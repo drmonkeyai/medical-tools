@@ -1,16 +1,29 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { specialties } from "../data/tools";
+
 import ISI from "../calculators/ISI";
 import EGFR from "../calculators/EGFR";
+
+import SCORE2 from "../calculators/SCORE2";
+import SCORE2OP from "../calculators/SCORE2OP";
+import SCORE2ASIAN from "../calculators/SCORE2ASIAN";
+import SCORE2DIABETES from "../calculators/SCORE2DIABETES";
 
 export default function ToolPlaceholder() {
   const { slug } = useParams();
   const navigate = useNavigate();
 
-  // Render tool thật (làm dần từng cái)
+  // Render tool thật
   if (slug === "isi") return <ISI />;
   if (slug === "egfr") return <EGFR />;
 
+  // Tim mạch (calculator thật)
+  if (slug === "score2") return <SCORE2 />;
+  if (slug === "score2-op") return <SCORE2OP />;
+  if (slug === "score2-asian") return <SCORE2ASIAN />;
+  if (slug === "score2-diabetes") return <SCORE2DIABETES />;
+
+  // Fallback: nếu slug chưa có calculator
   const tools = specialties.flatMap((s) =>
     s.tools.map((t) => ({ ...t, specialtyName: s.name }))
   );
@@ -68,7 +81,11 @@ export default function ToolPlaceholder() {
         <div style={{ marginTop: 14 }}>
           <Link
             to="/tools"
-            style={{ textDecoration: "none", color: "var(--primary)", fontWeight: 800 }}
+            style={{
+              textDecoration: "none",
+              color: "var(--primary)",
+              fontWeight: 800,
+            }}
           >
             ← Quay lại danh sách công cụ
           </Link>

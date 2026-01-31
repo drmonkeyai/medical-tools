@@ -1,3 +1,5 @@
+// src/data/tools.ts
+
 export interface Tool {
   id: string;
   name: string;
@@ -26,6 +28,39 @@ export const specialties: Specialty[] = [
       },
     ],
   },
+
+  {
+    id: "cardiology",
+    name: "Tim mạch",
+    tools: [
+      {
+        id: "score2",
+        name: "SCORE2",
+        description: "Ước tính nguy cơ tim mạch 10 năm (40–69 tuổi) — mặc định nguy cơ cao",
+        route: "/tools/score2",
+        isQuick: true,
+      },
+      {
+        id: "score2-op",
+        name: "SCORE2-OP",
+        description: "Ước tính nguy cơ tim mạch cho người ≥70 tuổi — mặc định nguy cơ cao",
+        route: "/tools/score2-op",
+      },
+      {
+        id: "score2-asian",
+        name: "SCORE2-ASIAN",
+        description: "Phiên bản hiệu chỉnh cho quần thể châu Á — mặc định nguy cơ cao",
+        route: "/tools/score2-asian",
+      },
+      {
+        id: "score2-diabetes",
+        name: "SCORE2-DIABETES",
+        description: "Ước tính nguy cơ tim mạch cho bệnh nhân đái tháo đường",
+        route: "/tools/score2-diabetes",
+      },
+    ],
+  },
+
   {
     id: "respiratory",
     name: "Hô hấp",
@@ -39,6 +74,7 @@ export const specialties: Specialty[] = [
       },
     ],
   },
+
   {
     id: "sleep",
     name: "Giấc ngủ",
@@ -52,6 +88,7 @@ export const specialties: Specialty[] = [
       },
     ],
   },
+
   {
     id: "family",
     name: "Gia đình – xã hội",
@@ -72,8 +109,7 @@ export const specialties: Specialty[] = [
     ],
   },
 
-  /* Bạn có thể thêm tiếp (chưa có tool cũng được) */
-  { id: "cardiology", name: "Tim mạch", tools: [] },
+  // Các chuyên khoa chưa có tool (để sẵn)
   { id: "endocrine", name: "Nội tiết", tools: [] },
   { id: "gastro", name: "Tiêu hoá", tools: [] },
   { id: "infectious", name: "Truyền nhiễm", tools: [] },
