@@ -1,12 +1,13 @@
-import React from "react";
+// src/components/RiskTargetsCard.tsx
+
 import type { RiskLevel } from "../calculators/riskBadge";
 import { riskBadgeClass, riskLabelVi } from "../calculators/riskBadge";
 
 type Props = {
   riskLevel: RiskLevel;
   riskPercent?: number; // ví dụ 7.2 (%)
-  modelName?: string;   // "SCORE2", "SCORE2-ASIAN"...
-  note?: string;        // mô tả thêm nếu cần
+  modelName?: string; // "SCORE2", "SCORE2-ASIAN"...
+  note?: string; // mô tả thêm nếu cần
   showSecondary?: boolean; // bật/tắt mục tiêu phụ
 };
 
@@ -15,12 +16,8 @@ function formatPercent(x?: number) {
   return `${x.toFixed(1)}%`;
 }
 
-function mmolToMgdlLDL(mmol: number) {
-  // LDL-C mmol/L -> mg/dL (x38.67)
-  return Math.round(mmol * 38.67);
-}
-
-function mmolToMgdlNonHDL(mmol: number) {
+function mmolToMgdl(mmol: number) {
+  // mmol/L -> mg/dL (x38.67) (áp dụng cho LDL-C và non-HDL-C)
   return Math.round(mmol * 38.67);
 }
 
@@ -32,15 +29,16 @@ type Targets = {
 };
 
 function getTargets(level: RiskLevel): Targets {
-  // ESC/EAS: LDL primary goals + secondary goals for non-HDL/ApoB
+  // ✅ Luôn return ở mọi nhánh (fix TS2366)
   switch (level) {
-    case "veryhigh":
+    case "very-high":
       return {
         ldlMmol: 1.4,
         ldlRule: "Giảm ≥50% so với LDL-C ban đầu",
         nonHdlMmol: 2.2,
         apoB: 65,
       };
+
     case "high":
       return {
         ldlMmol: 1.8,
@@ -48,6 +46,7 @@ function getTargets(level: RiskLevel): Targets {
         nonHdlMmol: 2.6,
         apoB: 80,
       };
+
     case "moderate":
       return {
         ldlMmol: 2.6,
@@ -55,12 +54,17 @@ function getTargets(level: RiskLevel): Targets {
         nonHdlMmol: 3.4,
         apoB: 100,
       };
+
     case "low":
       return {
         ldlMmol: 3.0,
         ldlRule: "Cân nhắc theo bối cảnh lâm sàng",
-        // low risk: guideline thường tập trung LDL; mục tiêu phụ có thể ẩn
       };
+
+    default: {
+      const _exhaustive: never = level;
+      return _exhaustive;
+    }
   }
 }
 
@@ -73,9 +77,8 @@ export default function RiskTargetsCard({
 }: Props) {
   const targets = getTargets(riskLevel);
 
-  const ldlMg = mmolToMgdlLDL(targets.ldlMmol);
-  const nonHdlMg =
-    targets.nonHdlMmol !== undefined ? mmolToMgdlNonHDL(targets.nonHdlMmol) : undefined;
+  const ldlMg = mmolToMgdl(targets.ldlMmol);
+  const nonHdlMg = targets.nonHdlMmol !== undefined ? mmolToMgdl(targets.nonHdlMmol) : undefined;
 
   const p = formatPercent(riskPercent);
 
@@ -104,6 +107,7 @@ export default function RiskTargetsCard({
           <div style={{ fontWeight: 900, fontSize: 16 }}>
             Kết quả phân tầng nguy cơ {modelName ? `(${modelName})` : ""}
           </div>
+
           {p && (
             <div style={{ marginTop: 6, color: "var(--muted)", fontWeight: 700 }}>
               Nguy cơ ước tính: <span style={{ color: "var(--text)" }}>{p}</span>
@@ -148,9 +152,7 @@ export default function RiskTargetsCard({
             Tương đương: &lt; {ldlMg} mg/dL
           </div>
 
-          <div style={{ marginTop: 8, color: "var(--muted)" }}>
-            {targets.ldlRule}
-          </div>
+          <div style={{ marginTop: 8, color: "var(--muted)" }}>{targets.ldlRule}</div>
         </div>
 
         {/* Secondary goals */}
@@ -180,9 +182,7 @@ export default function RiskTargetsCard({
                 <div style={{ fontWeight: 800 }}>non-HDL-C</div>
                 <div style={{ fontWeight: 900 }}>
                   &lt; {targets.nonHdlMmol.toFixed(1)} mmol/L{" "}
-                  <span style={{ color: "var(--muted)", fontWeight: 700 }}>
-                    (≈ {nonHdlMg} mg/dL)
-                  </span>
+                  <span style={{ color: "var(--muted)", fontWeight: 700 }}>(≈ {nonHdlMg} mg/dL)</span>
                 </div>
               </div>
             )}
@@ -201,9 +201,7 @@ export default function RiskTargetsCard({
                 }}
               >
                 <div style={{ fontWeight: 800 }}>ApoB</div>
-                <div style={{ fontWeight: 900 }}>
-                  &lt; {targets.apoB} mg/dL
-                </div>
+                <div style={{ fontWeight: 900 }}>&lt; {targets.apoB} mg/dL</div>
               </div>
             )}
 
@@ -226,9 +224,7 @@ export default function RiskTargetsCard({
             color: "var(--text)",
           }}
         >
-          <div style={{ fontWeight: 900, marginBottom: 6, color: "var(--primary)" }}>
-            Ghi chú
-          </div>
+          <div style={{ fontWeight: 900, marginBottom: 6, color: "var(--primary)" }}>Ghi chú</div>
           <div style={{ color: "var(--muted)" }}>{note}</div>
         </div>
       )}

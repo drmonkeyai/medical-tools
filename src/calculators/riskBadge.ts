@@ -1,39 +1,55 @@
 // src/calculators/riskBadge.ts
 
-export type RiskLevel = "low" | "moderate" | "high" | "very_high";
+// Chuẩn hoá risk level dùng trong toàn dự án
+export type RiskLevel = "low" | "moderate" | "high" | "very-high";
 
-// Map từ chuỗi riskGroup (trả về từ score2Core) -> RiskLevel
-export function riskLevelFromGroup(group?: string): RiskLevel | null {
-  if (!group) return null;
+// Nếu core trả riskGroup theo dạng khác nhau, bạn map về RiskLevel ở đây.
+// Bạn có thể chỉnh thêm alias tuỳ theo riskGroup bạn đang dùng.
+export function riskLevelFromGroup(group: string): RiskLevel {
+  const g = (group || "").toLowerCase().trim();
 
-  const g = group.toLowerCase();
+  // ✅ alias cho "very high"
+  if (
+    g === "very-high" ||
+    g === "veryhigh" ||
+    g === "very high" ||
+    g === "rất cao" ||
+    g === "rat cao" ||
+    g === "very_high"
+  ) {
+    return "very-high";
+  }
 
-  // chấp nhận nhiều cách viết
-  if (g.includes("very") && g.includes("high")) return "very_high";
-  if (g.includes("rất cao") || g.includes("rat cao")) return "very_high";
+  // ✅ alias cho "high"
+  if (g === "high" || g === "cao") return "high";
 
-  if (g.includes("high") || g.includes("cao")) return "high";
-  if (g.includes("moderate") || g.includes("vừa") || g.includes("trung")) return "moderate";
-  if (g.includes("low") || g.includes("thấp") || g.includes("thap")) return "low";
+  // ✅ alias cho "moderate"
+  if (g === "moderate" || g === "medium" || g === "vừa" || g === "trung bình" || g === "trung binh") {
+    return "moderate";
+  }
 
-  return null;
+  // ✅ mặc định low
+  return "low";
 }
 
-// Label tiếng Việt để hiển thị UI
 export function riskLabelVi(level: RiskLevel): string {
   switch (level) {
     case "low":
-      return "Nguy cơ thấp";
+      return "Thấp";
     case "moderate":
-      return "Nguy cơ vừa";
+      return "Vừa";
     case "high":
-      return "Nguy cơ cao";
-    case "very_high":
-      return "Nguy cơ rất cao";
+      return "Cao";
+    case "very-high":
+      return "Rất cao";
+    default: {
+      const _exhaustive: never = level;
+      return _exhaustive;
+    }
   }
 }
 
-// ClassName badge (đồng bộ với CSS bạn sẽ set trong index.css)
+// Class badge dựa theo CSS bạn đã có trong index.css
 export function riskBadgeClass(level: RiskLevel): string {
   switch (level) {
     case "low":
@@ -42,7 +58,11 @@ export function riskBadgeClass(level: RiskLevel): string {
       return "badge badge--moderate";
     case "high":
       return "badge badge--high";
-    case "very_high":
+    case "very-high":
       return "badge badge--veryhigh";
+    default: {
+      const _exhaustive: never = level;
+      return _exhaustive;
+    }
   }
 }
