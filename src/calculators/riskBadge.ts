@@ -1,34 +1,38 @@
 // src/calculators/riskBadge.ts
 
-// Chuẩn hoá risk level dùng trong toàn dự án
-export type RiskLevel = "low" | "moderate" | "high" | "very-high";
+export type RiskLevel = "low" | "moderate" | "high" | "very-high" | "extreme";
 
-// Nếu core trả riskGroup theo dạng khác nhau, bạn map về RiskLevel ở đây.
-// Bạn có thể chỉnh thêm alias tuỳ theo riskGroup bạn đang dùng.
-export function riskLevelFromGroup(group: string): RiskLevel {
+/**
+ * Risk categories theo ESC/EAS 2025 Focused Update (Table 3) cho SCORE2/SCORE2-OP:
+ *  <2%: low; 2–<10%: moderate; 10–<20%: high; ≥20%: very-high
+ */
+export function riskLevelFromScore2Percent(riskPercent?: number): RiskLevel {
+  if (riskPercent === undefined || riskPercent === null || !Number.isFinite(riskPercent)) return "low";
+  if (riskPercent < 2) return "low";
+  if (riskPercent < 10) return "moderate";
+  if (riskPercent < 20) return "high";
+  return "very-high";
+}
+
+/** Helper cho các model khác nếu bạn cần (vd ASIAN/DIABETES dùng 5/10/20) */
+export function riskLevelFromPercent(
+  riskPercent: number | undefined,
+  cutoffs: { lowToModerate: number; moderateToHigh: number; highToVeryHigh: number }
+): Exclude<RiskLevel, "extreme"> {
+  if (riskPercent === undefined || riskPercent === null || !Number.isFinite(riskPercent)) return "low";
+  if (riskPercent < cutoffs.lowToModerate) return "low";
+  if (riskPercent < cutoffs.moderateToHigh) return "moderate";
+  if (riskPercent < cutoffs.highToVeryHigh) return "high";
+  return "very-high";
+}
+
+/** Nếu core trả riskGroup dạng chữ, vẫn hỗ trợ alias để không rơi về low */
+export function riskLevelFromGroup(group: string): Exclude<RiskLevel, "extreme"> {
   const g = (group || "").toLowerCase().trim();
 
-  // ✅ alias cho "very high"
-  if (
-    g === "very-high" ||
-    g === "veryhigh" ||
-    g === "very high" ||
-    g === "rất cao" ||
-    g === "rat cao" ||
-    g === "very_high"
-  ) {
-    return "very-high";
-  }
-
-  // ✅ alias cho "high"
-  if (g === "high" || g === "cao") return "high";
-
-  // ✅ alias cho "moderate"
-  if (g === "moderate" || g === "medium" || g === "vừa" || g === "trung bình" || g === "trung binh") {
-    return "moderate";
-  }
-
-  // ✅ mặc định low
+  if (["very-high", "very high", "veryhigh", "very_high", "rất cao", "rat cao"].includes(g)) return "very-high";
+  if (["high", "cao"].includes(g)) return "high";
+  if (["moderate", "medium", "vừa", "trung bình", "trung binh"].includes(g)) return "moderate";
   return "low";
 }
 
@@ -42,14 +46,11 @@ export function riskLabelVi(level: RiskLevel): string {
       return "Cao";
     case "very-high":
       return "Rất cao";
-    default: {
-      const _exhaustive: never = level;
-      return _exhaustive;
-    }
+    case "extreme":
+      return "Cực cao";
   }
 }
 
-// Class badge dựa theo CSS bạn đã có trong index.css
 export function riskBadgeClass(level: RiskLevel): string {
   switch (level) {
     case "low":
@@ -60,9 +61,7 @@ export function riskBadgeClass(level: RiskLevel): string {
       return "badge badge--high";
     case "very-high":
       return "badge badge--veryhigh";
-    default: {
-      const _exhaustive: never = level;
-      return _exhaustive;
-    }
+    case "extreme":
+      return "badge badge--extreme";
   }
 }

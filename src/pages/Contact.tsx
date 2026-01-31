@@ -72,8 +72,7 @@ export default function Contact() {
         <section style={{ marginTop: 20 }}>
           <h3>Góp ý & phản hồi</h3>
           <p style={{ lineHeight: 1.6, color: "var(--muted)" }}>
-            Trang liên hệ chi tiết (email / form góp ý) sẽ được bổ sung
-            trong các phiên bản tiếp theo.
+            Email góp ý: hotrobacsi@gmail.com
           </p>
         </section>
       </div>
