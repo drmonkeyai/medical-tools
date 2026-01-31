@@ -1,7 +1,10 @@
 // src/calculators/SCORE2DIABETES.tsx
-import { useMemo, useState } from "react";
-import { calcSCORE2DIABETES, type RiskRegion, type Sex, clamp } from "./score2Core";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { calcSCORE2DIABETES, type RiskRegion, type Sex, clamp } from "./score2Core";
+
+import RiskTargetsCard from "../components/RiskTargetsCard";
+import { riskLevelFromGroup } from "./riskBadge";
 
 export default function SCORE2DIABETES() {
   const navigate = useNavigate();
@@ -43,10 +46,20 @@ export default function SCORE2DIABETES() {
     });
   }, [region, sex, age, smoker, sbp, tc, hdl, dmAge, hba1c, egfr]);
 
+  const level = riskLevelFromGroup(result.riskGroup);
+
   return (
     <div className="page">
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <div>
             <h2 style={{ margin: 0 }}>SCORE2-DIABETES</h2>
             <div style={{ marginTop: 6, color: "var(--muted)" }}>
@@ -64,14 +77,26 @@ export default function SCORE2DIABETES() {
               cursor: "pointer",
               fontWeight: 900,
             }}
+            title="Trở về trang trước"
           >
             ← Trở về trang trước
           </button>
         </div>
 
-        <div style={{ marginTop: 14, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        <div
+          style={{
+            marginTop: 14,
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          }}
+        >
           <Field label="Risk region">
-            <select value={region} onChange={(e) => setRegion(e.target.value as RiskRegion)} style={inputStyle}>
+            <select
+              value={region}
+              onChange={(e) => setRegion(e.target.value as RiskRegion)}
+              style={inputStyle}
+            >
               <option value="Low">Low</option>
               <option value="Moderate">Moderate</option>
               <option value="High">High</option>
@@ -87,47 +112,92 @@ export default function SCORE2DIABETES() {
           </Field>
 
           <Field label="Tuổi">
-            <input type="number" value={age} onChange={(e) => setAge(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              value={age}
+              onChange={(e) => setAge(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="Hút thuốc">
-            <select value={smoker} onChange={(e) => setSmoker(Number(e.target.value) as 0 | 1)} style={inputStyle}>
+            <select
+              value={smoker}
+              onChange={(e) => setSmoker(Number(e.target.value) as 0 | 1)}
+              style={inputStyle}
+            >
               <option value={0}>Không</option>
               <option value={1}>Có</option>
             </select>
           </Field>
 
           <Field label="HA tâm thu (mmHg)">
-            <input type="number" value={sbp} onChange={(e) => setSbp(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              value={sbp}
+              onChange={(e) => setSbp(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="Cholesterol toàn phần (mmol/L)">
-            <input type="number" step="0.1" value={tc} onChange={(e) => setTc(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              step="0.1"
+              value={tc}
+              onChange={(e) => setTc(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="HDL (mmol/L)">
-            <input type="number" step="0.1" value={hdl} onChange={(e) => setHdl(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              step="0.1"
+              value={hdl}
+              onChange={(e) => setHdl(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="Tuổi chẩn đoán ĐTĐ">
-            <input type="number" value={dmAge} onChange={(e) => setDmAge(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              value={dmAge}
+              onChange={(e) => setDmAge(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="HbA1c (mmol/mol)">
-            <input type="number" value={hba1c} onChange={(e) => setHba1c(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              value={hba1c}
+              onChange={(e) => setHba1c(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="eGFR (mL/min/1.73m²)">
-            <input type="number" value={egfr} onChange={(e) => setEgfr(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              value={egfr}
+              onChange={(e) => setEgfr(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
         </div>
 
-        <div style={{ marginTop: 14, padding: 14, borderRadius: 14, border: "1px solid var(--line)", background: "rgba(0,0,0,0.02)" }}>
-          <div style={{ fontWeight: 900, fontSize: 18 }}>
-            Kết quả: {Number.isFinite(result.riskPercent) ? `${result.riskPercent}%` : "—"}
-          </div>
-          <div style={{ marginTop: 6, color: "var(--muted)" }}>Phân loại: {result.riskGroup}</div>
-        </div>
+        {/* Kết quả + mục tiêu lipid */}
+        {level && (
+          <RiskTargetsCard
+            modelName="SCORE2-DIABETES"
+            riskLevel={level}
+            riskPercent={result.riskPercent}
+            showSecondary={true}
+            note="Phân loại nguy cơ dùng mốc 5/10/20%. Mục tiêu LDL-C phụ thuộc nhóm nguy cơ; với nguy cơ cao/rất cao, ưu tiên đạt ngưỡng LDL-C và giảm ≥50% so với ban đầu."
+          />
+        )}
 
         <div style={{ marginTop: 14, fontSize: 12, color: "var(--muted)" }}>
           Lưu ý: Công cụ hỗ trợ tham khảo, không thay thế quyết định lâm sàng.
