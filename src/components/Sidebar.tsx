@@ -11,23 +11,23 @@ export default function Sidebar() {
       <div className="sb__brand">
         <div className="sb__logo">🩺</div>
         <div>
-          <div className="sb__title">Dashboard</div>
-          <div className="sb__sub">Medical Tools</div>
+          <div className="sb__title">Hổ trợ bác sĩ</div>
+          <div className="sb__sub">Medical tools</div>
         </div>
       </div>
 
       <nav className="sb__nav">
         <NavLink to="/" className={linkClass}>
-          Dashboard
+          Trang chủ
         </NavLink>
         <NavLink to="/tools" className={linkClass}>
-          Calculators
+          Công cụ tính toán
         </NavLink>
         <NavLink to="/drug-interactions" className={linkClass}>
-          Drug Interactions
+          Tương tác thuốc
         </NavLink>
         <NavLink to="/icd10" className={linkClass}>
-          ICD-10
+          Tra cứu ICD-10
         </NavLink>
         <NavLink to="/contact" className={linkClass}>
           Liên hệ

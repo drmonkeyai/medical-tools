@@ -8,6 +8,10 @@ import SCORE2 from "../calculators/SCORE2";
 import SCORE2OP from "../calculators/SCORE2OP";
 import SCORE2ASIAN from "../calculators/SCORE2ASIAN";
 import SCORE2DIABETES from "../calculators/SCORE2DIABETES";
+import FamilyAPGAR from "../calculators/FamilyAPGAR";
+import SCREEM from "../calculators/SCREEM";
+import Pedigree from "../calculators/Pedigree";
+
 
 export default function ToolPlaceholder() {
   const { slug } = useParams();
@@ -110,6 +114,10 @@ export default function ToolPlaceholder() {
   if (slug === "score2-op") return <SCORE2OP />;
   if (slug === "score2-asian") return <SCORE2ASIAN />;
   if (slug === "score2-diabetes") return <SCORE2DIABETES />;
+  // Y học gia đình
+  if (slug === "family-apgar") return <FamilyAPGAR />;
+  if (slug === "screem") return <SCREEM />;
+  if (slug === "pedigree") return <Pedigree />;
 
   // Fallback: nếu slug chưa có calculator
   const tools = specialties.flatMap((s) =>

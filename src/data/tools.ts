@@ -106,6 +106,14 @@ export const specialties: Specialty[] = [
         description: "Đánh giá nguồn lực gia đình",
         route: "/tools/screem",
       },
+      {
+      id: "pedigree",
+      name: "Cây phả hệ (Family Pedigree)",
+      description: "Nhập gia sử sức khoẻ (3 thế hệ) và tự vẽ cây phả hệ để tham khảo",
+      route: "/tools/pedigree",
+      isQuick: false,
+      }
+
     ],
   },
 

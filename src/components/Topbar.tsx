@@ -25,6 +25,7 @@ function formatDateTimeVN(d: Date) {
 
 export default function Topbar() {
   const [now, setNow] = useState(() => new Date());
+  const [hover, setHover] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -35,9 +36,31 @@ export default function Topbar() {
 
   return (
     <div className="tb">
-      {/* đồng bộ style bằng tb__search */}
-      <div className="tb__search" style={{ maxWidth: 760 }}>
-        <span style={{ opacity: 0.7, fontSize: 16 }}>🕒</span>
+      {/* Ô thời gian: nổi bật vừa phải */}
+      <div
+        className="tb__search"
+        style={{
+          maxWidth: 760,
+          width: "fit-content", // ✅ ô vừa với nội dung
+          paddingLeft: 14,
+          paddingRight: 14,
+          borderColor: hover ? "rgba(37, 99, 235, 0.35)" : "rgba(37, 99, 235, 0.22)",
+          background: hover
+            ? "linear-gradient(180deg, rgba(37,99,235,0.10), rgba(37,99,235,0.06))"
+            : "linear-gradient(180deg, rgba(37,99,235,0.08), rgba(37,99,235,0.04))",
+          boxShadow: hover
+            ? "0 6px 18px rgba(37,99,235,0.10)"
+            : "0 2px 10px rgba(0,0,0,0.04)",
+          transition: "all 160ms ease",
+        }}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        title="Thời gian hiện tại"
+      >
+        <span style={{ opacity: 0.95, fontSize: 16, color: "rgba(37,99,235,0.95)" }}>
+          🕒
+        </span>
+
         <div
           style={{
             fontSize: 16,
@@ -46,6 +69,7 @@ export default function Topbar() {
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            color: "rgba(15, 23, 42, 0.92)", // xanh đen nhẹ cho dễ đọc
           }}
           title={text}
         >
