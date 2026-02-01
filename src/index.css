@@ -413,3 +413,67 @@ a{ color:inherit; }
 
   .field{ grid-column: span 12; }
 }
+/* ===== Responsive ===== */
+
+/* Tablet */
+@media (max-width: 1024px) {
+  .sb {
+    width: 220px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .sb {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-110%);
+    transition: transform 180ms ease;
+    z-index: 50;
+  }
+  .sb.sb--open {
+    transform: translateX(0);
+  }
+
+  .tb {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tb__search {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .tb__right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .page {
+    padding: 12px;
+  }
+  .card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+}
+
+/* Nút menu (hamburger) chỉ hiện trên mobile */
+.tb__menu {
+  display: none;
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .tb__menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

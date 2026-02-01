@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
+type TopbarProps = {
+  onToggleSidebar?: () => void;
+};
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -23,7 +27,7 @@ function formatDateTimeVN(d: Date) {
   return `${wd}, ${dd}/${mm}/${yyyy} • ${hh}:${min}`;
 }
 
-export default function Topbar() {
+export default function Topbar({ onToggleSidebar }: TopbarProps) {
   const [now, setNow] = useState(() => new Date());
   const [hover, setHover] = useState(false);
 
@@ -36,15 +40,27 @@ export default function Topbar() {
 
   return (
     <div className="tb">
+      {/* Nút mở menu (mobile) - hiện/ẩn bằng CSS .tb__menu */}
+      <button
+        className="tb__menu"
+        onClick={onToggleSidebar}
+        title="Mở menu"
+        type="button"
+      >
+        ☰
+      </button>
+
       {/* Ô thời gian: nổi bật vừa phải */}
       <div
         className="tb__search"
         style={{
           maxWidth: 760,
-          width: "fit-content", // ✅ ô vừa với nội dung
+          width: "fit-content",
           paddingLeft: 14,
           paddingRight: 14,
-          borderColor: hover ? "rgba(37, 99, 235, 0.35)" : "rgba(37, 99, 235, 0.22)",
+          borderColor: hover
+            ? "rgba(37, 99, 235, 0.35)"
+            : "rgba(37, 99, 235, 0.22)",
           background: hover
             ? "linear-gradient(180deg, rgba(37,99,235,0.10), rgba(37,99,235,0.06))"
             : "linear-gradient(180deg, rgba(37,99,235,0.08), rgba(37,99,235,0.04))",
@@ -57,7 +73,13 @@ export default function Topbar() {
         onMouseLeave={() => setHover(false)}
         title="Thời gian hiện tại"
       >
-        <span style={{ opacity: 0.95, fontSize: 16, color: "rgba(37,99,235,0.95)" }}>
+        <span
+          style={{
+            opacity: 0.95,
+            fontSize: 16,
+            color: "rgba(37,99,235,0.95)",
+          }}
+        >
           🕒
         </span>
 
@@ -69,7 +91,7 @@ export default function Topbar() {
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            color: "rgba(15, 23, 42, 0.92)", // xanh đen nhẹ cho dễ đọc
+            color: "rgba(15, 23, 42, 0.92)",
           }}
           title={text}
         >
