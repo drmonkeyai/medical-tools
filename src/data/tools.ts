@@ -118,7 +118,23 @@ export const specialties: Specialty[] = [
   },
 
   // Các chuyên khoa chưa có tool (để sẵn)
-  { id: "endocrine", name: "Nội tiết", tools: [] },
+
+  {
+  id: "endocrine",
+  name: "Nội tiết",
+  tools: [
+    {
+      id: "bmi-asian",
+      name: "BMI (Châu Á)",
+      description: "Tính BMI và phân loại theo ngưỡng người Châu Á",
+      route: "/tools/bmi",
+      isQuick: true,
+    },
+  ],
+},
+
+
+
   { id: "gastro", name: "Tiêu hoá", tools: [] },
   { id: "infectious", name: "Truyền nhiễm", tools: [] },
   { id: "neuro", name: "Thần kinh", tools: [] },

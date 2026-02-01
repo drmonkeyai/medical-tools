@@ -11,7 +11,7 @@ import SCORE2DIABETES from "../calculators/SCORE2DIABETES";
 import FamilyAPGAR from "../calculators/FamilyAPGAR";
 import SCREEM from "../calculators/SCREEM";
 import Pedigree from "../calculators/Pedigree";
-
+import BMI from "../calculators/BMI";
 
 export default function ToolPlaceholder() {
   const { slug } = useParams();
@@ -118,6 +118,10 @@ export default function ToolPlaceholder() {
   if (slug === "family-apgar") return <FamilyAPGAR />;
   if (slug === "screem") return <SCREEM />;
   if (slug === "pedigree") return <Pedigree />;
+  // Nội tiết
+  if (slug === "bmi") return <BMI />;
+
+
 
   // Fallback: nếu slug chưa có calculator
   const tools = specialties.flatMap((s) =>
