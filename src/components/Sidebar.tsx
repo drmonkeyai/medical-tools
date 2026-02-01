@@ -1,3 +1,4 @@
+// src/components/Sidebar.tsx
 import { NavLink } from "react-router-dom";
 
 type SidebarProps = {
@@ -26,15 +27,23 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <NavLink to="/" className={linkClass}>
           Trang chủ
         </NavLink>
+
         <NavLink to="/tools" className={linkClass}>
           Công cụ tính toán
         </NavLink>
+
+        <NavLink to="/dose-adjust" className={linkClass}>
+          Điều chỉnh liều thuốc
+        </NavLink>
+
         <NavLink to="/drug-interactions" className={linkClass}>
           Tương tác thuốc
         </NavLink>
+
         <NavLink to="/icd10" className={linkClass}>
           Tra cứu ICD-10
         </NavLink>
+
         <NavLink to="/contact" className={linkClass}>
           Liên hệ
         </NavLink>
@@ -46,3 +55,4 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     </aside>
   );
 }
+

@@ -1,6 +1,9 @@
-import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
+// src/pages/ToolPlaceholder.tsx
+import type { ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { specialties } from "../data/tools";
 
+// Existing calculators
 import ISI from "../calculators/ISI";
 import EGFR from "../calculators/EGFR";
 
@@ -8,19 +11,30 @@ import SCORE2 from "../calculators/SCORE2";
 import SCORE2OP from "../calculators/SCORE2OP";
 import SCORE2ASIAN from "../calculators/SCORE2ASIAN";
 import SCORE2DIABETES from "../calculators/SCORE2DIABETES";
+
 import FamilyAPGAR from "../calculators/FamilyAPGAR";
 import SCREEM from "../calculators/SCREEM";
 import Pedigree from "../calculators/Pedigree";
 import BMI from "../calculators/BMI";
+
+// New calculators (make sure these files exist in src/calculators/)
+import Centor from "../calculators/Centor";
+import CHA2DS2VASc from "../calculators/CHA2DS2VASc";
+import HASBLED from "../calculators/HASBLED";
+import CURB65 from "../calculators/CURB65";
+import QSOFA from "../calculators/QSOFA";
+import ChildPugh from "../calculators/ChildPugh";
 
 export default function ToolPlaceholder() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ BẮT TRƯỜNG HỢP DRUG INTERACTIONS (slug có thể undefined)
-  // - Nếu sidebar trỏ /drug-interactions => slug undefined => dùng pathname
-  // - Nếu sau này bạn trỏ /tools/drug-interactions => slug = "drug-interactions"
+  // =========================
+  // Special-case: Drug Interactions
+  // =========================
+  // - If sidebar points to /drug-interactions => slug can be undefined
+  // - If later you point /tools/drug-interactions => slug = "drug-interactions"
   const isDrugInteractions =
     location.pathname === "/drug-interactions" || slug === "drug-interactions";
 
@@ -105,30 +119,53 @@ export default function ToolPlaceholder() {
     );
   }
 
-  // Render tool thật
-  if (slug === "isi") return <ISI />;
-  if (slug === "egfr") return <EGFR />;
+  // =========================
+  // Map slug -> calculator component
+  // =========================
+  const map: Record<string, ReactNode> = {
+    // Thận – tiết niệu
+    egfr: <EGFR />,
 
-  // Tim mạch (calculator thật)
-  if (slug === "score2") return <SCORE2 />;
-  if (slug === "score2-op") return <SCORE2OP />;
-  if (slug === "score2-asian") return <SCORE2ASIAN />;
-  if (slug === "score2-diabetes") return <SCORE2DIABETES />;
-  // Y học gia đình
-  if (slug === "family-apgar") return <FamilyAPGAR />;
-  if (slug === "screem") return <SCREEM />;
-  if (slug === "pedigree") return <Pedigree />;
-  // Nội tiết
-  if (slug === "bmi") return <BMI />;
+    // Giấc ngủ
+    isi: <ISI />,
 
+    // Tim mạch
+    score2: <SCORE2 />,
+    "score2-op": <SCORE2OP />,
+    "score2-asian": <SCORE2ASIAN />,
+    "score2-diabetes": <SCORE2DIABETES />,
+    "cha2ds2-vasc": <CHA2DS2VASc />,
+    "has-bled": <HASBLED />,
 
+    // Hô hấp
+    centor: <Centor />,
+    curb65: <CURB65 />,
 
-  // Fallback: nếu slug chưa có calculator
+    // Truyền nhiễm
+    qsofa: <QSOFA />,
+
+    // Tiêu hoá
+    "child-pugh": <ChildPugh />,
+
+    // Gia đình – xã hội
+    "family-apgar": <FamilyAPGAR />,
+    screem: <SCREEM />,
+    pedigree: <Pedigree />,
+
+    // Nội tiết
+    bmi: <BMI />,
+  };
+
+  if (slug && map[slug]) return <>{map[slug]}</>;
+
+  // =========================
+  // Fallback: show placeholder if slug exists but calculator not implemented
+  // =========================
   const tools = specialties.flatMap((s) =>
     s.tools.map((t) => ({ ...t, specialtyName: s.name }))
   );
 
-  const tool = tools.find((t) => t.route === `/tools/${slug}`);
+  const tool = slug ? tools.find((t) => t.route === `/tools/${slug}`) : undefined;
 
   return (
     <div className="page">
@@ -176,6 +213,9 @@ export default function ToolPlaceholder() {
           }}
         >
           Trang này sẽ chứa form nhập liệu + tính điểm + diễn giải kết quả.
+          <div style={{ marginTop: 8, color: "var(--muted)" }}>
+            (Hiện chưa có component calculator cho tool này.)
+          </div>
         </div>
 
         <div style={{ marginTop: 14 }}>
