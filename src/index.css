@@ -1,3 +1,7 @@
+/* =========================
+   Global Theme + Typography
+   ========================= */
+
 :root{
   --bg:#f3f6fb;
   --card:#ffffff;
@@ -6,6 +10,12 @@
   --line:#e5e7eb;
   --primary:#1d4ed8;
   --primary2:#0b5bd3;
+
+  /* ✅ Typography */
+  --font-sans: Arial, Helvetica, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --fs-base: 13.5px;  /* toàn app */
+  --fs-small: 12px;   /* chữ phụ */
+  --lh-base: 1.45;
 
   /* Radius system */
   --r-card:16px;   /* card lớn */
@@ -39,14 +49,27 @@ html, body{ height:100%; overflow-x:hidden; }
 
 body{
   margin:0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
   background:var(--bg);
   color:var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a{ color:inherit; }
 
-/* Layout */
+button, input, select, textarea{
+  font-family: var(--font-sans);
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* =========================
+   Layout
+   ========================= */
+
 .app{
   display:flex;
   min-height:100vh;
@@ -73,7 +96,10 @@ a{ color:inherit; }
   min-width:0;
 }
 
-/* Sidebar */
+/* =========================
+   Sidebar
+   ========================= */
+
 .sb{
   width:240px;
   flex: 0 0 240px;
@@ -103,7 +129,7 @@ a{ color:inherit; }
 }
 
 .sb__title{ font-weight:800; line-height:1; }
-.sb__sub{ font-size:12px; opacity:.85; margin-top:3px; }
+.sb__sub{ font-size: var(--fs-small); opacity:.85; margin-top:3px; }
 
 .sb__nav{
   display:flex;
@@ -118,6 +144,7 @@ a{ color:inherit; }
   color:#fff;
   opacity:.92;
   background: transparent;
+  font-weight: 800;
 }
 .sb__link:hover{ background: rgba(255,255,255,0.10); }
 .sb__link--active{
@@ -131,10 +158,13 @@ a{ color:inherit; }
   padding:6px 10px;
   border-radius:var(--r-pill);
   background: rgba(255,255,255,0.16);
-  font-size:12px;
+  font-size: var(--fs-small);
 }
 
-/* Topbar */
+/* =========================
+   Topbar
+   ========================= */
+
 .tb{
   height:58px;
   display:flex;
@@ -142,10 +172,8 @@ a{ color:inherit; }
   justify-content:space-between;
   gap:12px;
   padding:10px 18px;
-
   background: var(--bg);
   border-bottom: none;
-
   width:100%;
   min-width:0;
 }
@@ -170,8 +198,9 @@ a{ color:inherit; }
   border:none;
   outline:none;
   width:100%;
-  font-size:14px;
+  font-size: inherit; /* ✅ inherit theo base */
   min-width:0;
+  font-weight: 900;
 }
 
 /* Cụm nút phải */
@@ -194,11 +223,11 @@ a{ color:inherit; }
   border:none;
   background: var(--primary);
   color:#fff;
-  padding:10px 14px;
-
+  padding:9px 13px; /* ✅ nhỏ nhẹ hơn */
   border-radius:var(--r-pill);
   cursor:pointer;
-  font-weight:800;
+  font-weight:900;
+  font-size: 13px;
 }
 .tb__btn:hover{ filter: brightness(0.95); }
 
@@ -209,12 +238,27 @@ a{ color:inherit; }
   display:flex;align-items:center;justify-content:center;
   background:#eef2ff;
   border:1px solid var(--line);
+  font-size: 14px;
 }
 
-/* Cards / Dashboard */
+/* Nút menu (hamburger) chỉ hiện trên mobile */
+.tb__menu {
+  display: none;
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 12px;
+  padding: 9px 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+/* =========================
+   Cards / Dashboard
+   ========================= */
+
 .pageTitle{
-  font-size:18px;
-  font-weight:800;
+  font-size:16px;   /* ✅ nhỏ hơn */
+  font-weight:900;
   margin: 0 0 12px 0;
 }
 
@@ -255,11 +299,14 @@ a{ color:inherit; }
 }
 .tile:hover{ box-shadow: var(--shadow-hover); }
 
-.tile__icon{ font-size:20px; }
-.tile__label{ font-weight:800; }
-.tile__sub{ font-size:12px; color:var(--muted); }
+.tile__icon{ font-size:18px; }
+.tile__label{ font-weight:900; font-size: 13.5px; }
+.tile__sub{ font-size: var(--fs-small); color:var(--muted); }
 
-/* ---------- Form UI (dùng cho calculators) ---------- */
+/* =========================
+   Form UI (calculators)
+   ========================= */
+
 .calcHeader{
   display:flex;
   justify-content:space-between;
@@ -269,7 +316,7 @@ a{ color:inherit; }
 }
 
 .calcTitle{
-  font-size:28px;
+  font-size:24px; /* ✅ nhỏ hơn (trước 28) */
   font-weight:900;
   margin: 0;
   letter-spacing: 0.2px;
@@ -280,16 +327,18 @@ a{ color:inherit; }
   color:var(--muted);
   font-weight:700;
   line-height:1.35;
+  font-size: var(--fs-small);
 }
 
 .btn{
   border:1px solid var(--line);
   background:#fff;
   color:var(--text);
-  padding:10px 12px;
+  padding:9px 11px;
   border-radius: var(--r-ui);
   cursor:pointer;
   font-weight:900;
+  font-size: 13px;
 }
 .btn:hover{ filter: brightness(0.98); }
 
@@ -297,10 +346,11 @@ a{ color:inherit; }
   border:none;
   background:var(--primary);
   color:#fff;
-  padding:10px 14px;
+  padding:9px 13px;
   border-radius: var(--r-pill);
   cursor:pointer;
   font-weight:900;
+  font-size: 13px;
 }
 .btnPrimary:hover{ filter: brightness(0.96); }
 
@@ -315,7 +365,6 @@ a{ color:inherit; }
   grid-column: span 3;
   min-width:0;
 }
-
 .field--wide{ grid-column: span 6; }
 .field--full{ grid-column: span 12; }
 
@@ -323,17 +372,18 @@ a{ color:inherit; }
   display:block;
   font-weight:900;
   margin-bottom:8px;
+  font-size: 13px;
 }
 
 .input, .select{
   width:100%;
   border:1px solid var(--line);
   border-radius: var(--r-ui);
-  padding:12px 12px;
+  padding:11px 12px; /* ✅ nhỏ nhẹ hơn */
   background:#fff;
   outline:none;
   font-weight:800;
-  font-size:14px;
+  font-size: inherit; /* ✅ theo base */
 }
 
 .input:focus, .select:focus{
@@ -344,7 +394,7 @@ a{ color:inherit; }
 .help{
   margin-top:8px;
   color:var(--muted);
-  font-size:12px;
+  font-size: var(--fs-small);
   line-height: 1.35;
 }
 
@@ -354,16 +404,20 @@ a{ color:inherit; }
   margin: 14px 0;
 }
 
-/* ---------- Risk badge (RiskTargetsCard dùng) ---------- */
+/* =========================
+   Risk badge
+   ========================= */
+
 .badge{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:8px 12px;
+  padding:7px 11px; /* ✅ nhỏ hơn */
   border-radius: var(--r-pill);
   font-weight:900;
   border:1px solid transparent;
   white-space: nowrap;
+  font-size: 12.5px;
 }
 
 .badge__dot{
@@ -398,7 +452,10 @@ a{ color:inherit; }
   color: var(--risk-vhigh-tx);
 }
 
-/* Responsive */
+/* =========================
+   Responsive
+   ========================= */
+
 @media (max-width: 980px){
   .sb{ width:200px; flex: 0 0 200px; }
   .tileGrid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -409,11 +466,12 @@ a{ color:inherit; }
 
 @media (max-width: 640px){
   .app__content{ padding: 14px; }
-  .calcTitle{ font-size: 24px; }
+  .calcTitle{ font-size: 21px; } /* ✅ nhỏ hơn mobile */
 
   .field{ grid-column: span 12; }
 }
-/* ===== Responsive ===== */
+
+/* ===== Responsive bổ sung ===== */
 
 /* Tablet */
 @media (max-width: 1024px) {
@@ -457,20 +515,7 @@ a{ color:inherit; }
     padding: 14px;
     border-radius: 14px;
   }
-}
 
-/* Nút menu (hamburger) chỉ hiện trên mobile */
-.tb__menu {
-  display: none;
-  border: 1px solid var(--line);
-  background: white;
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-@media (max-width: 768px) {
   .tb__menu {
     display: inline-flex;
     align-items: center;

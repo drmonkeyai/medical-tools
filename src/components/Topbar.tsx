@@ -1,4 +1,7 @@
+// src/components/Topbar.tsx
 import { useEffect, useMemo, useState } from "react";
+import { useCases } from "../context/CasesContext";
+import CaseTabs from "./CaseTabs";
 
 type TopbarProps = {
   onToggleSidebar?: () => void;
@@ -8,7 +11,8 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function formatDateTimeVN(d: Date) {
+// ✅ Ví dụ: "Thứ Ba ngày 03 tháng 02 năm 2026 12h30 chiều"
+function formatDateTimeVNFull(d: Date) {
   const weekdays = [
     "Chủ nhật",
     "Thứ Hai",
@@ -18,16 +22,22 @@ function formatDateTimeVN(d: Date) {
     "Thứ Sáu",
     "Thứ Bảy",
   ];
+
   const wd = weekdays[d.getDay()];
   const dd = pad2(d.getDate());
   const mm = pad2(d.getMonth() + 1);
   const yyyy = d.getFullYear();
-  const hh = pad2(d.getHours());
+
+  const hh = d.getHours();
   const min = pad2(d.getMinutes());
-  return `${wd}, ${dd}/${mm}/${yyyy} • ${hh}:${min}`;
+  const buoi = hh < 12 ? "sáng" : "chiều";
+
+  return `${wd} ngày ${dd} tháng ${mm} năm ${yyyy} ${pad2(hh)}h${min} ${buoi}`;
 }
 
 export default function Topbar({ onToggleSidebar }: TopbarProps) {
+  const { cases, openNewCaseModal } = useCases();
+
   const [now, setNow] = useState(() => new Date());
   const [hover, setHover] = useState(false);
 
@@ -36,11 +46,18 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
     return () => clearInterval(t);
   }, []);
 
-  const text = useMemo(() => formatDateTimeVN(now), [now]);
+  const text = useMemo(() => formatDateTimeVNFull(now), [now]);
 
   return (
-    <div className="tb">
-      {/* Nút mở menu (mobile) - hiện/ẩn bằng CSS .tb__menu */}
+    <div
+      className="tb"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        minWidth: 0,
+      }}
+    >
       <button
         className="tb__menu"
         onClick={onToggleSidebar}
@@ -50,14 +67,20 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
         ☰
       </button>
 
-      {/* Ô thời gian: nổi bật vừa phải */}
+      {/* ✅ Time chip: co theo nội dung, không dàn trải */}
       <div
         className="tb__search"
         style={{
-          maxWidth: 760,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 10,
           width: "fit-content",
-          paddingLeft: 14,
-          paddingRight: 14,
+          maxWidth: 520, // đủ cho format dài
+          minWidth: 260,
+          padding: "10px 12px",
+          borderRadius: 14,
+          borderStyle: "solid",
+          borderWidth: 1,
           borderColor: hover
             ? "rgba(37, 99, 235, 0.35)"
             : "rgba(37, 99, 235, 0.22)",
@@ -68,6 +91,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
             ? "0 6px 18px rgba(37,99,235,0.10)"
             : "0 2px 10px rgba(0,0,0,0.04)",
           transition: "all 160ms ease",
+          flex: "0 0 auto",
         }}
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
@@ -76,8 +100,9 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
         <span
           style={{
             opacity: 0.95,
-            fontSize: 16,
+            fontSize: 15,
             color: "rgba(37,99,235,0.95)",
+            lineHeight: 1,
           }}
         >
           🕒
@@ -85,13 +110,13 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
 
         <div
           style={{
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: 900,
-            letterSpacing: 0.2,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
             color: "rgba(15, 23, 42, 0.92)",
+            minWidth: 0,
           }}
           title={text}
         >
@@ -99,8 +124,22 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
         </div>
       </div>
 
-      <div className="tb__right">
-        <button className="tb__btn">＋ Tạo ca mới</button>
+      {/* Case tabs */}
+      {cases.length ? (
+        <CaseTabs />
+      ) : (
+        <div style={{ flex: 1, color: "var(--muted)", fontWeight: 800 }}>
+          Chưa chọn ca • bấm <b>+ Tạo ca mới</b>
+        </div>
+      )}
+
+      <div
+        className="tb__right"
+        style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" }}
+      >
+        <button className="tb__btn" type="button" onClick={openNewCaseModal}>
+          ＋ Tạo ca mới
+        </button>
         <div className="tb__avatar">👤</div>
       </div>
     </div>

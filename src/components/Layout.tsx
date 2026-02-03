@@ -1,7 +1,9 @@
+// src/components/Layout.tsx
 import { Outlet } from "react-router-dom";
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
+import NewCaseModal from "./NewCaseModal";
 
 export default function Layout() {
   const [sbOpen, setSbOpen] = useState(false);
@@ -12,9 +14,13 @@ export default function Layout() {
 
       <div className="app__main">
         <Topbar onToggleSidebar={() => setSbOpen((v) => !v)} />
+
         <main className="app__content">
           <Outlet />
         </main>
+
+        {/* ✅ Modal tạo ca — mount toàn app */}
+        <NewCaseModal />
       </div>
     </div>
   );
