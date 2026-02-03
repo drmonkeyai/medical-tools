@@ -86,7 +86,8 @@ function ensureReport(toolId: string, data: any) {
   const formula = inputs.formula as string | undefined;
   const fLabel = formulaLabelEgfr(formula);
 
-  const value = toNumber(outputs.value) ?? toNumber(outputs?.valueDisplay) ?? null;
+  const value =
+    toNumber(outputs.value) ?? toNumber(outputs?.valueDisplay) ?? null;
   const unit = (outputs.unit as string | undefined) ?? "mL/phút/1.73m²";
   const stage = (outputs.stage as string | null | undefined) ?? null;
 
@@ -146,6 +147,10 @@ function ensureReport(toolId: string, data: any) {
   };
 }
 
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === "object" && !Array.isArray(x);
+}
+
 export default function CaseSummary() {
   const navigate = useNavigate();
   const { activeCase } = useCases();
@@ -163,7 +168,11 @@ export default function CaseSummary() {
           <div style={{ marginTop: 14 }}>
             <Link
               to="/tools"
-              style={{ textDecoration: "none", color: "var(--primary)", fontWeight: 800 }}
+              style={{
+                textDecoration: "none",
+                color: "var(--primary)",
+                fontWeight: 800,
+              }}
             >
               ← Đi tới danh sách công cụ
             </Link>
@@ -173,16 +182,40 @@ export default function CaseSummary() {
     );
   }
 
-  const resultsRecord = (activeCase.results ?? {}) as Record<string, ToolResult[]>;
+  // ✅ Chuẩn hoá activeCase.results về Record<string, ToolResult[]>
+  // - Nếu schema mới: ToolResult[] -> group by toolId
+  // - Nếu schema cũ: Record<string, ToolResult[]> -> dùng trực tiếp
+  const resultsRecord = useMemo<Record<string, ToolResult[]>>(() => {
+    const raw = activeCase.results as unknown;
+
+    if (Array.isArray(raw)) {
+      return (raw as ToolResult[]).reduce<Record<string, ToolResult[]>>(
+        (acc, r) => {
+          const key = r.toolId || "unknown";
+          (acc[key] ||= []).push(r);
+          return acc;
+        },
+        {}
+      );
+    }
+
+    if (isRecord(raw)) {
+      const ok = Object.values(raw).every((v) => Array.isArray(v));
+      if (ok) return raw as Record<string, ToolResult[]>;
+    }
+
+    return {};
+  }, [activeCase.results]);
+
   const entries = useMemo(
     () =>
       Object.entries(resultsRecord)
         .filter(([, list]) => Array.isArray(list) && list.length > 0)
         // sort tool blocks by most recent result time desc
         .sort((a, b) => {
-          const at = a[1]?.[0]?.createdAt ?? 0;
-          const bt = b[1]?.[0]?.createdAt ?? 0;
-          return bt - at;
+          const maxA = Math.max(...a[1].map((x) => x?.createdAt ?? 0));
+          const maxB = Math.max(...b[1].map((x) => x?.createdAt ?? 0));
+          return maxB - maxA;
         }),
     [resultsRecord]
   );
@@ -205,8 +238,8 @@ export default function CaseSummary() {
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 6 }}>Tổng hợp ca</h2>
             <div style={{ color: "var(--muted)" }}>
-              {activeCase.patient.name} • {activeCase.patient.yob} • {activeCase.patient.sex} •{" "}
-              {total} lần lưu
+              {activeCase.patient.name} • {activeCase.patient.yob} •{" "}
+              {activeCase.patient.sex} • {total} lần lưu
             </div>
           </div>
 
@@ -270,13 +303,17 @@ export default function CaseSummary() {
                     <div style={{ fontSize: 16 }}>{prettyToolName(toolId)}</div>
                   </div>
 
-                  <div style={{ color: "var(--muted)", fontWeight: 800 }}>{list.length} lần</div>
+                  <div style={{ color: "var(--muted)", fontWeight: 800 }}>
+                    {list.length} lần
+                  </div>
                 </div>
 
                 <div style={{ padding: 12, display: "grid", gap: 10 }}>
                   {list.map((rawItem, idx) => {
                     const createdAt =
-                      typeof rawItem.createdAt === "number" ? rawItem.createdAt : Date.now();
+                      typeof rawItem.createdAt === "number"
+                        ? rawItem.createdAt
+                        : Date.now();
 
                     const item = {
                       ...rawItem,
@@ -313,7 +350,13 @@ export default function CaseSummary() {
                               {report?.title ?? `Kết quả #${list.length - idx}`}
                             </div>
                             {d.summary && (
-                              <div style={{ marginTop: 4, color: "var(--muted)", fontWeight: 800 }}>
+                              <div
+                                style={{
+                                  marginTop: 4,
+                                  color: "var(--muted)",
+                                  fontWeight: 800,
+                                }}
+                              >
                                 {d.summary}
                               </div>
                             )}
@@ -343,7 +386,8 @@ export default function CaseSummary() {
                                     justifyContent: "space-between",
                                     gap: 12,
                                     padding: "10px 12px",
-                                    background: i % 2 === 0 ? "rgba(0,0,0,0.015)" : "white",
+                                    background:
+                                      i % 2 === 0 ? "rgba(0,0,0,0.015)" : "white",
                                   }}
                                 >
                                   <div style={{ color: "var(--muted)", fontWeight: 900 }}>
@@ -355,7 +399,13 @@ export default function CaseSummary() {
                             </div>
 
                             {report.note && (
-                              <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)" }}>
+                              <div
+                                style={{
+                                  marginTop: 10,
+                                  fontSize: 12,
+                                  color: "var(--muted)",
+                                }}
+                              >
                                 {report.note}
                               </div>
                             )}
@@ -363,7 +413,14 @@ export default function CaseSummary() {
                         ) : null}
 
                         {/* Actions */}
-                        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                        <div
+                          style={{
+                            marginTop: 12,
+                            display: "flex",
+                            gap: 10,
+                            flexWrap: "wrap",
+                          }}
+                        >
                           <button
                             onClick={() => setOpenKey(isOpen ? null : key)}
                             style={{
@@ -385,7 +442,9 @@ export default function CaseSummary() {
                           <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                             {d.inputs && (
                               <div>
-                                <div style={{ fontWeight: 900, marginBottom: 6 }}>Inputs</div>
+                                <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                                  Inputs
+                                </div>
                                 <pre
                                   style={{
                                     margin: 0,
@@ -404,7 +463,9 @@ export default function CaseSummary() {
 
                             {d.outputs && (
                               <div>
-                                <div style={{ fontWeight: 900, marginBottom: 6 }}>Outputs</div>
+                                <div style={{ fontWeight: 900, marginBottom: 6 }}>
+                                  Outputs
+                                </div>
                                 <pre
                                   style={{
                                     margin: 0,
@@ -432,7 +493,14 @@ export default function CaseSummary() {
         )}
 
         <div style={{ marginTop: 14 }}>
-          <Link to="/tools" style={{ textDecoration: "none", color: "var(--primary)", fontWeight: 800 }}>
+          <Link
+            to="/tools"
+            style={{
+              textDecoration: "none",
+              color: "var(--primary)",
+              fontWeight: 800,
+            }}
+          >
             ← Quay lại danh sách công cụ
           </Link>
         </div>
