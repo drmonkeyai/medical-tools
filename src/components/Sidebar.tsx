@@ -23,7 +23,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       </div>
 
       {/* Khi bấm vào menu (trên mobile) -> đóng sidebar */}
-      <nav className="sb__nav" onClick={onClose}>
+      <nav
+        className="sb__nav"
+        onClick={() => {
+          onClose?.();
+        }}
+      >
         <NavLink to="/" className={linkClass}>
           Trang chủ
         </NavLink>
@@ -38,6 +43,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         <NavLink to="/drug-interactions" className={linkClass}>
           Tương tác thuốc
+        </NavLink>
+
+        {/* ✅ MỚI: Hướng dẫn tiêm chủng */}
+        <NavLink to="/immunization" className={linkClass}>
+          Hướng dẫn tiêm chủng
         </NavLink>
 
         <NavLink to="/icd10" className={linkClass}>
@@ -55,4 +65,3 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     </aside>
   );
 }
-

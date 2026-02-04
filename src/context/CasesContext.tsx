@@ -53,7 +53,10 @@ export type CasesContextValue = {
   // save tool result
   saveToActiveCase: (payload: { tool: string; inputs: any; outputs: any; summary?: string }) => void;
 
-  // ✅ NEW: label helpers (EGFR đang cần cái này)
+  // ✅ NEW: update patient info
+  updateCasePatient: (id: string, patient: Patient) => void;
+
+  // ✅ label helpers
   getCaseLabel: (c: CaseItem, opts?: { compact?: boolean }) => string;
   getActiveCaseLabel: (opts?: { compact?: boolean; fallback?: string }) => string;
 };
@@ -107,19 +110,15 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     return cases.find((c) => c.id === activeCaseId) ?? null;
   }, [cases, activeCaseId]);
 
-  const openNewCaseModal = () => {
-    setIsNewCaseModalOpen(true);
-  };
+  const openNewCaseModal = () => setIsNewCaseModalOpen(true);
 
   const closeNewCaseModal = () => {
     setIsNewCaseModalOpen(false);
-    // không xoá pendingSave ở đây để tránh user bấm X nhầm
-    // setPendingSave(null);
+    // không xoá pendingSave để tránh user bấm X nhầm
   };
 
   const closeCase = (id: string) => {
     setCases((prev) => prev.filter((c) => c.id !== id));
-    setPendingSave((p) => (p ? p : null));
 
     setActiveCaseId((prevActive) => {
       if (prevActive !== id) return prevActive;
@@ -196,12 +195,20 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // ✅ Label helpers (EGFR/Topbar đều có thể dùng)
+  // ✅ Update patient info
+  const updateCasePatient = (id: string, patient: Patient) => {
+    setCases((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c;
+        return { ...c, patient: { ...patient } };
+      })
+    );
+  };
+
+  // ✅ Label helpers
   const getCaseLabel = (c: CaseItem, opts?: { compact?: boolean }) => {
     const compact = !!opts?.compact;
-    // compact: Tên • Năm sinh
     if (compact) return `${c.patient.name} • ${c.patient.yob}`;
-    // full: Tên • Năm sinh • Giới tính
     return `${c.patient.name} • ${c.patient.yob} • ${c.patient.sex}`;
   };
 
@@ -226,7 +233,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     createCase,
     saveToActiveCase,
 
-    // ✅ expose helpers
+    updateCasePatient,
+
     getCaseLabel,
     getActiveCaseLabel,
   };

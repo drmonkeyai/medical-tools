@@ -11,6 +11,8 @@ import DrugInteractions from "./pages/DrugInteractions";
 import ICD10 from "./pages/ICD10";
 import Contact from "./pages/Contact";
 
+import Immunization from "./pages/Immunization"; // ✅ thêm dòng này
+
 import CaseDetail from "./pages/CaseDetail";
 // (CaseSummary nếu còn dùng thì giữ, không thì bỏ)
 import CaseSummary from "./pages/CaseSummary";
@@ -31,6 +33,9 @@ createRoot(document.getElementById("root")!).render(
 
           <Route path="/dose-adjust" element={<DoseAdjust />} />
           <Route path="/drug-interactions" element={<DrugInteractions />} />
+
+          <Route path="/immunization" element={<Immunization />} /> {/* ✅ thêm */}
+
           <Route path="/icd10" element={<ICD10 />} />
           <Route path="/contact" element={<Contact />} />
 

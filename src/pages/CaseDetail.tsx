@@ -1,19 +1,21 @@
 // src/pages/CaseDetail.tsx
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useCases } from "../context/CasesContext";
+import { useNavigate, useParams } from "react-router-dom";
+import { useCases, type Patient, type CaseItem, type ToolResult } from "../context/CasesContext";
 import { specialties } from "../data/tools";
 import type { Tool } from "../data/tools";
 
 type Domain = "bio" | "psycho" | "social";
 
+type ToolItem = Tool & {
+  specialtyId: string;
+  specialtyName: string;
+  domain: Domain;
+};
+
 function calcAge(yob: number) {
   const y = new Date().getFullYear();
   return Math.max(0, y - yob);
-}
-
-function round1(x: number) {
-  return Math.round(x * 10) / 10;
 }
 
 function bmiFrom(weightKg?: number, heightCm?: number) {
@@ -23,18 +25,17 @@ function bmiFrom(weightKg?: number, heightCm?: number) {
   return weightKg / (h * h);
 }
 
-function bmiClassAsia(bmi: number) {
+// BMI theo ngưỡng Châu Á (bạn đang dùng)
+function bmiClassAsian(bmi: number) {
   if (bmi < 18.5) return "Gầy (<18.5)";
   if (bmi < 23) return "Bình thường (18.5–22.9)";
   if (bmi < 25) return "Thừa cân (23–24.9)";
   return "Béo phì (≥25)";
 }
 
-/** Map toolId -> Domain (theo tools.ts hiện tại của bạn) */
-function toolDomain(id: string): Domain {
-  const social = new Set<string>(["family-apgar", "screem", "pedigree"]);
-
-  const psycho = new Set<string>([
+function toolDomain(toolId: string): Domain {
+  const social = new Set(["family-apgar", "screem", "pedigree"]);
+  const psycho = new Set([
     "phq9",
     "gad7",
     "audit-c",
@@ -45,264 +46,169 @@ function toolDomain(id: string): Domain {
     "abcd2",
     "nihss",
   ]);
-
-  if (social.has(id)) return "social";
-  if (psycho.has(id)) return "psycho";
+  if (social.has(toolId)) return "social";
+  if (psycho.has(toolId)) return "psycho";
   return "bio";
 }
 
-function domainMeta(domain: Domain) {
-  switch (domain) {
-    case "bio":
-      return {
-        title: "BIO",
-        subtitle:
-          "Tim mạch • Hô hấp • Thận tiết niệu • Nội tiết • Tiêu hoá • Truyền nhiễm,…",
-      };
-    case "psycho":
-      return {
-        title: "PSYCHO",
-        subtitle: "Tâm thần kinh • Hành vi • Giấc ngủ • Thần kinh,…",
-      };
-    case "social":
-      return {
-        title: "SOCIAL",
-        subtitle: "Gia đình – xã hội • Nguồn lực • Bối cảnh sống,…",
-      };
-  }
+function domainTitle(d: Domain) {
+  if (d === "bio") return "BIO";
+  if (d === "psycho") return "PSYCHO";
+  return "SOCIAL";
 }
 
-function flattenAllTools() {
-  const out: Array<
-    Tool & {
-      specialtyId: string;
-      specialtyName: string;
-      domain: Domain;
-    }
-  > = [];
-
-  for (const sp of specialties) {
-    for (const t of sp.tools) {
-      out.push({
-        ...t,
-        specialtyId: sp.id,
-        specialtyName: sp.name,
-        domain: toolDomain(t.id),
-      });
-    }
-  }
-  return out;
-}
-
-function safeText(x: any) {
-  if (x == null) return "";
-  return String(x);
-}
-
-function buildSummaryFallback(result: any): string {
-  const summary = safeText(result?.summary);
-  if (summary) return summary;
-
-  const o = result?.outputs;
-  if (!o) return "";
-
-  if (o?.formulaText && o?.value != null && o?.unit) {
-    const st = o?.stage ? ` • ${o.stage}` : "";
-    return `${o.formulaText}: ${o.value} ${o.unit}${st}`;
-  }
-
-  if (o?.value != null && o?.unit) return `${o.value} ${o.unit}`;
-  return "";
-}
-
-/** Tự đoán prefix route ca: /cases/:id hay /case/:id */
-function detectCasePrefix(pathname: string) {
-  if (pathname.startsWith("/case/")) return "/case/";
-  if (pathname.startsWith("/cases/")) return "/cases/";
-  // default
-  return "/cases/";
+function domainDesc(d: Domain) {
+  if (d === "bio") return "Tim mạch • Hô hấp • Thận tiết niệu • Nội tiết • Tiêu hoá • Truyền nhiễm,…";
+  if (d === "psycho") return "Tâm thần kinh • Hành vi • Giấc ngủ • Thần kinh,…";
+  return "Gia đình – xã hội • Nguồn lực • Bối cảnh sống,…";
 }
 
 export default function CaseDetail() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const params = useParams();
+  const nav = useNavigate();
+  const { id } = useParams();
 
-  // ✅ FIX: hỗ trợ cả id và caseId (và các biến thể)
-  const paramId =
-    (params as any).id ??
-    (params as any).caseId ??
-    (params as any).caseID ??
-    null;
+  const {
+    cases,
+    activeCaseId,
+    setActiveCaseId,
+    activeCase,
+    updateCasePatient,
+  } = useCases();
 
-  const { cases, activeCaseId, setActiveCaseId } = useCases();
+  // Case theo URL :id (ưu tiên), fallback activeCase
+  const caseFromUrl = useMemo(() => {
+    if (!id) return null;
+    return cases.find((c) => c.id === id) ?? null;
+  }, [cases, id]);
 
-  const prefix = useMemo(
-    () => detectCasePrefix(location.pathname),
-    [location.pathname]
-  );
+  const caze: CaseItem | null = caseFromUrl ?? activeCase ?? null;
 
-  const allTools = useMemo(() => flattenAllTools(), []);
-
-  // ✅ Nếu URL thiếu param → dùng activeCaseId (hoặc case đầu tiên) và điều hướng lại
+  // Đồng bộ activeCaseId theo URL nếu có
   useEffect(() => {
-    if (paramId) return;
+    if (!id) return;
+    if (activeCaseId !== id) {
+      const exists = cases.some((c) => c.id === id);
+      if (exists) setActiveCaseId(id);
+    }
+  }, [id, activeCaseId, cases, setActiveCaseId]);
 
-    const fallbackId =
-      (activeCaseId && cases.some((c) => c.id === activeCaseId) && activeCaseId) ||
-      cases[0]?.id ||
-      null;
+  // Nếu URL id không tồn tại → show “không tìm thấy ca”
+  const urlIdInvalid = useMemo(() => {
+    if (!id) return false;
+    return !cases.some((c) => c.id === id);
+  }, [id, cases]);
 
-    if (!fallbackId) return;
+  // Flatten tools
+  const allTools: ToolItem[] = useMemo(() => {
+    const out: ToolItem[] = [];
+    for (const s of specialties) {
+      for (const t of s.tools) {
+        out.push({
+          ...t,
+          specialtyId: s.id,
+          specialtyName: s.name,
+          domain: toolDomain(t.id),
+        });
+      }
+    }
+    return out;
+  }, []);
 
-    setActiveCaseId(fallbackId);
-    navigate(`${prefix}${fallbackId}`, { replace: true });
-  }, [paramId, activeCaseId, cases, setActiveCaseId, navigate, prefix]);
-
-  // ✅ Đồng bộ activeCaseId theo URL param (nếu id tồn tại)
-  useEffect(() => {
-    if (!paramId) return;
-    const exists = cases.some((c) => c.id === paramId);
-    if (exists && activeCaseId !== paramId) setActiveCaseId(paramId);
-  }, [paramId, cases, activeCaseId, setActiveCaseId]);
-
-  const caseItem = useMemo(() => {
-    if (!paramId) return null;
-    return cases.find((c) => c.id === paramId) ?? null;
-  }, [cases, paramId]);
-
-  // Latest result per tool
+  // Latest result per tool in this case
   const latestByTool = useMemo(() => {
-    const m = new Map<string, any>();
-    if (!caseItem) return m;
-
-    for (const r of caseItem.results ?? []) {
-      if (!r?.tool) continue;
-
+    const m = new Map<string, ToolResult>();
+    if (!caze) return m;
+    for (const r of caze.results) {
       const prev = m.get(r.tool);
       if (!prev) {
         m.set(r.tool, r);
         continue;
       }
-
-      const tPrev = Date.parse(prev.when ?? prev.outputs?.when ?? "");
-      const tNow = Date.parse(r.when ?? r.outputs?.when ?? "");
-      if (!Number.isFinite(tPrev) || tNow > tPrev) m.set(r.tool, r);
+      // compare time
+      if (String(r.when) > String(prev.when)) m.set(r.tool, r);
     }
     return m;
-  }, [caseItem]);
+  }, [caze]);
 
-  const computed = useMemo(() => {
-    const done: typeof allTools = [];
-    const todo: typeof allTools = [];
+  // Done / Todo
+  const doneTools = useMemo(() => allTools.filter((t) => latestByTool.has(t.id)), [allTools, latestByTool]);
+  const todoTools = useMemo(() => allTools.filter((t) => !latestByTool.has(t.id)), [allTools, latestByTool]);
 
-    for (const t of allTools) {
-      (latestByTool.has(t.id) ? done : todo).push(t);
+  const doneByDomain = useMemo(() => {
+    const obj: Record<Domain, ToolItem[]> = { bio: [], psycho: [], social: [] };
+    for (const t of doneTools) obj[t.domain].push(t);
+    for (const d of Object.keys(obj) as Domain[]) {
+      obj[d].sort((a, b) => a.name.localeCompare(b.name));
     }
+    return obj;
+  }, [doneTools]);
 
-    const order: Record<Domain, number> = { bio: 0, psycho: 1, social: 2 };
+  const countByDomain = useMemo(() => {
+    const allByDomain: Record<Domain, number> = { bio: 0, psycho: 0, social: 0 };
+    const doneCount: Record<Domain, number> = { bio: 0, psycho: 0, social: 0 };
+    for (const t of allTools) allByDomain[t.domain] += 1;
+    for (const t of doneTools) doneCount[t.domain] += 1;
+    return { allByDomain, doneCount };
+  }, [allTools, doneTools]);
 
-    const sorter = (
-      a: (typeof allTools)[number],
-      b: (typeof allTools)[number]
-    ) => {
-      const da = order[a.domain] ?? 9;
-      const db = order[b.domain] ?? 9;
-      if (da !== db) return da - db;
-      return a.name.localeCompare(b.name);
-    };
+  // Edit modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [draft, setDraft] = useState<Patient | null>(null);
 
-    done.sort(sorter);
-    todo.sort(
-      (a, b) =>
-        a.specialtyName.localeCompare(b.specialtyName) ||
-        a.name.localeCompare(b.name)
-    );
+  useEffect(() => {
+    if (!caze) return;
+    setDraft({ ...caze.patient });
+  }, [caze?.id]);
 
-    const byDomain = (arr: typeof allTools) => ({
-      bio: arr.filter((t) => t.domain === "bio"),
-      psycho: arr.filter((t) => t.domain === "psycho"),
-      social: arr.filter((t) => t.domain === "social"),
-    });
+  const patientLine = useMemo(() => {
+    if (!caze) return "";
+    const p = caze.patient;
+    const age = calcAge(p.yob);
+    return `${p.name} • ${p.yob} (${age} tuổi) • ${p.sex}`;
+  }, [caze]);
 
-    return {
-      done,
-      todo,
-      doneByDomain: byDomain(done),
-      todoByDomain: byDomain(todo),
-    };
-  }, [allTools, latestByTool]);
+  const bmi = useMemo(() => {
+    if (!caze) return null;
+    return bmiFrom(caze.patient.weightKg, caze.patient.heightCm);
+  }, [caze]);
 
-  // Filter controls for TODO section
-  const [specialtyFilter, setSpecialtyFilter] = useState<string>("all");
-  const [q, setQ] = useState<string>("");
+  const bmiText = useMemo(() => {
+    if (!bmi) return "—";
+    const v = Math.round(bmi * 10) / 10;
+    return `${v} • ${bmiClassAsian(v)}`;
+  }, [bmi]);
 
-  const todoGroupedBySpecialty = useMemo(() => {
-    const keyword = q.trim().toLowerCase();
+  // Print/PDF
+  const onPrint = () => {
+    // người dùng chọn Save as PDF trong hộp thoại in
+    window.print();
+  };
 
-    const filtered = computed.todo.filter((t) => {
-      if (specialtyFilter !== "all" && t.specialtyId !== specialtyFilter)
-        return false;
-      if (!keyword) return true;
-      const hay = `${t.name} ${t.description}`.toLowerCase();
-      return hay.includes(keyword);
-    });
-
-    const map = new Map<
-      string,
-      { id: string; name: string; tools: typeof filtered }
-    >();
-
-    for (const t of filtered) {
-      const key = t.specialtyId;
-      const existing = map.get(key);
-      if (existing) existing.tools.push(t);
-      else map.set(key, { id: t.specialtyId, name: t.specialtyName, tools: [t] });
-    }
-
-    return specialties
-      .filter((sp) => map.has(sp.id))
-      .map((sp) => map.get(sp.id)!)
-      .filter((g) => g.tools.length > 0);
-  }, [computed.todo, specialtyFilter, q]);
-
-  const totalTools = allTools.length;
-  const doneCount = computed.done.length;
-
-  if (!caseItem) {
-    // ✅ Nếu case chưa load kịp hoặc id sai, cho nút về ca hợp lệ
-    const fallbackId =
-      (activeCaseId && cases.some((c) => c.id === activeCaseId) && activeCaseId) ||
-      cases[0]?.id ||
-      null;
-
+  if (!caze || urlIdInvalid) {
     return (
       <div className="page">
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Không tìm thấy ca</h2>
           <div style={{ color: "var(--muted)", fontWeight: 700 }}>
-            Ca có thể đã bị đóng hoặc id không đúng.
+            Ca có thể đã bị đóng hoặc ID không đúng.
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-            <button className="btn" type="button" onClick={() => navigate(-1)}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+            <button className="btn" type="button" onClick={() => nav(-1)}>
               ← Trở về
             </button>
-
-            {fallbackId && (
-              <button
-                className="btnPrimary"
-                type="button"
-                onClick={() => {
-                  setActiveCaseId(fallbackId);
-                  navigate(`${prefix}${fallbackId}`);
-                }}
-              >
-                Về ca gần nhất
-              </button>
-            )}
-
-            <button className="btn" type="button" onClick={() => navigate("/")}>
+            <button
+              className="btnPrimary"
+              type="button"
+              onClick={() => {
+                const first = cases[0];
+                if (first) nav(`/cases/${first.id}`);
+                else nav("/");
+              }}
+            >
+              Về ca gần nhất
+            </button>
+            <button className="btn" type="button" onClick={() => nav("/")}>
               Về Trang chủ
             </button>
           </div>
@@ -311,268 +217,319 @@ export default function CaseDetail() {
     );
   }
 
-  const patient = caseItem.patient;
-  const age = calcAge(patient.yob);
-  const bmi = bmiFrom(patient.weightKg, patient.heightCm);
-
-  const ToolSummaryRow = ({ tool }: { tool: (typeof allTools)[number] }) => {
-    const r = latestByTool.get(tool.id);
-    const summary = buildSummaryFallback(r);
-
-    return (
-      <button
-        type="button"
-        onClick={() => navigate(tool.route)}
-        style={{
-          width: "100%",
-          textAlign: "left",
-          border: "1px solid var(--line)",
-          background: "white",
-          borderRadius: 14,
-          padding: 12,
-          cursor: "pointer",
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "center",
-        }}
-        title="Bấm để xem chi tiết trong công cụ"
-      >
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontWeight: 900,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {tool.name}
-          </div>
-          <div
-            style={{
-              marginTop: 4,
-              color: "var(--muted)",
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            {summary || "Đã đánh giá"}
-          </div>
-        </div>
-
-        <div style={{ fontWeight: 900, color: "var(--muted)" }}>→</div>
-      </button>
-    );
-  };
-
-  const ToolTodoRow = ({ tool }: { tool: (typeof allTools)[number] }) => (
-    <div
-      style={{
-        border: "1px solid var(--line)",
-        borderRadius: 14,
-        padding: 12,
-        background: "white",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-      }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 900 }}>{tool.name}</div>
-        <div style={{ marginTop: 4, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
-          {tool.description}
-        </div>
-      </div>
-
-      <button className="btn" type="button" onClick={() => navigate(tool.route)}>
-        Mở →
-      </button>
-    </div>
-  );
-
-  const DomainBlock = ({
-    domain,
-    tools,
-  }: {
-    domain: Domain;
-    tools: (typeof allTools)[number][];
-  }) => {
-    const meta = domainMeta(domain);
-    const totalInDomain = allTools.filter((t) => t.domain === domain).length;
-    const doneInDomain = computed.done.filter((t) => t.domain === domain).length;
-
-    return (
-      <div style={{ marginTop: 12 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 900, color: "rgba(2,132,199,1)" }}>
-              {meta.title}
-            </div>
-            <div style={{ marginTop: 4, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
-              {meta.subtitle}
-            </div>
-          </div>
-
-          <div style={{ color: "rgba(2,132,199,1)", fontWeight: 900, fontSize: 13 }}>
-            {doneInDomain}/{totalInDomain} đã đánh giá
-          </div>
-        </div>
-
-        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-          {tools.length === 0 ? (
-            <div style={{ color: "var(--muted)", fontWeight: 800, padding: "6px 0" }}>
-              Chưa có đánh giá {meta.title}.
-            </div>
-          ) : (
-            tools.map((t) => <ToolSummaryRow key={t.id} tool={t} />)
-          )}
-        </div>
-      </div>
-    );
-  };
-
+  // ---- UI ----
   return (
     <div className="page">
-      {/* KHỐI 1: THÔNG TIN CA */}
-      <div
-        className="card"
-        style={{
-          marginBottom: 14,
-          background: "rgba(2,132,199,0.06)",
-          borderColor: "rgba(2,132,199,0.35)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
+      {/* Header block: title + actions (bỏ "Thông tin cơ bản") */}
+      <div className="card" style={{ background: "rgba(29,78,216,0.06)", borderColor: "rgba(29,78,216,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>Ca bệnh nhân</h1>
-            <div style={{ marginTop: 6, color: "var(--muted)", fontWeight: 800 }}>
-              Thông tin cơ bản • {doneCount}/{totalTools} đã đánh giá
-            </div>
+
+            {/* ✅ Nút chỉnh sửa */}
+            <button className="btn" type="button" onClick={() => setEditOpen(true)}>
+              ✎ Chỉnh sửa
+            </button>
+
+            {/* ✅ Nút in / xuất PDF */}
+            <button className="btn" type="button" onClick={onPrint} title="Mở hộp thoại in (Save as PDF)">
+              🖨 In / Xuất PDF
+            </button>
           </div>
 
-          <button className="btn" type="button" onClick={() => navigate(-1)}>
+          <button className="btn" type="button" onClick={() => nav(-1)}>
             ← Trở về
           </button>
         </div>
 
-        <div style={{ marginTop: 12, background: "white", border: "1px solid var(--line)", borderRadius: 14, padding: 12 }}>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>
-            {patient.name} • {patient.yob} ({age} tuổi) • {patient.sex}
-          </div>
+        {/* Patient summary (vẫn giữ, nhưng không còn tiêu đề “Thông tin cơ bản …”) */}
+        <div
+          style={{
+            marginTop: 12,
+            background: "white",
+            border: "1px solid var(--line)",
+            borderRadius: 16,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontWeight: 900, fontSize: 18 }}>{patientLine}</div>
 
-          <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ border: "1px solid var(--line)", borderRadius: 999, padding: "8px 12px", background: "rgba(0,0,0,0.02)", fontWeight: 900 }}>
-              Cân nặng: {patient.weightKg ? `${patient.weightKg} kg` : "—"}
-            </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+            <span className="badge" style={{ borderColor: "var(--line)", background: "rgba(0,0,0,0.02)" }}>
+              <span style={{ fontWeight: 900 }}>Cân nặng:</span>&nbsp;{caze.patient.weightKg ?? "—"}{" "}
+              {typeof caze.patient.weightKg === "number" ? "kg" : ""}
+            </span>
 
-            <div style={{ border: "1px solid var(--line)", borderRadius: 999, padding: "8px 12px", background: "rgba(0,0,0,0.02)", fontWeight: 900 }}>
-              Chiều cao: {patient.heightCm ? `${patient.heightCm} cm` : "—"}
-            </div>
+            <span className="badge" style={{ borderColor: "var(--line)", background: "rgba(0,0,0,0.02)" }}>
+              <span style={{ fontWeight: 900 }}>Chiều cao:</span>&nbsp;{caze.patient.heightCm ?? "—"}{" "}
+              {typeof caze.patient.heightCm === "number" ? "cm" : ""}
+            </span>
 
-            <div style={{ border: "1px solid var(--line)", borderRadius: 999, padding: "8px 12px", background: "rgba(0,0,0,0.02)", fontWeight: 900 }}>
-              BMI:{" "}
-              {bmi ? (
-                <>
-                  {round1(bmi)} •{" "}
-                  <span style={{ color: "rgba(2,132,199,1)" }}>{bmiClassAsia(bmi)}</span>
-                </>
-              ) : (
-                "—"
-              )}
-            </div>
+            <span className="badge" style={{ borderColor: "var(--line)", background: "rgba(0,0,0,0.02)" }}>
+              <span style={{ fontWeight: 900 }}>BMI:</span>&nbsp;{bmiText}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* KHỐI 2: TỔNG HỢP ĐÃ ĐÁNH GIÁ */}
-      <div
-        className="card"
-        style={{
-          marginBottom: 14,
-          background: "rgba(2,132,199,0.06)",
-          borderColor: "rgba(2,132,199,0.35)",
-        }}
-      >
-        <div style={{ fontWeight: 900, fontSize: 18 }}>Tổng hợp đã đánh giá</div>
-        <div style={{ marginTop: 6, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
-          Chỉ hiển thị kết quả tóm tắt. Bấm vào từng dòng để mở công cụ xem chi tiết.
+      {/* Summary done */}
+      <div className="card" style={{ marginTop: 14, background: "rgba(29,78,216,0.06)", borderColor: "rgba(29,78,216,0.25)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>Tổng hợp đã đánh giá</div>
+            <div style={{ marginTop: 6, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
+              Chỉ hiển thị kết quả tóm tắt. Bấm vào từng dòng để mở công cụ xem chi tiết.
+            </div>
+          </div>
+
+          <div style={{ color: "var(--muted)", fontWeight: 900 }}>
+            {doneTools.length}/{allTools.length} đã đánh giá
+          </div>
         </div>
 
-        <DomainBlock domain="bio" tools={computed.doneByDomain.bio} />
-        <DomainBlock domain="psycho" tools={computed.doneByDomain.psycho} />
-        <DomainBlock domain="social" tools={computed.doneByDomain.social} />
+        <div style={{ marginTop: 14, display: "grid", gap: 16 }}>
+          {(["bio", "psycho", "social"] as Domain[]).map((d) => {
+            const rows = doneByDomain[d];
+            const doneN = countByDomain.doneCount[d];
+            const allN = countByDomain.allByDomain[d];
+
+            return (
+              <div key={d} style={{ padding: 14, borderRadius: 16, background: "rgba(255,255,255,0.75)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                  <div>
+                    <div style={{ fontWeight: 900, color: "rgba(2,132,199,0.95)" }}>{domainTitle(d)}</div>
+                    <div style={{ marginTop: 4, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
+                      {domainDesc(d)}
+                    </div>
+                  </div>
+
+                  <div style={{ color: "rgba(2,132,199,0.95)", fontWeight: 900 }}>
+                    {doneN}/{allN} đã đánh giá
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  {!rows.length ? (
+                    <div style={{ color: "var(--muted)", fontWeight: 800 }}>Chưa có đánh giá {domainTitle(d)}.</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {rows.map((t) => {
+                        const r = latestByTool.get(t.id);
+                        const summary = r?.summary || r?.outputs?.summary || "";
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => nav(t.route)}
+                            style={{
+                              width: "100%",
+                              textAlign: "left",
+                              padding: 12,
+                              borderRadius: 14,
+                              border: "1px solid var(--line)",
+                              background: "white",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 12,
+                              alignItems: "center",
+                            }}
+                            title="Mở công cụ để xem chi tiết"
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 900 }}>{t.name}</div>
+                              <div style={{ marginTop: 4, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
+                                {summary || "Đã đánh giá"}
+                              </div>
+                            </div>
+                            <div style={{ fontWeight: 900, color: "var(--muted)" }}>→</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* KHỐI 3: CÔNG CỤ CHƯA ĐÁNH GIÁ */}
-      <div className="card">
-        <div style={{ fontWeight: 900, fontSize: 18 }}>Công cụ chưa đánh giá</div>
+      {/* Todo tools by specialty */}
+      <div className="card" style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 20, fontWeight: 900 }}>Công cụ chưa đánh giá</div>
         <div style={{ marginTop: 6, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
           Đánh giá xong sẽ tự chuyển lên phần “Tổng hợp đã đánh giá” đúng nhóm BIO/PSYCHO/SOCIAL.
         </div>
 
         <div className="divider" />
 
-        <div className="formGrid" style={{ marginTop: 0 }}>
-          <div className="field field--wide" style={{ gridColumn: "span 6" }}>
-            <div className="label">Chuyên khoa</div>
-            <select
-              className="select"
-              value={specialtyFilter}
-              onChange={(e) => setSpecialtyFilter(e.target.value)}
-            >
-              <option value="all">Tất cả chuyên khoa</option>
-              {specialties.map((sp) => (
-                <option key={sp.id} value={sp.id}>
-                  {sp.name}
-                </option>
-              ))}
-            </select>
-            <div className="help">Mẹo: chọn “Tất cả” để duyệt toàn bộ bộ công cụ.</div>
+        {todoTools.length === 0 ? (
+          <div style={{ color: "var(--muted)", fontWeight: 800 }}>Đã đánh giá hết 🎉</div>
+        ) : (
+          <div style={{ display: "grid", gap: 14 }}>
+            {specialties.map((s) => {
+              const toolsInS = todoTools.filter((t) => t.specialtyId === s.id);
+              if (!toolsInS.length) return null;
+
+              return (
+                <div key={s.id} style={{ border: "1px solid var(--line)", borderRadius: 16, background: "white" }}>
+                  <div style={{ padding: 12, borderBottom: "1px solid var(--line)", fontWeight: 900 }}>
+                    {s.name}
+                  </div>
+
+                  <div style={{ padding: 12, display: "grid", gap: 10 }}>
+                    {toolsInS.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => nav(t.route)}
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          padding: 12,
+                          borderRadius: 14,
+                          border: "1px solid var(--line)",
+                          background: "white",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          alignItems: "center",
+                        }}
+                        title="Mở công cụ"
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 900 }}>{t.name}</div>
+                          <div style={{ marginTop: 4, color: "var(--muted)", fontWeight: 700, fontSize: 13 }}>
+                            {t.description}
+                          </div>
+                        </div>
+                        <div style={{ fontWeight: 900, color: "var(--muted)" }}>→</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
+        )}
+      </div>
 
-          <div className="field field--wide" style={{ gridColumn: "span 6" }}>
-            <div className="label">Tìm nhanh</div>
-            <input
-              className="input"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Tìm nhanh bằng từ khoá... (vd: score2, qsofa, BMI, centor)"
-            />
-            <div className="help">Tìm nhanh bằng từ khoá trong tên và mô tả công cụ.</div>
-          </div>
-        </div>
-
-        <div className="divider" />
-
-        <div style={{ display: "grid", gap: 14 }}>
-          {todoGroupedBySpecialty.length === 0 ? (
-            <div style={{ color: "var(--muted)", fontWeight: 900 }}>
-              Không còn công cụ nào chưa đánh giá (hoặc không khớp bộ lọc).
+      {/* Edit modal */}
+      {editOpen && draft && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onMouseDown={() => setEditOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 100,
+          }}
+        >
+          <div
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              width: "min(560px, 100%)",
+              background: "white",
+              borderRadius: 16,
+              border: "1px solid var(--line)",
+              boxShadow: "0 14px 40px rgba(0,0,0,0.18)",
+              padding: 14,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>Chỉnh sửa thông tin ca</div>
+              <button className="btn" type="button" onClick={() => setEditOpen(false)}>
+                ×
+              </button>
             </div>
-          ) : (
-            todoGroupedBySpecialty.map((group) => (
-              <div
-                key={group.id}
-                style={{
-                  border: "1px solid var(--line)",
-                  borderRadius: 16,
-                  padding: 14,
-                  background: "rgba(255,255,255,0.7)",
+
+            <div className="divider" />
+
+            <div className="formGrid" style={{ marginTop: 0 }}>
+              <div className="field field--full">
+                <label className="label">Họ và tên</label>
+                <input
+                  className="input"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+              </div>
+
+              <div className="field">
+                <label className="label">Năm sinh</label>
+                <input
+                  className="input"
+                  type="number"
+                  value={draft.yob}
+                  onChange={(e) => setDraft({ ...draft, yob: Number(e.target.value) })}
+                />
+              </div>
+
+              <div className="field">
+                <label className="label">Giới</label>
+                <select
+                  className="select"
+                  value={draft.sex}
+                  onChange={(e) => setDraft({ ...draft, sex: e.target.value as Patient["sex"] })}
+                >
+                  <option value="Nam">Nam</option>
+                  <option value="Nữ">Nữ</option>
+                </select>
+              </div>
+
+              <div className="field">
+                <label className="label">Cân nặng (kg)</label>
+                <input
+                  className="input"
+                  type="number"
+                  value={draft.weightKg ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value === "" ? undefined : Number(e.target.value);
+                    setDraft({ ...draft, weightKg: v });
+                  }}
+                />
+              </div>
+
+              <div className="field">
+                <label className="label">Chiều cao (cm)</label>
+                <input
+                  className="input"
+                  type="number"
+                  value={draft.heightCm ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value === "" ? undefined : Number(e.target.value);
+                    setDraft({ ...draft, heightCm: v });
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+              <button className="btn" type="button" onClick={() => setEditOpen(false)}>
+                Huỷ
+              </button>
+              <button
+                className="btnPrimary"
+                type="button"
+                onClick={() => {
+                  updateCasePatient(caze.id, draft);
+                  setEditOpen(false);
                 }}
               >
-                <div style={{ fontWeight: 900, fontSize: 16 }}>{group.name}</div>
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                  {group.tools.map((t) => (
-                    <ToolTodoRow key={t.id} tool={t} />
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
+                Lưu thay đổi
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
