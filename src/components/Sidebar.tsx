@@ -11,11 +11,30 @@ type NavLinkClassNameFn = (props: { isActive: boolean }) => string;
 const linkClass: NavLinkClassNameFn = ({ isActive }) =>
   isActive ? "sb__link sb__link--active" : "sb__link";
 
+type Item = {
+  label: string;
+  to: string;
+  icon: string; // dùng emoji để khỏi phụ thuộc lib icon
+};
+
+const items: Item[] = [
+  { label: "Trang chủ", to: "/", icon: "🏠" },
+  { label: "Công cụ tính toán", to: "/tools", icon: "✅" },
+  { label: "Tiếp cận theo chứng", to: "/symptoms", icon: "🧭" },
+  { label: "Điều chỉnh liều thuốc", to: "/dose-adjust", icon: "💊" },
+  { label: "Tương tác thuốc", to: "/drug-interactions", icon: "🔁" },
+  { label: "Hướng dẫn tiêm chủng", to: "/immunization", icon: "💉" },
+  { label: "Tra cứu ICD-10", to: "/icd10", icon: "📘" },
+  { label: "Liên hệ", to: "/contact", icon: "👤" },
+];
+
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <aside className={`sb ${isOpen ? "sb--open" : ""}`}>
       <div className="sb__brand">
-        <div className="sb__logo">🩺</div>
+        <div className="sb__logo" aria-hidden="true">
+          🩺
+        </div>
         <div>
           <div className="sb__title">Hỗ trợ bác sĩ</div>
           <div className="sb__sub">Medical tools</div>
@@ -29,34 +48,14 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           onClose?.();
         }}
       >
-        <NavLink to="/" className={linkClass}>
-          Trang chủ
-        </NavLink>
-
-        <NavLink to="/tools" className={linkClass}>
-          Công cụ tính toán
-        </NavLink>
-
-        <NavLink to="/dose-adjust" className={linkClass}>
-          Điều chỉnh liều thuốc
-        </NavLink>
-
-        <NavLink to="/drug-interactions" className={linkClass}>
-          Tương tác thuốc
-        </NavLink>
-
-        {/* ✅ MỚI: Hướng dẫn tiêm chủng */}
-        <NavLink to="/immunization" className={linkClass}>
-          Hướng dẫn tiêm chủng
-        </NavLink>
-
-        <NavLink to="/icd10" className={linkClass}>
-          Tra cứu ICD-10
-        </NavLink>
-
-        <NavLink to="/contact" className={linkClass}>
-          Liên hệ
-        </NavLink>
+        {items.map((it) => (
+          <NavLink key={it.to} to={it.to} end={it.to === "/"} className={linkClass}>
+            <span className="sb__i" aria-hidden="true">
+              {it.icon}
+            </span>
+            <span className="sb__text">{it.label}</span>
+          </NavLink>
+        ))}
       </nav>
 
       <div className="sb__footer">

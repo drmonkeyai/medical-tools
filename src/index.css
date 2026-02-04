@@ -1,49 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap");
+
 /* =========================
    Global Theme + Typography
    ========================= */
-
 :root{
-  --bg:#f3f6fb;
+  /* Base */
+  --bg:#f5f7fb;
   --card:#ffffff;
   --text:#0f172a;
   --muted:#64748b;
   --line:#e5e7eb;
-  --primary:#1d4ed8;
-  --primary2:#0b5bd3;
 
-  /* ✅ Typography */
-  --font-sans: Arial, Helvetica, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  --fs-base: 13.5px;  /* toàn app */
-  --fs-small: 12px;   /* chữ phụ */
+  --primary:#1d4ed8;
+  --primary2:#1e40af;
+
+  /* Sidebar palette */
+  --sb1:#1f4fbf;
+  --sb2:#1843a3;
+  --sb3:#153a8c;
+
+  /* Typography */
+  --font-sans: "Roboto", system-ui, -apple-system, "Segoe UI", Arial, Helvetica, "Noto Sans", sans-serif;
+  --fs-base: 14px;
+  --fs-small: 12px;
   --lh-base: 1.45;
 
-  /* Radius system */
-  --r-card:16px;   /* card lớn */
-  --r-ui:14px;     /* input / button / avatar / tile */
+  /* Radius */
+  --r-card:12px;
+  --r-ui:10px;
   --r-pill:999px;
 
-  /* Shadow system */
-  --shadow-card: 0 6px 20px rgba(15,23,42,0.06);
-  --shadow-hover: 0 6px 16px rgba(15,23,42,0.08);
+  /* Shadows (very light) */
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.08);
 
-  /* Risk colors (dịu, đồng bộ UI) */
+  /* Focus ring */
+  --ring: 0 0 0 4px rgba(29,78,216,0.12);
+
+  /* Risk colors */
   --risk-low-bg: rgba(22,163,74,0.10);
-  --risk-low-bd: rgba(22,163,74,0.28);
+  --risk-low-bd: rgba(22,163,74,0.25);
   --risk-low-tx: #166534;
 
   --risk-mod-bg: rgba(245,158,11,0.12);
-  --risk-mod-bd: rgba(245,158,11,0.30);
+  --risk-mod-bd: rgba(245,158,11,0.28);
   --risk-mod-tx: #92400e;
 
   --risk-high-bg: rgba(249,115,22,0.12);
-  --risk-high-bd: rgba(249,115,22,0.30);
+  --risk-high-bd: rgba(249,115,22,0.28);
   --risk-high-tx: #9a3412;
 
   --risk-vhigh-bg: rgba(239,68,68,0.12);
-  --risk-vhigh-bd: rgba(239,68,68,0.30);
+  --risk-vhigh-bd: rgba(239,68,68,0.28);
   --risk-vhigh-tx: #991b1b;
 }
 
+/* =========================
+   Reset + Base
+   ========================= */
 *{ box-sizing:border-box; }
 html, body{ height:100%; overflow-x:hidden; }
 
@@ -52,13 +65,13 @@ body{
   font-family: var(--font-sans);
   font-size: var(--fs-base);
   line-height: var(--lh-base);
-  background:var(--bg);
   color:var(--text);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a{ color:inherit; }
+a{ color:inherit; text-decoration:none; }
 
 button, input, select, textarea{
   font-family: var(--font-sans);
@@ -66,14 +79,25 @@ button, input, select, textarea{
   line-height: inherit;
 }
 
+::selection{
+  background: rgba(29,78,216,0.18);
+}
+
+:focus-visible{
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: 6px;
+}
+
 /* =========================
    Layout
    ========================= */
-
 .app{
   display:flex;
   min-height:100vh;
   width:100%;
+  padding: 14px;
+  gap: 14px;
 }
 
 .app__main{
@@ -82,14 +106,17 @@ button, input, select, textarea{
   flex-direction:column;
   min-width:0;
   width:100%;
+  border-radius: var(--r-card);
+  background: var(--card);
+  border: 1px solid var(--line);
+  overflow: hidden;
 }
 
 .app__content{
-  padding:18px;
+  padding:16px;
   min-width:0;
 }
 
-/* Generic page wrapper */
 .page{
   max-width: 1160px;
   margin: 0 auto;
@@ -97,88 +124,151 @@ button, input, select, textarea{
 }
 
 /* =========================
-   Sidebar
+   Sidebar (simple)
    ========================= */
-
 .sb{
   width:240px;
   flex: 0 0 240px;
-  background: linear-gradient(180deg, #0b3a83, #0b5bd3);
-  color:#fff;
   padding:14px;
   display:flex;
   flex-direction:column;
   gap:14px;
+
+  border-radius: var(--r-card);
+  background: linear-gradient(180deg, var(--sb1) 0%, var(--sb2) 55%, var(--sb3) 100%);
+  color:#fff;
+  border: 1px solid rgba(255,255,255,0.10);
+  position: relative;
+  overflow: hidden;
 }
+
+.sb::before{ display:none; }
 
 .sb__brand{
   display:flex;
-  gap:10px;
+  gap:12px;
   align-items:center;
-  padding:10px 10px;
-  border-radius:var(--r-ui);
-  background: rgba(255,255,255,0.08);
+  padding:10px 10px 12px;
+  border-radius: var(--r-ui);
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.14);
 }
 
 .sb__logo{
-  width:34px;height:34px;
-  border-radius:10px;
+  width:42px;height:42px;
+  border-radius: var(--r-ui);
   display:flex;align-items:center;justify-content:center;
-  background: rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.18);
   font-size:18px;
 }
 
-.sb__title{ font-weight:800; line-height:1; }
-.sb__sub{ font-size: var(--fs-small); opacity:.85; margin-top:3px; }
+.sb__title{
+  font-weight:800;
+  line-height:1.1;
+  font-size: 15px;
+  letter-spacing: .2px;
+}
+.sb__sub{
+  font-size: var(--fs-small);
+  opacity:.85;
+  margin-top:2px;
+}
 
 .sb__nav{
   display:flex;
   flex-direction:column;
   gap:8px;
+  padding: 6px 2px;
 }
 
 .sb__link{
-  padding:10px 12px;
-  border-radius:var(--r-ui);
-  text-decoration:none;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 10px;
+  border-radius: var(--r-ui);
   color:#fff;
-  opacity:.92;
+  opacity:.95;
+  border: 1px solid transparent;
   background: transparent;
-  font-weight: 800;
+  font-weight: 700;
+  transition: background 120ms ease, border-color 120ms ease;
 }
-.sb__link:hover{ background: rgba(255,255,255,0.10); }
+
+.sb__link:hover{
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.sb__i{
+  width:30px;height:30px;
+  border-radius: 9px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: 14px;
+}
+
+.sb__text{
+  flex:1;
+  min-width:0;
+}
+
+/* badge (nếu bạn còn dùng ở đâu) */
+.sb__soon{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.18);
+  font-size: var(--fs-small);
+  color: rgba(255,255,255,0.92);
+}
+
 .sb__link--active{
-  background: rgba(255,255,255,0.18);
   opacity:1;
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.22);
+}
+
+.sb__link--active .sb__i{
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.26);
 }
 
 .sb__footer{ margin-top:auto; }
 .sb__chip{
-  display:inline-block;
-  padding:6px 10px;
-  border-radius:var(--r-pill);
-  background: rgba(255,255,255,0.16);
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  border-radius: var(--r-ui);
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.14);
   font-size: var(--fs-small);
+  color: rgba(255,255,255,0.92);
 }
 
 /* =========================
-   Topbar
+   Topbar (simple)
    ========================= */
-
 .tb{
-  height:58px;
+  height:56px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:12px;
-  padding:10px 18px;
-  background: var(--bg);
-  border-bottom: none;
+  padding:10px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
   width:100%;
   min-width:0;
 }
 
-/* Ô thời gian */
 .tb__search{
   flex:1;
   max-width:760px;
@@ -187,78 +277,69 @@ button, input, select, textarea{
   gap:10px;
   padding:10px 12px;
   min-width:0;
-
-  background:#fff;
-  border:1px solid var(--line);
-  border-radius:var(--r-ui);
-  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-ui);
 }
 
 .tb__input{
   border:none;
   outline:none;
   width:100%;
-  font-size: inherit; /* ✅ inherit theo base */
   min-width:0;
-  font-weight: 900;
+  font-weight: 700;
+  background: transparent;
+  color: var(--text);
 }
 
-/* Cụm nút phải */
 .tb__right{
   display:flex;
   align-items:center;
   gap:10px;
-
   padding:8px 10px;
   border-radius:var(--r-ui);
-  background:#fff;
-  border:1px solid var(--line);
-  box-shadow: 0 4px 14px rgba(15,23,42,0.04);
-
+  background: #fff;
+  border: 1px solid var(--line);
   flex: 0 0 auto;
 }
 
-/* Nút Tạo ca mới */
 .tb__btn{
   border:none;
   background: var(--primary);
   color:#fff;
-  padding:9px 13px; /* ✅ nhỏ nhẹ hơn */
-  border-radius:var(--r-pill);
+  padding:9px 13px;
+  border-radius: var(--r-pill);
   cursor:pointer;
-  font-weight:900;
+  font-weight:800;
   font-size: 13px;
 }
-.tb__btn:hover{ filter: brightness(0.95); }
+.tb__btn:hover{ background: var(--primary2); }
 
-/* Avatar */
 .tb__avatar{
   width:36px;height:36px;
-  border-radius:var(--r-ui);
+  border-radius: var(--r-ui);
   display:flex;align-items:center;justify-content:center;
-  background:#eef2ff;
-  border:1px solid var(--line);
+  background: #fff;
+  border: 1px solid var(--line);
   font-size: 14px;
 }
 
-/* Nút menu (hamburger) chỉ hiện trên mobile */
 .tb__menu {
   display: none;
   border: 1px solid var(--line);
-  background: white;
-  border-radius: 12px;
+  background: #fff;
+  border-radius: var(--r-ui);
   padding: 9px 11px;
-  font-weight: 900;
+  font-weight: 800;
   cursor: pointer;
 }
 
 /* =========================
    Cards / Dashboard
    ========================= */
-
 .pageTitle{
-  font-size:16px;   /* ✅ nhỏ hơn */
-  font-weight:900;
+  font-size:15px;
+  font-weight:800;
   margin: 0 0 12px 0;
 }
 
@@ -274,11 +355,12 @@ button, input, select, textarea{
   border: 1px solid var(--line);
   border-radius: var(--r-card);
   padding: 14px;
-  box-shadow: var(--shadow-card);
   min-width:0;
 }
 
-/* Tiles */
+/* =========================
+   Tiles (auto responsive)
+   ========================= */
 .tileGrid{
   display:grid;
   grid-template-columns: repeat(4, minmax(0,1fr));
@@ -289,24 +371,26 @@ button, input, select, textarea{
   border: 1px solid var(--line);
   border-radius: var(--r-ui);
   padding: 12px;
-  background: #fff;
+  background: var(--card);
   cursor:pointer;
-  text-decoration:none;
   display:flex;
   flex-direction:column;
   gap:6px;
   min-width:0;
+  transition: border-color 120ms ease, background 120ms ease;
 }
-.tile:hover{ box-shadow: var(--shadow-hover); }
+.tile:hover{
+  border-color: rgba(29,78,216,0.35);
+  background: #fbfdff;
+}
 
 .tile__icon{ font-size:18px; }
-.tile__label{ font-weight:900; font-size: 13.5px; }
+.tile__label{ font-weight:800; font-size: 13.5px; }
 .tile__sub{ font-size: var(--fs-small); color:var(--muted); }
 
 /* =========================
    Form UI (calculators)
    ========================= */
-
 .calcHeader{
   display:flex;
   justify-content:space-between;
@@ -316,7 +400,7 @@ button, input, select, textarea{
 }
 
 .calcTitle{
-  font-size:24px; /* ✅ nhỏ hơn (trước 28) */
+  font-size:22px;
   font-weight:900;
   margin: 0;
   letter-spacing: 0.2px;
@@ -325,34 +409,38 @@ button, input, select, textarea{
 .calcSub{
   margin-top:6px;
   color:var(--muted);
-  font-weight:700;
+  font-weight:500;
   line-height:1.35;
   font-size: var(--fs-small);
 }
 
 .btn{
-  border:1px solid var(--line);
-  background:#fff;
+  border: 1px solid var(--line);
+  background: #fff;
   color:var(--text);
   padding:9px 11px;
   border-radius: var(--r-ui);
   cursor:pointer;
-  font-weight:900;
+  font-weight:800;
   font-size: 13px;
+  transition: background 120ms ease, border-color 120ms ease;
 }
-.btn:hover{ filter: brightness(0.98); }
+.btn:hover{
+  background:#f8fafc;
+  border-color: rgba(15,23,42,0.14);
+}
 
 .btnPrimary{
-  border:none;
-  background:var(--primary);
+  border: 1px solid rgba(29,78,216,0.25);
+  background: var(--primary);
   color:#fff;
   padding:9px 13px;
   border-radius: var(--r-pill);
   cursor:pointer;
-  font-weight:900;
+  font-weight:800;
   font-size: 13px;
 }
-.btnPrimary:hover{ filter: brightness(0.96); }
+.btnPrimary:hover{ background: var(--primary2); }
 
 .formGrid{
   display:grid;
@@ -361,34 +449,31 @@ button, input, select, textarea{
   margin-top: 14px;
 }
 
-.field{
-  grid-column: span 3;
-  min-width:0;
-}
+.field{ grid-column: span 3; min-width:0; }
 .field--wide{ grid-column: span 6; }
 .field--full{ grid-column: span 12; }
 
 .label{
   display:block;
-  font-weight:900;
+  font-weight:800;
   margin-bottom:8px;
   font-size: 13px;
 }
 
 .input, .select{
   width:100%;
-  border:1px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: var(--r-ui);
-  padding:11px 12px; /* ✅ nhỏ nhẹ hơn */
-  background:#fff;
+  padding:11px 12px;
+  background: #fff;
   outline:none;
-  font-weight:800;
-  font-size: inherit; /* ✅ theo base */
+  font-weight:600;
+  font-size: inherit;
 }
 
 .input:focus, .select:focus{
   border-color: rgba(29,78,216,0.45);
-  box-shadow: 0 0 0 4px rgba(29,78,216,0.10);
+  box-shadow: var(--ring);
 }
 
 .help{
@@ -407,14 +492,13 @@ button, input, select, textarea{
 /* =========================
    Risk badge
    ========================= */
-
 .badge{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:7px 11px; /* ✅ nhỏ hơn */
+  padding:7px 11px;
   border-radius: var(--r-pill);
-  font-weight:900;
+  font-weight:800;
   border:1px solid transparent;
   white-space: nowrap;
   font-size: 12.5px;
@@ -428,36 +512,21 @@ button, input, select, textarea{
   opacity: .95;
 }
 
-.badge--low{
-  background: var(--risk-low-bg);
-  border-color: var(--risk-low-bd);
-  color: var(--risk-low-tx);
-}
-
-.badge--moderate{
-  background: var(--risk-mod-bg);
-  border-color: var(--risk-mod-bd);
-  color: var(--risk-mod-tx);
-}
-
-.badge--high{
-  background: var(--risk-high-bg);
-  border-color: var(--risk-high-bd);
-  color: var(--risk-high-tx);
-}
-
-.badge--very-high{
-  background: var(--risk-vhigh-bg);
-  border-color: var(--risk-vhigh-bd);
-  color: var(--risk-vhigh-tx);
-}
+.badge--low{ background: var(--risk-low-bg); border-color: var(--risk-low-bd); color: var(--risk-low-tx); }
+.badge--moderate{ background: var(--risk-mod-bg); border-color: var(--risk-mod-bd); color: var(--risk-mod-tx); }
+.badge--high{ background: var(--risk-high-bg); border-color: var(--risk-high-bd); color: var(--risk-high-tx); }
+.badge--very-high{ background: var(--risk-vhigh-bg); border-color: var(--risk-vhigh-bd); color: var(--risk-vhigh-tx); }
 
 /* =========================
    Responsive
    ========================= */
+@media (max-width: 1024px) {
+  .sb { width: 220px; flex: 0 0 220px; }
+}
 
 @media (max-width: 980px){
   .sb{ width:200px; flex: 0 0 200px; }
+
   .tileGrid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
 
   .field{ grid-column: span 6; }
@@ -466,59 +535,49 @@ button, input, select, textarea{
 
 @media (max-width: 640px){
   .app__content{ padding: 14px; }
-  .calcTitle{ font-size: 21px; } /* ✅ nhỏ hơn mobile */
-
+  .calcTitle{ font-size: 20px; }
   .field{ grid-column: span 12; }
-}
-
-/* ===== Responsive bổ sung ===== */
-
-/* Tablet */
-@media (max-width: 1024px) {
-  .sb {
-    width: 220px;
-  }
 }
 
 /* Mobile */
 @media (max-width: 768px) {
-  .sb {
+  .app{ padding: 12px; }
+
+  .sb{
     position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
+    left: 12px;
+    top: 12px;
+    bottom: 12px;
+    border-radius: var(--r-card);
     transform: translateX(-110%);
     transition: transform 180ms ease;
     z-index: 50;
   }
-  .sb.sb--open {
-    transform: translateX(0);
-  }
+  .sb.sb--open { transform: translateX(0); }
 
-  .tb {
+  .tb{
     gap: 10px;
     flex-wrap: wrap;
+    height: auto;
   }
-  .tb__search {
+  .tb__search{
     width: 100% !important;
     max-width: 100% !important;
   }
-  .tb__right {
+  .tb__right{
     width: 100%;
     justify-content: space-between;
   }
 
-  .page {
-    padding: 12px;
-  }
-  .card {
-    padding: 14px;
-    border-radius: 14px;
-  }
+  .page{ padding: 12px; }
+  .card{ padding: 14px; border-radius: var(--r-card); }
 
-  .tb__menu {
+  .tb__menu{
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
+
+  /* tileGrid on very small screens */
+  .tileGrid{ grid-template-columns: repeat(1, minmax(0,1fr)); }
 }
