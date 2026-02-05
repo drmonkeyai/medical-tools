@@ -25,6 +25,7 @@ import CanNang from "./pages/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan";
 import DauNguc from "./pages/symptoms/dau-nguc";
 import KhoTho from "./pages/symptoms/kho-tho";
 import HoiHop from "./pages/symptoms/hoi-hop-danh-trong-nguc";
+import Ho from "./pages/symptoms/ho";
 import PhuChan from "./pages/symptoms/phu-chan";
 
 import DauDau from "./pages/symptoms/dau-dau";
@@ -75,6 +76,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/symptoms/dau-nguc" element={<DauNguc />} />
           <Route path="/symptoms/kho-tho" element={<KhoTho />} />
           <Route path="/symptoms/hoi-hop-danh-trong-nguc" element={<HoiHop />} />
+          <Route path="/symptoms/ho" element={<Ho />} />
           <Route path="/symptoms/phu-chan" element={<PhuChan />} />
 
           <Route path="/symptoms/dau-dau" element={<DauDau />} />

@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 
 export default function SymptomLayout({
   title,
+  subtitle,
   children,
 }: {
   title: string;
+  subtitle?: string; // ✅ thêm subtitle
   children?: ReactNode;
 }) {
   return (
@@ -13,12 +15,17 @@ export default function SymptomLayout({
       <div className="calcHeader">
         <div>
           <h1 className="calcTitle">{title}</h1>
+
           <div className="calcSub">
-            Khung tiếp cận: hỏi bệnh → khám → red flags → gợi ý xét nghiệm → chẩn đoán phân biệt.
+            {subtitle ??
+              "Khung tiếp cận: hỏi bệnh → khám → red flags → gợi ý xét nghiệm → chẩn đoán phân biệt."}
           </div>
         </div>
+
         <div style={{ display: "flex", gap: 10 }}>
-          <Link className="btn" to="/symptoms">← Danh sách chứng</Link>
+          <Link className="btn" to="/symptoms">
+            ← Danh sách chứng
+          </Link>
         </div>
       </div>
 

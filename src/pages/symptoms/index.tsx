@@ -41,6 +41,7 @@ const symptoms: SymptomItem[] = [
   { group: "tim-mach-ho-hap", groupLabel: "🫀 Nhóm tim mạch – hô hấp", label: "Đau ngực", slug: "dau-nguc", keywords: "chest pain" },
   { group: "tim-mach-ho-hap", groupLabel: "🫀 Nhóm tim mạch – hô hấp", label: "Khó thở", slug: "kho-tho", keywords: "dyspnea" },
   { group: "tim-mach-ho-hap", groupLabel: "🫀 Nhóm tim mạch – hô hấp", label: "Hồi hộp / đánh trống ngực", slug: "hoi-hop-danh-trong-nguc", keywords: "palpitations" },
+  { group: "tim-mach-ho-hap", groupLabel: "🫀 Nhóm tim mạch – hô hấp", label: "Ho", slug: "ho", keywords: "cough" },
   { group: "tim-mach-ho-hap", groupLabel: "🫀 Nhóm tim mạch – hô hấp", label: "Phù chân", slug: "phu-chan", keywords: "edema" },
 
   // 🧠 Nhóm thần kinh – tâm thần
