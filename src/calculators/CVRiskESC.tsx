@@ -1,1615 +1,814 @@
 // src/calculators/CVRiskESC.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useCases } from "../context/CasesContext";
 
-type RiskLevel = "Thấp" | "Trung bình" | "Cao" | "Rất cao" | "Chưa phân loại";
-type Prevention = "Phòng ngừa thứ phát" | "Phòng ngừa nguyên phát";
+import ScorePopup, { type ScoreModel, type ScorePopupResult } from "../components/ScorePopup";
+import type { RiskRegion, Sex } from "./score2Core";
 
-type ScoreTab = "score2" | "score2-op" | "score2-diabetes";
-type CountryCluster = "Nguy cơ thấp" | "Nguy cơ trung bình" | "Nguy cơ cao" | "Nguy cơ rất cao";
+type EscRisk = "low" | "moderate" | "high" | "very-high";
 
-function upgradeOne(level: RiskLevel): RiskLevel {
-  if (level === "Chưa phân loại") return level;
-  if (level === "Rất cao") return level;
-  if (level === "Cao") return "Rất cao";
-  if (level === "Trung bình") return "Cao";
-  return "Trung bình";
+function escLabel(v: EscRisk) {
+  if (v === "low") return "Nguy cơ thấp";
+  if (v === "moderate") return "Nguy cơ trung bình";
+  if (v === "high") return "Nguy cơ cao";
+  return "Nguy cơ rất cao";
 }
 
-function clamp01to100(x: number) {
-  if (!Number.isFinite(x)) return 0;
-  return Math.max(0, Math.min(100, x));
+function escColors(v: EscRisk) {
+  // theo phong cách ESC (vàng/cam/đỏ/đỏ đậm)
+  if (v === "low") return { bg: "#FFF000", fg: "#111827" };
+  if (v === "moderate") return { bg: "#F09010", fg: "#111827" };
+  if (v === "high") return { bg: "#E00000", fg: "#ffffff" };
+  return { bg: "#B00000", fg: "#ffffff" };
 }
 
-/**
- * ✅ FIX lỗi “mặc định rất cao”: không cho "" -> 0
- * ✅ hỗ trợ dấu phẩy: 7,5 -> 7.5
- */
-function numOrUndef(v: string): number | undefined {
-  const s = (v ?? "").trim();
-  if (!s) return undefined;
-  const normalized = s.replace(",", ".");
-  const x = Number(normalized);
-  return Number.isFinite(x) ? x : undefined;
+function nextUp(v: EscRisk): EscRisk {
+  if (v === "low") return "moderate";
+  if (v === "moderate") return "high";
+  if (v === "high") return "very-high";
+  return "very-high";
 }
 
-const CHOL_MGDL_PER_MMOLL = 38.67;
-const mgToMmol = (mg: number) => mg / CHOL_MGDL_PER_MMOLL;
-const mmolToMg = (mmol: number) => mmol * CHOL_MGDL_PER_MMOLL;
+function boolCountUnsafe(obj: unknown) {
+  return Object.values(obj as Record<string, boolean>).filter(Boolean).length;
+}
 
-type Tone = {
-  tagVN: string;
-  tagEN: string;
-  bg: string;
-  border: string;
-  chipBg: string;
-  chipText: string;
-};
-
-function escTone(level: RiskLevel): Tone {
-  // Màu theo tinh thần ESC: xanh (low) - cam (moderate) - đỏ (high) - đỏ đậm (very high)
-  switch (level) {
-    case "Thấp":
-      return {
-        tagVN: "Thấp",
-        tagEN: "Low risk",
-        bg: "rgba(132,204,22,.12)",
-        border: "rgba(77,124,15,.45)",
-        chipBg: "#84cc16",
-        chipText: "#0b1220",
-      };
-    case "Trung bình":
-      return {
-        tagVN: "Trung bình",
-        tagEN: "Moderate risk",
-        bg: "rgba(245,158,11,.14)",
-        border: "rgba(180,83,9,.45)",
-        chipBg: "#f59e0b",
-        chipText: "#0b1220",
-      };
-    case "Cao":
-      return {
-        tagVN: "Cao",
-        tagEN: "High risk",
-        bg: "rgba(239,68,68,.10)",
-        border: "rgba(185,28,28,.40)",
-        chipBg: "#ef4444",
-        chipText: "#ffffff",
-      };
-    case "Rất cao":
-      return {
-        tagVN: "Rất cao",
-        tagEN: "Very high risk",
-        bg: "rgba(153,27,27,.10)",
-        border: "rgba(127,29,29,.45)",
-        chipBg: "#991b1b",
-        chipText: "#ffffff",
-      };
-    default:
-      return {
-        tagVN: "Chưa phân loại",
-        tagEN: "Not classified",
-        bg: "rgba(100,116,139,.10)",
-        border: "rgba(100,116,139,.35)",
-        chipBg: "#64748b",
-        chipText: "#ffffff",
-      };
+function targetsForRisk(v: EscRisk) {
+  if (v === "very-high") {
+    return [
+      "LDL-C mục tiêu: < 1.4 mmol/L (55 mg/dL) + giảm ≥50% so với ban đầu.",
+      "Ưu tiên can thiệp tích cực đa yếu tố (HA, đường huyết, hút thuốc…).",
+      "Lối sống: bỏ thuốc lá, vận động đều, giảm muối, kiểm soát cân nặng.",
+    ];
   }
-}
-
-type LDLGoal = {
-  classLabel: string;
-  mmol: string;
-  mgdl: string;
-  extra?: string;
-  note?: string;
-};
-
-function ldlGoalFor(level: RiskLevel): LDLGoal | null {
-  if (level === "Chưa phân loại") return null;
-
-  if (level === "Thấp") return { classLabel: "Class IIb", mmol: "<3.0", mgdl: "<116" };
-  if (level === "Trung bình") return { classLabel: "Class IIa", mmol: "<2.6", mgdl: "<100" };
-  if (level === "Cao")
-    return { classLabel: "Class I", mmol: "<1.8", mgdl: "<70", extra: "và giảm ≥50% từ ban đầu" };
-
-  return {
-    classLabel: "Class I",
-    mmol: "<1.4",
-    mgdl: "<55",
-    extra: "và giảm ≥50% từ ban đầu",
-    note:
-      "Nếu biến cố tái phát dù điều trị tối ưu (tình huống “extreme risk”): có thể cân nhắc mục tiêu <1.0 mmol/L (<40 mg/dL).",
-  };
-}
-
-type Strategy = {
-  label: string;
-  color: "green" | "yellow" | "red" | "gray";
-};
-
-function ldlBand(ldlMmol: number) {
-  if (ldlMmol < 1.4) return 0;
-  if (ldlMmol < 1.8) return 1;
-  if (ldlMmol < 2.6) return 2;
-  if (ldlMmol < 3.0) return 3;
-  if (ldlMmol < 4.9) return 4;
-  return 5;
-}
-
-function interventionStrategy(risk: RiskLevel, prevention: Prevention, ldlMmol?: number): Strategy | null {
-  if (risk === "Chưa phân loại") return null;
-  if (ldlMmol === undefined) return null;
-
-  const b = ldlBand(ldlMmol);
-
-  const green: Strategy = { label: "Tư vấn lối sống", color: "green" };
-  const yellow: Strategy = { label: "Điều chỉnh lối sống, cân nhắc thêm thuốc nếu chưa kiểm soát", color: "yellow" };
-  const red: Strategy = { label: "Điều chỉnh lối sống + can thiệp thuốc đồng thời", color: "red" };
-
-  if (risk === "Rất cao" && prevention === "Phòng ngừa thứ phát") return red;
-
-  if (risk === "Thấp") {
-    if (b <= 3) return green;
-    if (b === 4) return yellow;
-    return { label: "LDL-C rất cao (≥4.9) → thường đã thuộc nhóm nguy cơ ≥ Cao", color: "gray" };
+  if (v === "high") {
+    return [
+      "LDL-C mục tiêu: < 1.8 mmol/L (70 mg/dL) + giảm ≥50% so với ban đầu.",
+      "Kiểm soát HA tích cực theo dung nạp.",
+      "Lối sống: bỏ thuốc lá, ăn lành mạnh, vận động đều.",
+    ];
   }
-
-  if (risk === "Trung bình") {
-    if (b <= 2) return green;
-    if (b === 3 || b === 4) return yellow;
-    return { label: "LDL-C rất cao (≥4.9) → thường đã thuộc nhóm nguy cơ ≥ Cao", color: "gray" };
+  if (v === "moderate") {
+    return [
+      "LDL-C mục tiêu: < 2.6 mmol/L (100 mg/dL).",
+      "Lối sống tối ưu, theo dõi định kỳ.",
+      "Cân nhắc thuốc nếu LDL cao/khó kiểm soát hoặc nhiều yếu tố nguy cơ.",
+    ];
   }
-
-  if (risk === "Cao") {
-    if (b <= 1) return green;
-    if (b === 2) return yellow;
-    return red;
-  }
-
-  // Very high primary prevention
-  if (risk === "Rất cao") {
-    if (b <= 1) return yellow;
-    return red;
-  }
-
-  return null;
-}
-
-function badgeStyle(color: Strategy["color"]): React.CSSProperties {
-  if (color === "green")
-    return { background: "rgba(16,185,129,.18)", borderColor: "rgba(16,185,129,.45)", color: "#064e3b" };
-  if (color === "yellow")
-    return { background: "rgba(245,158,11,.18)", borderColor: "rgba(245,158,11,.45)", color: "#7c2d12" };
-  if (color === "red")
-    return { background: "rgba(239,68,68,.14)", borderColor: "rgba(185,28,28,.40)", color: "#7f1d1d" };
-  return { background: "rgba(100,116,139,.12)", borderColor: "rgba(100,116,139,.35)", color: "#334155" };
+  return [
+    "LDL-C mục tiêu: < 3.0 mmol/L (116 mg/dL).",
+    "Ưu tiên lối sống, tầm soát và theo dõi định kỳ.",
+  ];
 }
 
 export default function CVRiskESC() {
-  const ctx = useCases() as any;
-  const activeCase = ctx?.activeCase;
-  const activeCaseId = ctx?.activeCaseId;
-  const saveToActiveCase = ctx?.saveToActiveCase ?? ctx?.saveToolResult;
+  const navigate = useNavigate();
+  const { activeCaseId, saveToActiveCase } = useCases();
 
-  const nowYear = new Date().getFullYear();
-  const caseYob: number | undefined = activeCase?.patient?.yob;
-  const caseSexRaw: any = activeCase?.patient?.sex;
+  // ===== Inputs tối thiểu =====
+  const [region, setRegion] = useState<RiskRegion>("High");
+  const [sex, setSex] = useState<Sex>("male");
+  const [age, setAge] = useState<number>(55);
 
-  // ============== 0) DỮ LIỆU TỐI THIỂU (khi cần SCORE) ==============
-  const [age, setAge] = useState<string>("");
-  const [sex, setSex] = useState<string>(""); // "Nam" | "Nữ"
-  const [sbp, setSbp] = useState<string>(""); // SBP (mmHg)
-  const [dbp, setDbp] = useState<string>(""); // DBP (mmHg)
-  const [smoking, setSmoking] = useState(false);
+  const [sbp, setSbp] = useState<number>(130);
+  const [smoker, setSmoker] = useState<boolean>(false);
 
-  const [lipidUnit, setLipidUnit] = useState<"mg/dL" | "mmol/L">("mmol/L");
-  const [tc, setTc] = useState<string>(""); // Total cholesterol
-  const [hdl, setHdl] = useState<string>(""); // HDL-C
-  const [ldl, setLdl] = useState<string>(""); // LDL-C (ưu tiên “chưa điều trị”)
-  const [onLipidLowering, setOnLipidLowering] = useState(false); // chặn dùng SCORE
+  const [tc, setTc] = useState<number>(5.2);
+  const [hdl, setHdl] = useState<number>(1.3);
+  const [ldl, setLdl] = useState<number | "">("");
 
-  // Cluster quốc gia (chỉ lưu để ghi chép/nhắc; không tự tính)
-  const [countryCluster, setCountryCluster] = useState<CountryCluster>("Nguy cơ trung bình");
+  const nonHdl = useMemo(() => {
+    const v = Number(tc) - Number(hdl);
+    return Number.isFinite(v) ? Math.max(0, v) : NaN;
+  }, [tc, hdl]);
 
-  useEffect(() => {
-    if (!age && caseYob) setAge(String(Math.max(0, nowYear - caseYob)));
-    if (!sex && caseSexRaw) {
-      const s = String(caseSexRaw).toLowerCase();
-      if (s === "nam" || s === "male") setSex("Nam");
-      if (s === "nữ" || s === "nu" || s === "female") setSex("Nữ");
-    }
-  }, [age, sex, caseYob, caseSexRaw, nowYear]);
+  const [onLipidTherapy, setOnLipidTherapy] = useState<boolean>(false);
 
-  const ageNum = useMemo(() => numOrUndef(age), [age]);
-  const sbpNum = useMemo(() => numOrUndef(sbp), [sbp]);
-  const dbpNum = useMemo(() => numOrUndef(dbp), [dbp]);
+  // ===== Step 1: ASCVD / hình ảnh chắc chắn =====
+  const [hasAscgdClinical, setHasAscgdClinical] = useState<boolean>(false);
+  const [hasAscgdImagingCertain, setHasAscgdImagingCertain] = useState<boolean>(false);
 
-  const tcNum = useMemo(() => numOrUndef(tc), [tc]);
-  const hdlNum = useMemo(() => numOrUndef(hdl), [hdl]);
-  const ldlNum = useMemo(() => numOrUndef(ldl), [ldl]);
+  // ===== Step 2A: Diabetes =====
+  const [hasDiabetes, setHasDiabetes] = useState<boolean>(false);
+  const [dmType, setDmType] = useState<1 | 2>(2);
+  const [dmDuration, setDmDuration] = useState<number>(0);
 
-  const tcMmol = useMemo(() => {
-    if (tcNum === undefined) return undefined;
-    return lipidUnit === "mmol/L" ? tcNum : mgToMmol(tcNum);
-  }, [tcNum, lipidUnit]);
+  const [dmOrgan, setDmOrgan] = useState({
+    microalbumin: false,
+    retinopathy: false,
+    neuropathy: false,
+    lvh: false,
+  });
 
-  const hdlMmol = useMemo(() => {
-    if (hdlNum === undefined) return undefined;
-    return lipidUnit === "mmol/L" ? hdlNum : mgToMmol(hdlNum);
-  }, [hdlNum, lipidUnit]);
+  const [dmMajorRF, setDmMajorRF] = useState({
+    htn: false,
+    smoking: false,
+    dyslipidemia: false,
+    obesity: false,
+    olderAge: false,
+  });
 
-  const ldlMmol = useMemo(() => {
-    if (ldlNum === undefined) return undefined;
-    return lipidUnit === "mmol/L" ? ldlNum : mgToMmol(ldlNum);
-  }, [ldlNum, lipidUnit]);
+  const [t1EarlyOnset, setT1EarlyOnset] = useState<boolean>(false);
 
-  const nonHdlMmol = useMemo(() => {
-    if (tcMmol === undefined || hdlMmol === undefined) return undefined;
-    return tcMmol - hdlMmol;
-  }, [tcMmol, hdlMmol]);
+  // ===== Step 2B: CKD =====
+  const [hasCkd, setHasCkd] = useState<boolean>(false);
+  const [egfr, setEgfr] = useState<number>(90);
 
-  const nonHdlDisplay = useMemo(() => {
-    if (nonHdlMmol === undefined) return null;
-    const mmol = Math.round(nonHdlMmol * 10) / 10;
-    const mg = Math.round(mmolToMg(nonHdlMmol));
-    return { mmol, mg };
-  }, [nonHdlMmol]);
+  // ===== Step 2C: FH =====
+  const [hasFH, setHasFH] = useState<boolean>(false);
+  const [fhWithMajorRF, setFhWithMajorRF] = useState<boolean>(false);
 
-  const scoreSuggested = useMemo(() => {
-    if (ageNum === undefined) return "SCORE2 / SCORE2-OP";
-    return ageNum >= 70 ? "SCORE2-OP" : "SCORE2";
-  }, [ageNum]);
+  // ===== Step 4: Risk modifiers =====
+  const [mod, setMod] = useState({
+    familyHistoryEarly: false,
+    obesity: false,
+    sedentary: false,
+    metabolicSyndrome: false,
+    psychosocial: false,
+    chronicInflammatory: false,
+    hiv: false,
+    osa: false,
+    prematureMenopause: false,
+    preeclampsia: false,
+    hsCRP: false,
+    lp_a: false,
+    subclinicalPlaqueOrHighCAC: false,
+  });
 
-  // ============== B1) ASCVD (phòng ngừa thứ phát) ==============
-  const [ascvdClinical, setAscvdClinical] = useState(false);
-  const [imagingSignificantPlaque, setImagingSignificantPlaque] = useState(false);
-  const [cacVeryHigh, setCacVeryHigh] = useState(false);
+  // ===== SCORE popup state =====
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const [scoreDefaultModel, setScoreDefaultModel] = useState<ScoreModel>("score2");
+  const [scoreApplied, setScoreApplied] = useState<ScorePopupResult | null>(null);
 
-  // ============== B2) BỆNH NỀN ĐẨY THẲNG ==============
-  // 2A) Diabetes
-  const [diabetes, setDiabetes] = useState(false);
-  const [dmType, setDmType] = useState<"" | "T1DM" | "T2DM">("");
-  const [dmDuration, setDmDuration] = useState<string>(""); // years
-  const [dmOrganDamage, setDmOrganDamage] = useState(false);
-  const dmDurationNum = useMemo(() => numOrUndef(dmDuration), [dmDuration]);
+  const severeSingleRF = useMemo(() => {
+    const tcHigh = Number(tc) > 8.0;
+    const ldlHigh = ldl === "" ? false : Number(ldl) > 4.9;
+    const bpVeryHigh = Number(sbp) >= 180;
+    return tcHigh || ldlHigh || bpVeryHigh;
+  }, [tc, ldl, sbp]);
 
-  const [dmRF_HTN, setDmRF_HTN] = useState(false);
-  const [dmRF_Smoke, setDmRF_Smoke] = useState(false);
-  const [dmRF_Dyslip, setDmRF_Dyslip] = useState(false);
-  const [dmRF_Obesity, setDmRF_Obesity] = useState(false);
+  const dmOrganDamage = useMemo(() => boolCountUnsafe(dmOrgan) >= 1, [dmOrgan]);
+  const dmMajorRFCount = useMemo(() => boolCountUnsafe(dmMajorRF), [dmMajorRF]);
 
-  const dmRFCount = useMemo(
-    () => [dmRF_HTN, dmRF_Smoke, dmRF_Dyslip, dmRF_Obesity].filter(Boolean).length,
-    [dmRF_HTN, dmRF_Smoke, dmRF_Dyslip, dmRF_Obesity]
-  );
+  // ✅ quan trọng: chỉ “chặn SCORE vì CKD” khi eGFR <60 (CKD đẩy thẳng nhóm nguy cơ)
+  const ckdPushesRisk = hasCkd && egfr < 60;
 
-  // 2B) CKD
-  const [egfr, setEgfr] = useState<string>("");
-  const egfrNum = useMemo(() => numOrUndef(egfr), [egfr]);
+  const eligibleForScore = useMemo(() => {
+    if (hasAscgdClinical || hasAscgdImagingCertain) return false;
+    if (hasDiabetes) return false;
+    if (ckdPushesRisk) return false;
+    if (hasFH) return false;
+    if (onLipidTherapy) return false;
+    return true;
+  }, [hasAscgdClinical, hasAscgdImagingCertain, hasDiabetes, ckdPushesRisk, hasFH, onLipidTherapy]);
 
-  // 2C) FH
-  const [familialHC, setFamilialHC] = useState(false);
-  const [fhWithMajorRF, setFhWithMajorRF] = useState(false);
-
-  // ============== B3) SCORE (% nhập) ==============
-  const [scoreRiskPct, setScoreRiskPct] = useState<string>("");
-  const scorePctNum = useMemo(() => {
-    const v = numOrUndef(scoreRiskPct);
-    return v === undefined ? undefined : clamp01to100(v);
-  }, [scoreRiskPct]);
-
-  // ============== B4) MODIFIERS ==============
-  const [modFamilyHxEarly, setModFamilyHxEarly] = useState(false);
-  const [modHighRiskEthnicity, setModHighRiskEthnicity] = useState(false);
-  const [modStress, setModStress] = useState(false);
-  const [modDeprivation, setModDeprivation] = useState(false);
-  const [modObesity, setModObesity] = useState(false);
-  const [modInactivity, setModInactivity] = useState(false);
-  const [modChronicInflamm, setModChronicInflamm] = useState(false);
-  const [modSevereMentalIllness, setModSevereMentalIllness] = useState(false);
-  const [modHIV, setModHIV] = useState(false);
-  const [modOSA, setModOSA] = useState(false);
-  const [modFemaleRepro, setModFemaleRepro] = useState(false);
-  const [modHsCRP, setModHsCRP] = useState(false);
-  const [modLpa, setModLpa] = useState(false);
-
-  const [modSubclinicalPlaque, setModSubclinicalPlaque] = useState(false);
-  const [modCACRaised, setModCACRaised] = useState(false);
-
-  const modifierCount = useMemo(() => {
-    return [
-      modFamilyHxEarly,
-      modHighRiskEthnicity,
-      modStress,
-      modDeprivation,
-      modObesity,
-      modInactivity,
-      modChronicInflamm,
-      modSevereMentalIllness,
-      modHIV,
-      modOSA,
-      modFemaleRepro,
-      modHsCRP,
-      modLpa,
-      modSubclinicalPlaque,
-      modCACRaised,
-    ].filter(Boolean).length;
-  }, [
-    modFamilyHxEarly,
-    modHighRiskEthnicity,
-    modStress,
-    modDeprivation,
-    modObesity,
-    modInactivity,
-    modChronicInflamm,
-    modSevereMentalIllness,
-    modHIV,
-    modOSA,
-    modFemaleRepro,
-    modHsCRP,
-    modLpa,
-    modSubclinicalPlaque,
-    modCACRaised,
-  ]);
-
-  // =================== SCORE POPUP ===================
-  const [scoreModalOpen, setScoreModalOpen] = useState(false);
-  const [scoreTab, setScoreTab] = useState<ScoreTab>("score2");
-  const [scoreModalPct, setScoreModalPct] = useState<string>("");
-
-  function openScoreModal(tab?: ScoreTab) {
-    const auto: ScoreTab = (ageNum ?? 0) >= 70 ? "score2-op" : "score2";
-    const next = tab ?? auto;
-    setScoreTab(next);
-    setScoreModalPct(scoreRiskPct ?? "");
-    setScoreModalOpen(true);
-  }
-  function closeScoreModal() {
-    setScoreModalOpen(false);
+  function suggestedDefaultModel(): ScoreModel {
+    if (hasDiabetes && dmType === 2) return "score2-diabetes";
+    if (age >= 70) return "score2-op";
+    return "score2";
   }
 
-  useEffect(() => {
-    if (!scoreModalOpen) return;
+  function openScore(model: ScoreModel) {
+    setScoreDefaultModel(model);
+    setScoreOpen(true);
+  }
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeScoreModal();
-    };
-    window.addEventListener("keydown", onKey);
+  const decision = useMemo(() => {
+    let base: EscRisk | null = null;
+    let reason = "";
+    let usedScore: { model: string; percent: number } | null = null;
 
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [scoreModalOpen]);
-
-  // ====== LOGIC QUYẾT ĐỊNH ======
-  const computed = useMemo(() => {
-    const reasons: string[] = [];
-    const shortReasons: string[] = [];
-    const adjNotes: string[] = [];
-
-    const hasASCVD = ascvdClinical || imagingSignificantPlaque || cacVeryHigh;
-    const prevention: Prevention = hasASCVD ? "Phòng ngừa thứ phát" : "Phòng ngừa nguyên phát";
-
-    let base: RiskLevel = "Chưa phân loại";
-
-    // B1
-    if (hasASCVD) {
-      base = "Rất cao";
-      reasons.push("Có ASCVD (lâm sàng hoặc hình ảnh rõ ràng) → xếp nguy cơ RẤT CAO");
-      if (ascvdClinical) shortReasons.push("ASCVD lâm sàng");
-      if (imagingSignificantPlaque) shortReasons.push("Mảng xơ vữa có ý nghĩa trên hình ảnh");
-      if (cacVeryHigh) shortReasons.push("CAC rất cao");
+    // Step 1: ASCVD -> very-high
+    if (hasAscgdClinical) {
+      base = "very-high";
+      reason = "Có ASCVD đã ghi nhận (phòng ngừa thứ phát) → xếp rất cao.";
+    } else if (hasAscgdImagingCertain) {
+      base = "very-high";
+      reason = "Có bằng chứng xơ vữa chắc chắn trên hình ảnh / CAC rất cao → xếp rất cao.";
     }
 
-    // B2A - DM
-    if (base !== "Rất cao" && diabetes) {
-      const dmVeryHigh = dmOrganDamage || dmRFCount >= 3 || (dmType === "T1DM" && (dmDurationNum ?? 0) > 20);
-
-      if (dmVeryHigh) {
-        base = "Rất cao";
-        reasons.push("ĐTĐ nguy cơ rất cao (tổn thương cơ quan đích hoặc ≥3 yếu tố nguy cơ chính hoặc T1DM kéo dài >20 năm)");
-        if (dmOrganDamage) shortReasons.push("ĐTĐ + tổn thương cơ quan đích");
-        else if (dmRFCount >= 3) shortReasons.push("ĐTĐ + ≥3 yếu tố nguy cơ chính");
-        else shortReasons.push("T1DM >20 năm");
+    // Step 2A: Diabetes
+    if (!base && hasDiabetes) {
+      const veryHigh = dmOrganDamage || dmMajorRFCount >= 3 || (dmType === 1 && t1EarlyOnset && dmDuration > 20);
+      if (veryHigh) {
+        base = "very-high";
+        reason = "ĐTĐ kèm tổn thương cơ quan đích / ≥3 yếu tố nguy cơ chính / T1 khởi phát sớm >20 năm → rất cao.";
+      } else if (dmDuration >= 10 || dmMajorRFCount >= 1) {
+        base = "high";
+        reason = "ĐTĐ (chưa ASCVD) nhưng thời gian ≥10 năm hoặc có ≥1 yếu tố nguy cơ → cao.";
       } else {
-        const dmHigh = (dmDurationNum ?? 0) >= 10 || dmRFCount >= 1;
-        if (dmHigh) {
-          base = "Cao";
-          reasons.push("ĐTĐ nguy cơ cao (≥10 năm hoặc có thêm yếu tố nguy cơ khác)");
-          if ((dmDurationNum ?? 0) >= 10) shortReasons.push("ĐTĐ ≥10 năm");
-          if (dmRFCount >= 1) shortReasons.push("ĐTĐ + yếu tố nguy cơ kèm theo");
+        const young = (dmType === 1 && age < 35) || (dmType === 2 && age < 50);
+        if (young && dmDuration < 10 && dmMajorRFCount === 0 && !dmOrganDamage) {
+          base = "moderate";
+          reason = "ĐTĐ ở người trẻ, thời gian <10 năm, không yếu tố nguy cơ khác → trung bình.";
         } else {
-          base = "Trung bình";
-          reasons.push("ĐTĐ chưa đủ tiêu chí nguy cơ cao/rất cao → tạm xếp nguy cơ trung bình; cân nhắc SCORE2-Diabetes cho T2DM");
-          shortReasons.push("ĐTĐ (không đạt tiêu chí cao/rất cao)");
+          base = "high";
+          reason = "ĐTĐ: chưa đủ tiêu chí trung bình → xử trí như nhóm cao (cao).";
         }
       }
     }
 
-    // B2B - CKD
-    if (base !== "Rất cao") {
-      if (egfrNum !== undefined && egfrNum < 30) {
-        base = "Rất cao";
-        reasons.push("CKD nặng: eGFR <30 → nguy cơ RẤT CAO");
-        shortReasons.push("eGFR <30");
-      } else if (base !== "Cao" && egfrNum !== undefined && egfrNum >= 30 && egfrNum <= 59) {
-        base = "Cao";
-        reasons.push("CKD trung bình: eGFR 30–59 → nguy cơ CAO");
-        shortReasons.push("eGFR 30–59");
+    // Step 2B: CKD
+    if (!base && hasCkd) {
+      if (egfr < 30) {
+        base = "very-high";
+        reason = "Bệnh thận mạn nặng (eGFR <30) → rất cao.";
+      } else if (egfr <= 59) {
+        base = "high";
+        reason = "Bệnh thận mạn (eGFR 30–59) → cao.";
+      } else {
+        // eGFR ≥60 không tự đẩy thẳng
+        reason = "eGFR ≥60: không tự xếp cao theo CKD (xem các bước khác / SCORE nếu đủ điều kiện).";
       }
     }
 
-    // B2C - FH
-    if (base !== "Rất cao" && familialHC) {
+    // Step 2C: FH
+    if (!base && hasFH) {
       if (fhWithMajorRF) {
-        base = "Rất cao";
-        reasons.push("FH + yếu tố nguy cơ chính khác → nguy cơ RẤT CAO");
-        shortReasons.push("FH + yếu tố nguy cơ chính");
-      } else if (base !== "Cao") {
-        base = "Cao";
-        reasons.push("FH (không kèm yếu tố nguy cơ chính khác) → nguy cơ CAO");
-        shortReasons.push("FH");
+        base = "very-high";
+        reason = "Tăng cholesterol máu gia đình kèm yếu tố nguy cơ lớn khác → rất cao.";
+      } else {
+        base = "high";
+        reason = "Tăng cholesterol máu gia đình → cao.";
       }
     }
 
-    // B2D - single very high RF
-    if (base !== "Rất cao") {
-      const tcVeryHigh = tcMmol !== undefined && tcMmol > 8.0;
-      const ldlVeryHigh = ldlMmol !== undefined && ldlMmol > 4.9;
-      const bpVeryHigh = (sbpNum !== undefined && sbpNum >= 180) || (dbpNum !== undefined && dbpNum >= 110);
+    // Step 2D: single severe RF
+    if (!base && severeSingleRF) {
+      base = "high";
+      reason = "Có 1 yếu tố nguy cơ đơn lẻ rất nặng (TC/LDL rất cao hoặc HA rất cao) → cao.";
+    }
 
-      if (tcVeryHigh || ldlVeryHigh || bpVeryHigh) {
-        base = "Cao";
-        const parts: string[] = [];
-        if (tcVeryHigh) parts.push("TC >8.0 mmol/L (≈>310 mg/dL)");
-        if (ldlVeryHigh) parts.push("LDL-C >4.9 mmol/L (≈>190 mg/dL)");
-        if (sbpNum !== undefined && sbpNum >= 180) parts.push("SBP ≥180");
-        if (dbpNum !== undefined && dbpNum >= 110) parts.push("DBP ≥110");
-        reasons.push(`Yếu tố nguy cơ đơn lẻ rất nặng → nguy cơ CAO: ${parts.join(" • ")}`);
-        shortReasons.push("Yếu tố nguy cơ đơn lẻ rất nặng");
+    // Step 3: SCORE (nếu eligible)
+    if (!base && eligibleForScore) {
+      if (scoreApplied && Number.isFinite(scoreApplied.riskPercent)) {
+        const p = scoreApplied.riskPercent;
+        // map về 4 nhóm ESC
+        const cutLow = scoreApplied.model === "score2" || scoreApplied.model === "score2-op" ? 2 : 5;
+        if (p < cutLow) base = "low";
+        else if (p < 10) base = "moderate";
+        else if (p < 20) base = "high";
+        else base = "very-high";
+
+        usedScore = {
+          model:
+            scoreApplied.model === "score2"
+              ? "SCORE2"
+              : scoreApplied.model === "score2-op"
+              ? "SCORE2-OP"
+              : scoreApplied.model === "score2-asian"
+              ? "SCORE2-ASIA-PACIFIC"
+              : "SCORE2-DIABETES",
+          percent: p,
+        };
+
+        reason = `Chưa có bệnh nền “đẩy thẳng” → dùng ${usedScore.model}: ${p.toFixed(1)}%/10 năm.`;
+      } else {
+        reason = "Chưa có bệnh nền “đẩy thẳng” → cần tính SCORE trong POP-UP để ra % nguy cơ.";
       }
     }
 
-    // B3 - SCORE (chỉ khi đủ điều kiện)
-    const hasCKD = egfrNum !== undefined && egfrNum < 60;
-    const eligibleForScore = !hasASCVD && !diabetes && !hasCKD && !familialHC && !onLipidLowering;
-
-    if (eligibleForScore && base !== "Cao" && base !== "Rất cao" && scorePctNum !== undefined) {
-      if (scorePctNum < 2) base = "Thấp";
-      else if (scorePctNum < 10) base = "Trung bình";
-      else if (scorePctNum < 20) base = "Cao";
-      else base = "Rất cao";
-
-      reasons.push(`${scoreSuggested}: ${scorePctNum}% nguy cơ 10 năm (nhập tay)`);
-      shortReasons.push(`${scoreSuggested} = ${scorePctNum}%`);
-    }
-
-    // B4 - modifiers (nâng bậc)
-    let adjusted = base;
-
-    if (adjusted !== "Chưa phân loại" && adjusted !== "Rất cao") {
-      if (modSubclinicalPlaque) {
-        adjusted = upgradeOne(adjusted);
-        adjNotes.push("Có xơ vữa dưới lâm sàng trên hình ảnh → cân nhắc nâng 1 bậc");
-      }
-      if (modCACRaised && adjusted !== "Rất cao") {
-        adjusted = upgradeOne(adjusted);
-        adjNotes.push("CAC tăng → cân nhắc nâng 1 bậc");
-      }
-
-      const coreMods =
-        [
-          modFamilyHxEarly,
-          modHighRiskEthnicity,
-          modStress,
-          modDeprivation,
-          modObesity,
-          modInactivity,
-          modChronicInflamm,
-          modSevereMentalIllness,
-          modHIV,
-          modOSA,
-          modFemaleRepro,
-          modHsCRP,
-          modLpa,
-        ].filter(Boolean).length;
-
-      if (coreMods >= 2 && adjusted !== "Rất cao") {
-        adjusted = upgradeOne(adjusted);
-        adjNotes.push("Có ≥2 yếu tố điều chỉnh nguy cơ → xử trí như nhóm cao hơn");
+    // Không eligible SCORE
+    if (!base && !eligibleForScore) {
+      if (onLipidTherapy) {
+        reason = "Đang dùng thuốc hạ lipid → không dùng SCORE để “tính lại” nguy cơ. Ưu tiên xếp nhóm theo bệnh nền/tiêu chí.";
+      } else if (!reason) {
+        reason = "Chưa đủ điều kiện để phân tầng (kiểm tra lại tiêu chí).";
       }
     }
 
-    const hasAdjustment = base !== "Chưa phân loại" && adjusted !== base;
+    // Step 4: modifiers upgrade 1 bậc nếu “lưng chừng”
+    let finalRisk = base;
+    let upgraded = false;
 
-    return {
-      prevention,
-      eligibleForScore,
-      base,
-      finalLevel: adjusted,
-      reasons,
-      shortReasons,
-      adjNotes,
-      hasAdjustment,
-    };
+    if (base && base !== "very-high") {
+      const modCount = boolCountUnsafe(mod);
+      const shouldUpgrade = mod.subclinicalPlaqueOrHighCAC || modCount >= 2;
+      if (shouldUpgrade) {
+        finalRisk = nextUp(base);
+        upgraded = true;
+      }
+    }
+
+    const noteUpgrade =
+      base && finalRisk && upgraded
+        ? "Đã cân nhắc nâng 1 bậc do có nhiều yếu tố điều chỉnh nguy cơ / xơ vữa dưới lâm sàng."
+        : "";
+
+    return { base, finalRisk, reason, usedScore, upgraded, noteUpgrade };
   }, [
-    ascvdClinical,
-    imagingSignificantPlaque,
-    cacVeryHigh,
-    diabetes,
-    dmType,
-    dmDurationNum,
+    hasAscgdClinical,
+    hasAscgdImagingCertain,
+    hasDiabetes,
     dmOrganDamage,
-    dmRFCount,
-    egfrNum,
-    familialHC,
+    dmMajorRFCount,
+    dmType,
+    t1EarlyOnset,
+    dmDuration,
+    age,
+    hasCkd,
+    egfr,
+    hasFH,
     fhWithMajorRF,
-    tcMmol,
-    ldlMmol,
-    sbpNum,
-    dbpNum,
-    onLipidLowering,
-    scoreSuggested,
-    scorePctNum,
-    modFamilyHxEarly,
-    modHighRiskEthnicity,
-    modStress,
-    modDeprivation,
-    modObesity,
-    modInactivity,
-    modChronicInflamm,
-    modSevereMentalIllness,
-    modHIV,
-    modOSA,
-    modFemaleRepro,
-    modHsCRP,
-    modLpa,
-    modSubclinicalPlaque,
-    modCACRaised,
+    severeSingleRF,
+    eligibleForScore,
+    scoreApplied,
+    mod,
+    onLipidTherapy,
   ]);
 
-  const finalTone = escTone(computed.finalLevel);
-  const ldlGoal = ldlGoalFor(computed.finalLevel);
-  const strategy = interventionStrategy(computed.finalLevel, computed.prevention, ldlMmol);
+  const finalRisk = decision.finalRisk;
+  const bannerStyle = finalRisk ? escColors(finalRisk) : null;
 
-  const canSave = computed.finalLevel !== "Chưa phân loại";
+  const canSave = Boolean(activeCaseId) && typeof saveToActiveCase === "function" && Boolean(finalRisk);
 
-  const scoreMissing = useMemo(() => {
-    const miss: string[] = [];
-    if (ageNum === undefined) miss.push("Tuổi");
-    if (!sex) miss.push("Giới");
-    if (sbpNum === undefined) miss.push("SBP");
-    if (tcNum === undefined) miss.push("TC");
-    if (hdlNum === undefined) miss.push("HDL-C");
-    return miss;
-  }, [ageNum, sex, sbpNum, tcNum, hdlNum]);
-
-  const shortExplain = useMemo(() => {
-    const lines: string[] = [];
-    if (computed.shortReasons.length) lines.push(...computed.shortReasons.slice(0, 3));
-    if (computed.adjNotes.length) lines.push(computed.adjNotes[0]);
-    return lines;
-  }, [computed.shortReasons, computed.adjNotes]);
-
-  function resetAll() {
-    setAge("");
-    setSex("");
-    setSbp("");
-    setDbp("");
-    setSmoking(false);
-
-    setLipidUnit("mmol/L");
-    setTc("");
-    setHdl("");
-    setLdl("");
-    setOnLipidLowering(false);
-
-    setCountryCluster("Nguy cơ trung bình");
-
-    setAscvdClinical(false);
-    setImagingSignificantPlaque(false);
-    setCacVeryHigh(false);
-
-    setDiabetes(false);
-    setDmType("");
-    setDmDuration("");
-    setDmOrganDamage(false);
-    setDmRF_HTN(false);
-    setDmRF_Smoke(false);
-    setDmRF_Dyslip(false);
-    setDmRF_Obesity(false);
-
-    setEgfr("");
-    setFamilialHC(false);
-    setFhWithMajorRF(false);
-
-    setScoreRiskPct("");
-
-    setModFamilyHxEarly(false);
-    setModHighRiskEthnicity(false);
-    setModStress(false);
-    setModDeprivation(false);
-    setModObesity(false);
-    setModInactivity(false);
-    setModChronicInflamm(false);
-    setModSevereMentalIllness(false);
-    setModHIV(false);
-    setModOSA(false);
-    setModFemaleRepro(false);
-    setModHsCRP(false);
-    setModLpa(false);
-    setModSubclinicalPlaque(false);
-    setModCACRaised(false);
-  }
-
-  function handleSave() {
-    if (!saveToActiveCase) {
-      alert("Không tìm thấy hàm lưu vào ca (saveToActiveCase). Hãy kiểm tra CasesContext.");
-      return;
-    }
-    if (!activeCaseId) {
-      alert("Hãy tạo/chọn một ca đang hoạt động trước khi lưu.");
-      return;
-    }
-    if (!canSave) {
-      alert("Chưa đủ dữ liệu để phân tầng.");
-      return;
-    }
-
-    const when = new Date().toISOString();
+  function save() {
+    if (!finalRisk) return;
 
     const inputs = {
-      demographics: { age: ageNum, sex },
-      minimalForScore: {
-        countryCluster,
-        sbp: sbpNum,
-        smokingCurrent: smoking,
-        lipidUnit,
-        tc: tcNum,
-        hdl: hdlNum,
-        nonHdl: nonHdlMmol,
-        ldl: ldlNum,
-        onLipidLowering,
-      },
-      step1_ascvd: { ascvdClinical, imagingSignificantPlaque, cacVeryHigh },
-      step2_comorbidity: {
-        diabetes,
-        dmType,
-        dmDurationYears: dmDurationNum,
-        dmOrganDamage,
-        dmMajorRFCount: dmRFCount,
-        ckd: { egfr: egfrNum },
-        familialHC,
-        fhWithMajorRF,
-        bp: { sbp: sbpNum, dbp: dbpNum },
-      },
-      step3_score: { eligibleForScore: computed.eligibleForScore, scoreSuggested, scoreRiskPct: scorePctNum },
-      step4_modifiers: {
-        modFamilyHxEarly,
-        modHighRiskEthnicity,
-        modStress,
-        modDeprivation,
-        modObesity,
-        modInactivity,
-        modChronicInflamm,
-        modSevereMentalIllness,
-        modHIV,
-        modOSA,
-        modFemaleRepro,
-        modHsCRP,
-        modLpa,
-        modSubclinicalPlaque,
-        modCACRaised,
-      },
+      region,
+      sex,
+      age,
+      sbp,
+      smoker,
+      tc,
+      hdl,
+      ldl: ldl === "" ? undefined : Number(ldl),
+      nonHdl,
+      onLipidTherapy,
+
+      hasAscgdClinical,
+      hasAscgdImagingCertain,
+
+      hasDiabetes,
+      dmType,
+      dmDuration,
+      dmOrgan,
+      dmMajorRF,
+      t1EarlyOnset,
+
+      hasCkd,
+      egfr,
+
+      hasFH,
+      fhWithMajorRF,
+
+      riskModifiers: mod,
+
+      scoreApplied: scoreApplied ? { model: scoreApplied.model, riskPercent: scoreApplied.riskPercent, summary: scoreApplied.summary } : null,
     };
 
     const outputs = {
-      when,
-      prevention: computed.prevention,
-      baseRisk: computed.base,
-      finalRisk: computed.finalLevel,
-      reasons: computed.reasons,
-      shortReasons: computed.shortReasons,
-      adjustmentNotes: computed.adjNotes,
-      eligibleForScore: computed.eligibleForScore,
-      scoreSuggested,
-      ldlGoal,
-      interventionStrategy: strategy,
+      baseRisk: decision.base,
+      finalRisk,
+      reason: decision.reason,
+      usedScore: decision.usedScore,
+      upgraded: decision.upgraded,
+      noteUpgrade: decision.noteUpgrade,
+      targets: targetsForRisk(finalRisk),
     };
 
-    const goalShort = ldlGoal ? ` • LDL-C ${ldlGoal.mmol} mmol/L (${ldlGoal.mgdl} mg/dL)` : "";
-    const summary = computed.hasAdjustment
-      ? `Nguy cơ tim mạch: ${computed.finalLevel} (${computed.prevention}, điều chỉnh từ ${computed.base})${goalShort}`
-      : `Nguy cơ tim mạch: ${computed.finalLevel} (${computed.prevention})${goalShort}`;
+    const summary = `Phân tầng nguy cơ tim mạch (ESC): ${escLabel(finalRisk)}${
+      decision.usedScore ? ` • ${decision.usedScore.model} ${decision.usedScore.percent.toFixed(1)}%` : ""
+    }`;
 
     saveToActiveCase({
       tool: "cv-risk-esc",
-      when,
-      summary,
       inputs,
       outputs,
+      summary,
     });
-
-    alert("Đã lưu kết quả vào ca đang hoạt động.");
   }
 
-  // =================== UI STYLES ===================
-  const cardStyle: React.CSSProperties = {
-    background: "var(--card, #fff)",
-    border: "1px solid var(--line, #e5e7eb)",
-    borderRadius: 16,
-    padding: 16,
-    boxShadow: "var(--shadow-card, 0 8px 24px rgba(0,0,0,.06))",
-    marginBottom: 14,
-  };
-
-  const grid2: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 12,
-  };
-
-  const labelStyle: React.CSSProperties = { fontSize: 13, color: "var(--muted, #64748b)" };
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid var(--line, #e5e7eb)",
-    outline: "none",
-    fontSize: 14,
-    background: "#fff",
-  };
-
-  const btnPrimary: React.CSSProperties = {
-    padding: "10px 14px",
-    borderRadius: 14,
-    border: "1px solid transparent",
-    background: "var(--primary, #1d4ed8)",
-    color: "#fff",
-    cursor: "pointer",
-    fontWeight: 800,
-  };
-
-  const btnGhost: React.CSSProperties = {
-    padding: "10px 14px",
-    borderRadius: 14,
-    border: "1px solid var(--line, #e5e7eb)",
-    background: "#fff",
-    cursor: "pointer",
-    fontWeight: 800,
-  };
-
-  const scoreEligibleBoxBg = computed.eligibleForScore ? "rgba(16,185,129,.10)" : "rgba(239,68,68,.08)";
-
   return (
-    <div style={{ padding: 16, maxWidth: 1040, margin: "0 auto" }}>
-      {/* =================== KẾT QUẢ =================== */}
-      <div
-        style={{
-          ...cardStyle,
-          border: `2px solid ${finalTone.border}`,
-          background: finalTone.bg,
-          padding: 18,
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+    <div className="page">
+      <div className="card">
+        <div className="calcHeader">
           <div>
-            <div style={{ fontSize: 12, letterSpacing: 1, fontWeight: 900, color: "var(--muted,#64748b)" }}>
-              PHÂN TẦNG NGUY CƠ TIM MẠCH (ESC/EAS)
+            <h1 className="calcTitle">Phân tầng nguy cơ tim mạch (ESC/EAS)</h1>
+            <div className="calcSub">
+              Ưu tiên xếp nhóm nguy cơ <b>không cần tính điểm</b>. Chỉ dùng SCORE khi chưa có bệnh nền “đẩy thẳng”.
+            </div>
+          </div>
+
+          <button className="btn" onClick={() => navigate(-1)} title="Trở về trang trước">
+            ← Trở về trang trước
+          </button>
+        </div>
+
+        {/* ===== RESULT BANNER ===== */}
+        {finalRisk ? (
+          <div
+            style={{
+              borderRadius: 16,
+              padding: 14,
+              background: bannerStyle!.bg,
+              color: bannerStyle!.fg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              boxShadow: "0 12px 26px rgba(0,0,0,0.12)",
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 12, opacity: 0.95, fontWeight: 1000, letterSpacing: 0.2 }}>KẾT QUẢ PHÂN TẦNG</div>
+              <div style={{ fontSize: 24, fontWeight: 1100, marginTop: 2 }}>{escLabel(finalRisk)}</div>
+
+              {decision.usedScore && (
+                <div style={{ marginTop: 6, fontWeight: 1000, opacity: 0.95 }}>
+                  {decision.usedScore.model}: {decision.usedScore.percent.toFixed(1)}% / 10 năm
+                </div>
+              )}
             </div>
 
-            <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="btn"
+                onClick={() => openScore(suggestedDefaultModel())}
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: finalTone.chipBg,
-                  color: finalTone.chipText,
-                  fontWeight: 950,
-                  fontSize: 16,
+                  border: "1px solid rgba(255,255,255,0.55)",
+                  background: "rgba(255,255,255,0.18)",
+                  color: bannerStyle!.fg,
+                  fontWeight: 1000,
                 }}
               >
-                {finalTone.tagVN}
-              </span>
-              <span style={{ color: "var(--muted,#64748b)", fontWeight: 800 }}>{finalTone.tagEN}</span>
-              <span style={{ color: "var(--muted,#64748b)", fontWeight: 800 }}>• {computed.prevention}</span>
+                Tính SCORE (POP-UP)
+              </button>
 
-              {computed.hasAdjustment ? (
-                <span style={{ color: "var(--muted,#64748b)", fontSize: 12 }}>
-                  (điều chỉnh từ: <b>{computed.base}</b>)
-                </span>
+              <button
+                className="btn"
+                disabled={!canSave}
+                onClick={save}
+                style={{
+                  border: "none",
+                  background: "rgba(255,255,255,0.95)",
+                  color: "#111827",
+                  fontWeight: 1000,
+                  opacity: canSave ? 1 : 0.55,
+                  cursor: canSave ? "pointer" : "not-allowed",
+                }}
+              >
+                Lưu vào ca
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            style={{
+              borderRadius: 16,
+              padding: 14,
+              border: "1px solid var(--line)",
+              background: "rgba(0,0,0,0.02)",
+              color: "var(--muted)",
+              fontWeight: 900,
+              marginBottom: 12,
+            }}
+          >
+            Chưa có kết quả phân tầng. Hãy nhập thông tin và/hoặc bấm “Tính SCORE (POP-UP)” khi cần.
+          </div>
+        )}
+
+        {/* ===== Lý giải + mục tiêu ===== */}
+        {finalRisk && (
+          <div
+            style={{
+              borderRadius: 16,
+              padding: 12,
+              border: "1px solid var(--line)",
+              background: "white",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontWeight: 1100, marginBottom: 6 }}>Lý giải ngắn gọn</div>
+            <div style={{ color: "var(--text)", fontWeight: 800, lineHeight: 1.55 }}>
+              {decision.reason}
+              {decision.noteUpgrade ? (
+                <div style={{ marginTop: 6, color: "var(--muted)", fontWeight: 900 }}>• {decision.noteUpgrade}</div>
               ) : null}
+            </div>
+
+            <div className="divider" />
+
+            <div style={{ fontWeight: 1100, marginBottom: 6 }}>Mục tiêu điều trị (tóm tắt)</div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: "var(--text)", fontWeight: 850, lineHeight: 1.55 }}>
+              {targetsForRisk(finalRisk).map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ===== INPUTS ===== */}
+        <div className="formGrid">
+          <div className="field field--wide">
+            <label className="label">Cụm quốc gia (HeartScore)</label>
+            <select className="select" value={region} onChange={(e) => setRegion(e.target.value as RiskRegion)}>
+              <option value="Low">Nguy cơ thấp</option>
+              <option value="Moderate">Nguy cơ trung bình</option>
+              <option value="High">Nguy cơ cao</option>
+              <option value="Very high">Nguy cơ rất cao</option>
+            </select>
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">Giới</label>
+            <select className="select" value={sex} onChange={(e) => setSex(e.target.value as Sex)}>
+              <option value="male">Nam</option>
+              <option value="female">Nữ</option>
+            </select>
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">Tuổi</label>
+            <input className="input" type="number" value={age} onChange={(e) => setAge(Number(e.target.value))} />
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">HA tâm thu (mmHg)</label>
+            <input className="input" type="number" value={sbp} onChange={(e) => setSbp(Number(e.target.value))} />
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">Hút thuốc hiện tại</label>
+            <select className="select" value={smoker ? 1 : 0} onChange={(e) => setSmoker(e.target.value === "1")}>
+              <option value={0}>Không</option>
+              <option value={1}>Có</option>
+            </select>
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">TC (mmol/L)</label>
+            <input className="input" type="number" step="0.1" value={tc} onChange={(e) => setTc(Number(e.target.value))} />
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">HDL-C (mmol/L)</label>
+            <input className="input" type="number" step="0.1" value={hdl} onChange={(e) => setHdl(Number(e.target.value))} />
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">LDL-C (mmol/L) (nếu có)</label>
+            <input
+              className="input"
+              type="number"
+              step="0.1"
+              value={ldl}
+              onChange={(e) => setLdl(e.target.value === "" ? "" : Number(e.target.value))}
+              placeholder="Có thể để trống"
+            />
+            <div className="help">
+              Non-HDL = TC − HDL = <b>{Number.isFinite(nonHdl) ? nonHdl.toFixed(2) : "?"}</b> mmol/L
+            </div>
+          </div>
+
+          <div className="field field--wide">
+            <label className="label">Đang dùng thuốc hạ lipid máu?</label>
+            <select className="select" value={onLipidTherapy ? 1 : 0} onChange={(e) => setOnLipidTherapy(e.target.value === "1")}>
+              <option value={0}>Không</option>
+              <option value={1}>Có (không dùng SCORE để “tính lại”)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="divider" />
+
+        {/* Step 1 */}
+        <div style={{ fontWeight: 1100, marginBottom: 8 }}>Bước 1 — Có ASCVD (lâm sàng/hình ảnh chắc chắn)?</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+            <input type="checkbox" checked={hasAscgdClinical} onChange={(e) => setHasAscgdClinical(e.target.checked)} />
+            Có ASCVD (nhồi máu, đột quỵ/TIA, PAD, can thiệp mạch…)
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+            <input type="checkbox" checked={hasAscgdImagingCertain} onChange={(e) => setHasAscgdImagingCertain(e.target.checked)} />
+            Hình ảnh chắc chắn xơ vữa có ý nghĩa / CAC rất cao
+          </label>
+        </div>
+
+        <div className="divider" />
+
+        {/* Step 2A */}
+        <div style={{ fontWeight: 1100, marginBottom: 8 }}>Bước 2A — Đái tháo đường</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+            <input type="checkbox" checked={hasDiabetes} onChange={(e) => setHasDiabetes(e.target.checked)} />
+            Có đái tháo đường
+          </label>
+
+          {hasDiabetes && (
+            <>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontWeight: 900, color: "var(--muted)" }}>Típ</span>
+                <select className="select" style={{ width: 120 }} value={dmType} onChange={(e) => setDmType(Number(e.target.value) as 1 | 2)}>
+                  <option value={1}>Típ 1</option>
+                  <option value={2}>Típ 2</option>
+                </select>
+
+                <span style={{ fontWeight: 900, color: "var(--muted)" }}>Thời gian (năm)</span>
+                <input className="input" style={{ width: 120 }} type="number" value={dmDuration} onChange={(e) => setDmDuration(Number(e.target.value))} />
+              </div>
+
+              <button className="btn" onClick={() => openScore("score2-diabetes")} title="Tính SCORE2-DIABETES trong POP-UP">
+                Tính SCORE2-DIABETES (POP-UP)
+              </button>
+            </>
+          )}
+        </div>
+
+        {hasDiabetes && (
+          <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+            <div style={{ fontWeight: 1000 }}>Tổn thương cơ quan đích</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {([
+                ["microalbumin", "Albumin niệu tăng / microalbumin niệu"],
+                ["retinopathy", "Bệnh võng mạc ĐTĐ"],
+                ["neuropathy", "Bệnh thần kinh ngoại biên do ĐTĐ"],
+                ["lvh", "Phì đại thất trái"],
+              ] as const).map(([k, lab]) => (
+                <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+                  <input
+                    type="checkbox"
+                    checked={(dmOrgan as any)[k]}
+                    onChange={(e) => setDmOrgan((p) => ({ ...p, [k]: e.target.checked }))}
+                  />
+                  {lab}
+                </label>
+              ))}
+            </div>
+
+            <div style={{ fontWeight: 1000 }}>Yếu tố nguy cơ chính đi kèm (đếm số)</div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {([
+                ["htn", "Tăng huyết áp"],
+                ["smoking", "Hút thuốc"],
+                ["dyslipidemia", "Rối loạn lipid"],
+                ["obesity", "Béo phì"],
+                ["olderAge", "Tuổi cao"],
+              ] as const).map(([k, lab]) => (
+                <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+                  <input
+                    type="checkbox"
+                    checked={(dmMajorRF as any)[k]}
+                    onChange={(e) => setDmMajorRF((p) => ({ ...p, [k]: e.target.checked }))}
+                  />
+                  {lab}
+                </label>
+              ))}
+            </div>
+
+            {dmType === 1 && (
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+                <input type="checkbox" checked={t1EarlyOnset} onChange={(e) => setT1EarlyOnset(e.target.checked)} />
+                Típ 1 khởi phát sớm (đánh dấu nếu phù hợp)
+              </label>
+            )}
+          </div>
+        )}
+
+        <div className="divider" />
+
+        {/* Step 2B */}
+        <div style={{ fontWeight: 1100, marginBottom: 8 }}>Bước 2B — Bệnh thận mạn (eGFR)</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+            <input type="checkbox" checked={hasCkd} onChange={(e) => setHasCkd(e.target.checked)} />
+            Có bệnh thận mạn
+          </label>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ fontWeight: 900, color: "var(--muted)" }}>eGFR</span>
+            <input className="input" style={{ width: 140 }} type="number" value={egfr} onChange={(e) => setEgfr(Number(e.target.value))} />
+            <span style={{ fontWeight: 900, color: "var(--muted)" }}>mL/min/1.73m²</span>
+          </div>
+
+          {hasCkd && egfr >= 60 && (
+            <div style={{ color: "var(--muted)", fontWeight: 900 }}>
+              eGFR ≥60: không tự “đẩy thẳng” nhóm nguy cơ, vẫn có thể dùng SCORE nếu đủ điều kiện khác.
+            </div>
+          )}
+        </div>
+
+        <div className="divider" />
+
+        {/* Step 2C */}
+        <div style={{ fontWeight: 1100, marginBottom: 8 }}>Bước 2C — Tăng cholesterol máu gia đình</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+            <input type="checkbox" checked={hasFH} onChange={(e) => setHasFH(e.target.checked)} />
+            Nghi/từng được chẩn đoán tăng cholesterol máu gia đình
+          </label>
+
+          {hasFH && (
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+              <input type="checkbox" checked={fhWithMajorRF} onChange={(e) => setFhWithMajorRF(e.target.checked)} />
+              Kèm yếu tố nguy cơ lớn khác
+            </label>
+          )}
+        </div>
+
+        <div className="divider" />
+
+        {/* Step 4 */}
+        <div style={{ fontWeight: 1100, marginBottom: 8 }}>Bước 4 — Yếu tố điều chỉnh nguy cơ (nếu “lưng chừng”)</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {([
+            ["familyHistoryEarly", "Tiền sử gia đình bệnh tim mạch sớm"],
+            ["obesity", "Béo phì"],
+            ["sedentary", "Ít vận động"],
+            ["metabolicSyndrome", "Hội chứng chuyển hoá"],
+            ["psychosocial", "Stress kéo dài / kinh tế-xã hội thấp"],
+            ["chronicInflammatory", "Bệnh viêm/tự miễn mạn"],
+            ["hiv", "HIV"],
+            ["osa", "Ngưng thở khi ngủ"],
+            ["prematureMenopause", "Mãn kinh sớm"],
+            ["preeclampsia", "Tiền sản giật / THA thai kỳ"],
+            ["hsCRP", "hs-CRP tăng dai dẳng"],
+            ["lp_a", "Lipoprotein(a) tăng"],
+            ["subclinicalPlaqueOrHighCAC", "Xơ vữa dưới lâm sàng / CAC tăng"],
+          ] as const).map(([k, lab]) => (
+            <label key={k} style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900 }}>
+              <input type="checkbox" checked={(mod as any)[k]} onChange={(e) => setMod((p) => ({ ...p, [k]: e.target.checked }))} />
+              {lab}
+            </label>
+          ))}
+        </div>
+
+        <div className="divider" />
+
+        {/* SCORE area */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 1100 }}>
+            Thang điểm SCORE (khi chưa có bệnh nền “đẩy thẳng”)
+            <div style={{ color: "var(--muted)", fontWeight: 900, marginTop: 4 }}>
+              {eligibleForScore
+                ? "Bạn có thể tính SCORE trong POP-UP và áp dụng ngay cho phân tầng."
+                : "Hiện không eligible dùng SCORE (ASCVD/ĐTĐ/CKD<60/FH/đang dùng thuốc hạ lipid…)."}
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={btnPrimary} onClick={handleSave} disabled={!canSave || !activeCaseId}>
-              Lưu vào ca
+            <button className="btn" onClick={() => openScore(suggestedDefaultModel())}>
+              Tính SCORE (POP-UP)
             </button>
-            <button style={btnGhost} onClick={resetAll}>
-              Reset
+            <button className="btn" onClick={() => openScore("score2-asian")}>
+              SCORE2-ASIA (POP-UP)
             </button>
           </div>
         </div>
 
-        {/* Lý giải ngắn + LDL goal + Strategy */}
-        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 12 }}>
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 14,
-              border: "1px solid var(--line,#e5e7eb)",
-              background: "rgba(255,255,255,.70)",
-            }}
-          >
-            <div style={{ fontWeight: 950, marginBottom: 8 }}>Lý giải ngắn gọn</div>
-            {shortExplain.length ? (
-              <ul style={{ margin: 0, paddingLeft: 18 }}>
-                {shortExplain.map((t, i) => (
-                  <li key={i} style={{ marginBottom: 6 }}>
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div style={{ color: "var(--muted,#64748b)" }}>
-                Chưa đủ dữ liệu. Hãy xác định ASCVD/bệnh nền; nếu phù hợp thì dùng SCORE và nhập %.
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              padding: 12,
-              borderRadius: 14,
-              border: "1px solid var(--line,#e5e7eb)",
-              background: "rgba(255,255,255,.70)",
-            }}
-          >
-            <div style={{ fontWeight: 950, marginBottom: 8 }}>Mục tiêu điều trị (LDL-C)</div>
-
-            {ldlGoal ? (
-              <>
-                <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: "1px solid var(--line,#e5e7eb)",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      background: "white",
-                    }}
-                  >
-                    {ldlGoal.classLabel}
-                  </span>
-                  <div style={{ fontSize: 22, fontWeight: 950 }}>{ldlGoal.mmol} mmol/L</div>
-                  <div style={{ color: "var(--muted,#64748b)", fontWeight: 800 }}>({ldlGoal.mgdl} mg/dL)</div>
-                </div>
-
-                {ldlGoal.extra ? <div style={{ marginTop: 8, fontWeight: 900 }}>{ldlGoal.extra}</div> : null}
-                {ldlGoal.note ? (
-                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted,#64748b)" }}>{ldlGoal.note}</div>
-                ) : null}
-              </>
-            ) : (
-              <div style={{ color: "var(--muted,#64748b)" }}>Chưa có mục tiêu LDL-C vì chưa phân tầng được nguy cơ.</div>
-            )}
-
-            {strategy ? (
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>Chiến lược can thiệp (theo LDL chưa điều trị)</div>
-                <span
-                  style={{
-                    display: "inline-flex",
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    border: "1px solid",
-                    ...badgeStyle(strategy.color),
-                    fontWeight: 900,
-                    fontSize: 12,
-                  }}
-                >
-                  {strategy.label}
-                </span>
-                <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-                  (Nhập LDL-C “chưa điều trị” để gợi ý theo bảng can thiệp.)
-                </div>
-              </div>
-            ) : (
-              <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted,#64748b)" }}>
-                (Chưa có gợi ý can thiệp vì chưa có LDL-C “chưa điều trị”.)
-              </div>
-            )}
-          </div>
-        </div>
-
-        {!activeCaseId ? (
-          <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted,#64748b)" }}>
-            (Chưa có ca active → tạo/chọn ca trước khi lưu)
-          </div>
-        ) : null}
-      </div>
-
-      {/* =================== 0) DỮ LIỆU TỐI THIỂU (SCORE) =================== */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>0) Chuẩn bị dữ liệu tối thiểu (khi cần SCORE2 / SCORE2-OP)</h3>
-
-        <div style={grid2}>
-          <div>
-            <div style={labelStyle}>Tuổi (năm)</div>
-            <input style={inputStyle} value={age} onChange={(e) => setAge(e.target.value)} placeholder="vd: 55" inputMode="numeric" />
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              Gợi ý thang điểm: <b>{scoreSuggested}</b>
-            </div>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Giới</div>
-            <select style={inputStyle} value={sex} onChange={(e) => setSex(e.target.value)}>
-              <option value="">(chọn)</option>
-              <option value="Nam">Nam</option>
-              <option value="Nữ">Nữ</option>
-            </select>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Huyết áp tâm thu (SBP, mmHg)</div>
-            <input style={inputStyle} value={sbp} onChange={(e) => setSbp(e.target.value)} placeholder="vd: 128" inputMode="decimal" />
-          </div>
-
-          <div>
-            <div style={labelStyle}>Hút thuốc hiện tại</div>
-            <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
-              <input type="checkbox" checked={smoking} onChange={(e) => setSmoking(e.target.checked)} />
-              <span>Có hút thuốc</span>
-            </label>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Huyết áp tâm trương (DBP, mmHg)</div>
-            <input style={inputStyle} value={dbp} onChange={(e) => setDbp(e.target.value)} placeholder="vd: 78" inputMode="decimal" />
-          </div>
-
-          <div>
-            <div style={labelStyle}>Cụm quốc gia (HeartScore)</div>
-            <select style={inputStyle} value={countryCluster} onChange={(e) => setCountryCluster(e.target.value as CountryCluster)}>
-              <option value="Nguy cơ thấp">Nguy cơ thấp</option>
-              <option value="Nguy cơ trung bình">Nguy cơ trung bình</option>
-              <option value="Nguy cơ cao">Nguy cơ cao</option>
-              <option value="Nguy cơ rất cao">Nguy cơ rất cao</option>
-            </select>
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              (Dùng khi bạn tính trên HeartScore theo quốc gia/cụm nguy cơ.)
-            </div>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Đơn vị lipid</div>
-            <select style={inputStyle} value={lipidUnit} onChange={(e) => setLipidUnit(e.target.value as any)}>
-              <option value="mmol/L">mmol/L</option>
-              <option value="mg/dL">mg/dL</option>
-            </select>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Đang dùng thuốc hạ lipid máu?</div>
-            <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
-              <input type="checkbox" checked={onLipidLowering} onChange={(e) => setOnLipidLowering(e.target.checked)} />
-              <span>Statin / ezetimibe / PCSK9…</span>
-            </label>
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              Nếu đang dùng thuốc hạ lipid → <b>không dùng SCORE2/SCORE2-OP</b> để “tính lại”.
-            </div>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Cholesterol toàn phần (TC)</div>
-            <input
-              style={inputStyle}
-              value={tc}
-              onChange={(e) => setTc(e.target.value)}
-              placeholder={`vd: ${lipidUnit === "mmol/L" ? "5.2" : "200"}`}
-              inputMode="decimal"
-            />
-          </div>
-
-          <div>
-            <div style={labelStyle}>HDL-C</div>
-            <input
-              style={inputStyle}
-              value={hdl}
-              onChange={(e) => setHdl(e.target.value)}
-              placeholder={`vd: ${lipidUnit === "mmol/L" ? "1.2" : "46"}`}
-              inputMode="decimal"
-            />
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              Non-HDL = TC − HDL {nonHdlDisplay ? <b>→ {nonHdlDisplay.mmol} mmol/L (~{nonHdlDisplay.mg} mg/dL)</b> : null}
-            </div>
-          </div>
-
-          <div>
-            <div style={labelStyle}>LDL-C (nếu có — ưu tiên “chưa điều trị”)</div>
-            <input
-              style={inputStyle}
-              value={ldl}
-              onChange={(e) => setLdl(e.target.value)}
-              placeholder={`vd: ${lipidUnit === "mmol/L" ? "3.1" : "120"}`}
-              inputMode="decimal"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* =================== B1 ASCVD =================== */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>Bước 1) ASCVD? (phòng ngừa thứ phát)</h3>
-        <div style={{ color: "var(--muted,#64748b)", fontSize: 13, marginBottom: 10 }}>
-          Nếu có ASCVD lâm sàng hoặc hình ảnh rõ ràng → gần như luôn xếp <b>nguy cơ RẤT CAO</b>.
-        </div>
-
-        <div style={{ display: "grid", gap: 10 }}>
-          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input type="checkbox" checked={ascvdClinical} onChange={(e) => setAscvdClinical(e.target.checked)} />
-            <span>ASCVD lâm sàng (NMCT/ACS, bệnh mạch vành mạn, PCI/CABG; đột quỵ/TIA; PAD…)</span>
-          </label>
-
-          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={imagingSignificantPlaque}
-              onChange={(e) => setImagingSignificantPlaque(e.target.checked)}
-            />
-            <span>Mảng xơ vữa “có ý nghĩa” trên hình ảnh (vd: hẹp &gt;50%/kết luận rõ)</span>
-          </label>
-
-          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input type="checkbox" checked={cacVeryHigh} onChange={(e) => setCacVeryHigh(e.target.checked)} />
-            <span>Điểm vôi hóa ĐMV rất cao (vd: CAC ≥300 hoặc “rất cao” theo kết luận)</span>
-          </label>
-        </div>
-      </div>
-
-      {/* =================== B2 BỆNH NỀN ĐẨY THẲNG =================== */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>Bước 2) Nếu chưa ASCVD: xét bệnh nền “đẩy thẳng” vào nhóm nguy cơ</h3>
-
-        <div style={grid2}>
-          {/* Diabetes */}
-          <div>
-            <h4 style={{ margin: "0 0 8px 0" }}>2A) Đái tháo đường</h4>
-
-            <label style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-              <input type="checkbox" checked={diabetes} onChange={(e) => setDiabetes(e.target.checked)} />
-              <span>Có đái tháo đường</span>
-            </label>
-
-            <div style={{ opacity: diabetes ? 1 : 0.5, pointerEvents: diabetes ? "auto" : "none" }}>
-              <div style={{ display: "grid", gap: 10 }}>
-                <div>
-                  <div style={labelStyle}>Típ</div>
-                  <select style={inputStyle} value={dmType} onChange={(e) => setDmType(e.target.value as any)}>
-                    <option value="">(chọn)</option>
-                    <option value="T1DM">T1DM</option>
-                    <option value="T2DM">T2DM</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div style={labelStyle}>Thời gian mắc (năm)</div>
-                  <input style={inputStyle} value={dmDuration} onChange={(e) => setDmDuration(e.target.value)} placeholder="vd: 8" inputMode="decimal" />
-                </div>
-
-                <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <input type="checkbox" checked={dmOrganDamage} onChange={(e) => setDmOrganDamage(e.target.checked)} />
-                  <span>Tổn thương cơ quan đích (microalbumin niệu / võng mạc / thần kinh…)</span>
-                </label>
-
-                <div style={{ fontWeight: 900, marginTop: 6 }}>Yếu tố nguy cơ chính kèm theo</div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <input type="checkbox" checked={dmRF_HTN} onChange={(e) => setDmRF_HTN(e.target.checked)} />
-                    <span>Tăng huyết áp</span>
-                  </label>
-                  <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <input type="checkbox" checked={dmRF_Smoke} onChange={(e) => setDmRF_Smoke(e.target.checked)} />
-                    <span>Hút thuốc</span>
-                  </label>
-                  <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <input type="checkbox" checked={dmRF_Dyslip} onChange={(e) => setDmRF_Dyslip(e.target.checked)} />
-                    <span>Rối loạn lipid máu</span>
-                  </label>
-                  <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                    <input type="checkbox" checked={dmRF_Obesity} onChange={(e) => setDmRF_Obesity(e.target.checked)} />
-                    <span>Béo phì</span>
-                  </label>
-                </div>
-
-                <div style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
-                  Số yếu tố nguy cơ chính: <b>{dmRFCount}</b>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* CKD + FH */}
-          <div>
-            <h4 style={{ margin: "0 0 8px 0" }}>2B/2C/2D) Thận – FH – Yếu tố đơn lẻ rất nặng</h4>
-
-            <div style={{ marginBottom: 10 }}>
-              <div style={labelStyle}>eGFR (mL/phút/1.73m²)</div>
-              <input style={inputStyle} value={egfr} onChange={(e) => setEgfr(e.target.value)} placeholder="vd: 65" inputMode="decimal" />
-              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-                &lt;30: Rất cao • 30–59: Cao • ≥60: không xếp theo CKD
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input type="checkbox" checked={familialHC} onChange={(e) => setFamilialHC(e.target.checked)} />
-                <span>Tăng cholesterol máu gia đình (FH)</span>
-              </label>
-
-              <div style={{ opacity: familialHC ? 1 : 0.5, pointerEvents: familialHC ? "auto" : "none", marginTop: 8 }}>
-                <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <input type="checkbox" checked={fhWithMajorRF} onChange={(e) => setFhWithMajorRF(e.target.checked)} />
-                  <span>FH + 1 yếu tố nguy cơ chính khác → nâng lên Rất cao</span>
-                </label>
-              </div>
-            </div>
-
-            <div style={{ padding: 12, borderRadius: 12, border: "1px solid var(--line,#e5e7eb)", background: "rgba(0,0,0,.02)" }}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>Nhắc tiêu chí “yếu tố đơn lẻ rất nặng”</div>
-              <div style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
-                TC &gt;8.0 mmol/L (~&gt;310 mg/dL) hoặc LDL-C &gt;4.9 mmol/L (~&gt;190 mg/dL) hoặc HA ≥180/110.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* =================== B3 SCORE =================== */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>Bước 3) Nếu không thuộc nhóm “xếp thẳng”: dùng SCORE2 / SCORE2-OP</h3>
-
-        <div style={{ color: "var(--muted,#64748b)", fontSize: 13, marginBottom: 10 }}>
-          Chỉ dùng SCORE khi: <b>không ASCVD</b>, <b>không ĐTĐ</b>, <b>không CKD</b>, <b>không FH</b>, và <b>không đang dùng thuốc hạ lipid</b>.
-        </div>
-
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 12,
-            border: "1px solid var(--line,#e5e7eb)",
-            background: scoreEligibleBoxBg,
-          }}
-        >
-          <b>Điều kiện dùng SCORE:</b> {computed.eligibleForScore ? "ĐỦ điều kiện" : "KHÔNG đủ điều kiện"}
-          {computed.eligibleForScore && scoreMissing.length ? (
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              Thiếu dữ liệu tối thiểu: <b>{scoreMissing.join(", ")}</b>
-            </div>
-          ) : null}
-        </div>
-
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div>
-            <div style={labelStyle}>% nguy cơ 10 năm (SCORE2/SCORE2-OP)</div>
-            <input
-              style={inputStyle}
-              value={scoreRiskPct}
-              onChange={(e) => setScoreRiskPct(e.target.value)}
-              placeholder="vd: 7.5"
-              inputMode="decimal"
-            />
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              &lt;2 Thấp • 2–&lt;10 Trung bình • 10–&lt;20 Cao • ≥20 Rất cao
-            </div>
-          </div>
-
-          <div>
-            <div style={labelStyle}>Mở SCORE (POP-UP trong trang này)</div>
-            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button type="button" style={btnGhost} onClick={() => openScoreModal((ageNum ?? 0) >= 70 ? "score2-op" : "score2")}>
-                Mở SCORE2 / SCORE2-OP
+        {scoreApplied && (
+          <div style={{ marginTop: 10, borderRadius: 14, border: "1px solid var(--line)", padding: 12, background: "rgba(0,0,0,0.02)" }}>
+            <div style={{ fontWeight: 1100 }}>Đã áp dụng kết quả SCORE</div>
+            <div style={{ color: "var(--muted)", fontWeight: 900, marginTop: 4 }}>{scoreApplied.summary}</div>
+            <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="btn" onClick={() => setScoreApplied(null)} style={{ background: "white" }}>
+                Bỏ kết quả SCORE
               </button>
-
-              <button
-                type="button"
-                style={{
-                  ...btnGhost,
-                  opacity: diabetes && dmType === "T2DM" ? 1 : 0.55,
-                  cursor: diabetes && dmType === "T2DM" ? "pointer" : "not-allowed",
-                }}
-                onClick={() => openScoreModal("score2-diabetes")}
-                disabled={!diabetes || dmType !== "T2DM"}
-                title={!diabetes || dmType !== "T2DM" ? "Chỉ bật khi bệnh nhân T2DM" : ""}
-              >
-                Mở SCORE2-Diabetes (nếu T2DM)
+              <button className="btn" onClick={() => openScore(scoreApplied.model)}>
+                Tính lại (POP-UP)
               </button>
             </div>
-
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted,#64748b)" }}>
-              POP-UP sẽ tự điền sẵn Tuổi / Giới / SBP / Hút thuốc / TC / HDL / Non-HDL từ trang phân tầng.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* =================== B4 MODIFIERS =================== */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>Bước 4) Tinh chỉnh (tái phân loại) bằng yếu tố điều chỉnh nguy cơ</h3>
-
-        <div style={grid2}>
-          <div style={{ display: "grid", gap: 8 }}>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modFamilyHxEarly} onChange={(e) => setModFamilyHxEarly(e.target.checked)} />
-              <span>Tiền sử gia đình bệnh tim mạch sớm</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modHighRiskEthnicity} onChange={(e) => setModHighRiskEthnicity(e.target.checked)} />
-              <span>Sắc tộc nguy cơ cao (vd: Nam Á)</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modStress} onChange={(e) => setModStress(e.target.checked)} />
-              <span>Căng thẳng kéo dài / stress</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modDeprivation} onChange={(e) => setModDeprivation(e.target.checked)} />
-              <span>Thiếu thốn xã hội / điều kiện sống khó khăn</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modObesity} onChange={(e) => setModObesity(e.target.checked)} />
-              <span>Béo phì</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modInactivity} onChange={(e) => setModInactivity(e.target.checked)} />
-              <span>Ít vận động</span>
-            </label>
-          </div>
-
-          <div style={{ display: "grid", gap: 8 }}>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modChronicInflamm} onChange={(e) => setModChronicInflamm(e.target.checked)} />
-              <span>Bệnh viêm/tự miễn mạn</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={modSevereMentalIllness}
-                onChange={(e) => setModSevereMentalIllness(e.target.checked)}
-              />
-              <span>Bệnh tâm thần nặng điều trị dài hạn</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modHIV} onChange={(e) => setModHIV(e.target.checked)} />
-              <span>Nhiễm HIV</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modOSA} onChange={(e) => setModOSA(e.target.checked)} />
-              <span>Ngưng thở khi ngủ do tắc nghẽn</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modFemaleRepro} onChange={(e) => setModFemaleRepro(e.target.checked)} />
-              <span>Mãn kinh sớm / tiền sản giật / THA thai kỳ</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modHsCRP} onChange={(e) => setModHsCRP(e.target.checked)} />
-              <span>hs-CRP tăng dai dẳng (&gt;2 mg/L)</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modLpa} onChange={(e) => setModLpa(e.target.checked)} />
-              <span>Lipoprotein(a) tăng (&gt;50 mg/dL hoặc &gt;105 nmol/L)</span>
-            </label>
-          </div>
-        </div>
-
-        <hr style={{ border: "none", borderTop: "1px solid var(--line,#e5e7eb)", margin: "14px 0" }} />
-
-        <div style={grid2}>
-          <div style={{ display: "grid", gap: 8 }}>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modSubclinicalPlaque} onChange={(e) => setModSubclinicalPlaque(e.target.checked)} />
-              <span>Có xơ vữa dưới lâm sàng trên hình ảnh (không rõ mức độ)</span>
-            </label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <input type="checkbox" checked={modCACRaised} onChange={(e) => setModCACRaised(e.target.checked)} />
-              <span>CAC tăng (diễn giải thận trọng nếu đang dùng statin)</span>
-            </label>
-          </div>
-
-          <div style={{ alignSelf: "center", color: "var(--muted,#64748b)", fontSize: 13 }}>
-            Yếu tố điều chỉnh đã chọn: <b>{modifierCount}</b>
-          </div>
-        </div>
-      </div>
-
-      {/* =================== GIẢI THÍCH CHI TIẾT =================== */}
-      <div style={cardStyle}>
-        <h3 style={{ marginTop: 0 }}>Lý do / tiêu chí (chi tiết)</h3>
-
-        {computed.reasons.length ? (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {computed.reasons.map((r, i) => (
-              <li key={i} style={{ marginBottom: 6 }}>
-                {r}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div style={{ color: "var(--muted,#64748b)" }}>
-            Chưa đủ dữ liệu để phân tầng. Hãy bắt đầu từ ASCVD và bệnh nền, sau đó mới dùng SCORE khi đủ điều kiện.
           </div>
         )}
 
-        {computed.adjNotes.length ? (
-          <>
-            <div style={{ fontWeight: 900, margin: "12px 0 8px 0" }}>Tinh chỉnh / tái phân loại</div>
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {computed.adjNotes.map((r, i) => (
-                <li key={i} style={{ marginBottom: 6 }}>
-                  {r}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
-
-        <div style={{ marginTop: 10, color: "var(--muted,#64748b)", fontSize: 12 }}>
-          Công cụ hỗ trợ theo tiêu chí ESC/EAS, không thay thế quyết định lâm sàng.
+        <div style={{ marginTop: 14, color: "var(--muted)", fontWeight: 900 }}>
+          Lưu ý: Công cụ hỗ trợ tham khảo, không thay thế quyết định lâm sàng.
         </div>
       </div>
 
-      {/* =================== SCORE MODAL (PREFILL) =================== */}
-      {scoreModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onMouseDown={closeScoreModal}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,.55)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 14,
-          }}
-        >
-          <div
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              width: "min(980px, 100%)",
-              maxHeight: "92vh",
-              background: "var(--card,#fff)",
-              borderRadius: 18,
-              border: "1px solid var(--line,#e5e7eb)",
-              boxShadow: "0 20px 60px rgba(0,0,0,.25)",
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {/* Header */}
-            <div
-              style={{
-                padding: "12px 14px",
-                borderBottom: "1px solid var(--line,#e5e7eb)",
-                display: "flex",
-                gap: 10,
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <div style={{ fontWeight: 950, fontSize: 15 }}>
-                  {scoreTab === "score2" ? "SCORE2" : scoreTab === "score2-op" ? "SCORE2-OP" : "SCORE2-Diabetes"}
-                  <span style={{ marginLeft: 8, fontSize: 12, color: "var(--muted,#64748b)" }}>
-                    (điền sẵn từ Phân tầng nguy cơ)
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--muted,#64748b)" }}>
-                  Dữ liệu bên dưới đã lấy từ form chính. Bạn có thể sửa trực tiếp tại đây (sẽ cập nhật ngược lại).
-                </div>
-              </div>
+      {/* POPUP */}
+      <ScorePopup
+        open={scoreOpen}
+        defaultModel={scoreDefaultModel}
+        title="SCORE (tự tính trong POP-UP, đã điền sẵn)"
+        prefill={{
+          region,
+          sex,
+          age,
+          smoker: smoker ? 1 : 0,
+          sbp,
+          tc,
+          hdl,
+        }}
+        onClose={() => setScoreOpen(false)}
+        onApply={(r: ScorePopupResult) => {
+          setScoreApplied(r);
+          setScoreOpen(false);
 
-              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <input
-                  value={scoreModalPct}
-                  onChange={(e) => setScoreModalPct(e.target.value)}
-                  placeholder="% nguy cơ 10 năm"
-                  inputMode="decimal"
-                  style={{
-                    width: 170,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid var(--line,#e5e7eb)",
-                    outline: "none",
-                    fontWeight: 800,
-                  }}
-                />
-                <button
-                  type="button"
-                  style={btnPrimary}
-                  onClick={() => {
-                    setScoreRiskPct(scoreModalPct);
-                    closeScoreModal();
-                  }}
-                >
-                  Áp dụng %
-                </button>
-                <button type="button" style={btnGhost} onClick={closeScoreModal} title="ESC để đóng">
-                  Đóng
-                </button>
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div
-              style={{
-                padding: "10px 14px",
-                borderBottom: "1px solid var(--line,#e5e7eb)",
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setScoreTab("score2")}
-                style={{
-                  ...btnGhost,
-                  borderColor: scoreTab === "score2" ? "var(--primary,#1d4ed8)" : "var(--line,#e5e7eb)",
-                  background: scoreTab === "score2" ? "rgba(29,78,216,.08)" : "#fff",
-                }}
-              >
-                SCORE2 (&lt;70)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setScoreTab("score2-op")}
-                style={{
-                  ...btnGhost,
-                  borderColor: scoreTab === "score2-op" ? "var(--primary,#1d4ed8)" : "var(--line,#e5e7eb)",
-                  background: scoreTab === "score2-op" ? "rgba(29,78,216,.08)" : "#fff",
-                }}
-              >
-                SCORE2-OP (≥70)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setScoreTab("score2-diabetes")}
-                disabled={!diabetes || dmType !== "T2DM"}
-                style={{
-                  ...btnGhost,
-                  opacity: !diabetes || dmType !== "T2DM" ? 0.5 : 1,
-                  cursor: !diabetes || dmType !== "T2DM" ? "not-allowed" : "pointer",
-                  borderColor: scoreTab === "score2-diabetes" ? "var(--primary,#1d4ed8)" : "var(--line,#e5e7eb)",
-                  background: scoreTab === "score2-diabetes" ? "rgba(29,78,216,.08)" : "#fff",
-                }}
-                title={!diabetes || dmType !== "T2DM" ? "Chỉ bật khi bệnh nhân T2DM" : ""}
-              >
-                SCORE2-Diabetes
-              </button>
-            </div>
-
-            {/* Body */}
-            <div style={{ padding: 14, overflow: "auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div>
-                  <div style={labelStyle}>Tuổi</div>
-                  <input style={inputStyle} value={age} onChange={(e) => setAge(e.target.value)} inputMode="numeric" />
-                </div>
-
-                <div>
-                  <div style={labelStyle}>Giới</div>
-                  <select style={inputStyle} value={sex} onChange={(e) => setSex(e.target.value)}>
-                    <option value="">(chọn)</option>
-                    <option value="Nam">Nam</option>
-                    <option value="Nữ">Nữ</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div style={labelStyle}>SBP (mmHg)</div>
-                  <input style={inputStyle} value={sbp} onChange={(e) => setSbp(e.target.value)} inputMode="decimal" />
-                </div>
-
-                <div>
-                  <div style={labelStyle}>Hút thuốc hiện tại</div>
-                  <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
-                    <input type="checkbox" checked={smoking} onChange={(e) => setSmoking(e.target.checked)} />
-                    <span>Có hút thuốc</span>
-                  </label>
-                </div>
-
-                <div>
-                  <div style={labelStyle}>TC</div>
-                  <input style={inputStyle} value={tc} onChange={(e) => setTc(e.target.value)} inputMode="decimal" />
-                </div>
-
-                <div>
-                  <div style={labelStyle}>HDL-C</div>
-                  <input style={inputStyle} value={hdl} onChange={(e) => setHdl(e.target.value)} inputMode="decimal" />
-                </div>
-
-                <div>
-                  <div style={labelStyle}>Non-HDL (tự tính)</div>
-                  <div
-                    style={{
-                      ...inputStyle,
-                      background: "rgba(0,0,0,.03)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      fontWeight: 900,
-                    }}
-                  >
-                    <span>{nonHdlDisplay ? `${nonHdlDisplay.mmol} mmol/L` : "—"}</span>
-                    <span style={{ color: "var(--muted,#64748b)", fontWeight: 800 }}>
-                      {nonHdlDisplay ? `~${nonHdlDisplay.mg} mg/dL` : ""}
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <div style={labelStyle}>Cụm quốc gia (HeartScore)</div>
-                  <select style={inputStyle} value={countryCluster} onChange={(e) => setCountryCluster(e.target.value as CountryCluster)}>
-                    <option value="Nguy cơ thấp">Nguy cơ thấp</option>
-                    <option value="Nguy cơ trung bình">Nguy cơ trung bình</option>
-                    <option value="Nguy cơ cao">Nguy cơ cao</option>
-                    <option value="Nguy cơ rất cao">Nguy cơ rất cao</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: "1px solid var(--line,#e5e7eb)", background: "rgba(0,0,0,.02)" }}>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>Cách dùng nhanh trong POP-UP</div>
-                <ol style={{ margin: 0, paddingLeft: 18, color: "var(--text,#0f172a)" }}>
-                  <li>Kiểm tra dữ liệu đã điền sẵn (Tuổi/Giới/SBP/Hút thuốc/Non-HDL).</li>
-                  <li>Tính SCORE2/SCORE2-OP theo công cụ bạn dùng (HeartScore hoặc bảng/ứng dụng).</li>
-                  <li>Nhập <b>% nguy cơ 10 năm</b> ở góc phải và bấm <b>Áp dụng %</b>.</li>
-                </ol>
-
-                <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <a
-                    href="https://www.escardio.org/Education/Practice-Tools/CVD-prevention-toolbox/HeartScore"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ textDecoration: "none", ...btnGhost, display: "inline-flex", alignItems: "center" }}
-                  >
-                    Mở HeartScore ↗
-                  </a>
-
-                  <div style={{ fontSize: 12, color: "var(--muted,#64748b)", alignSelf: "center" }}>
-                    (Bạn chọn SCORE2 hay SCORE2-OP theo tuổi: {ageNum !== undefined ? (ageNum >= 70 ? "SCORE2-OP" : "SCORE2") : "—"})
-                  </div>
-                </div>
-              </div>
-
-              {scoreTab === "score2-diabetes" ? (
-                <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted,#64748b)" }}>
-                  Gợi ý: SCORE2-Diabetes dành cho T2DM (không ASCVD). Tại đây bạn cũng nhập % nguy cơ rồi “Áp dụng %”.
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      )}
+          // ✅ sync ngược về form chính (đúng yêu cầu của bạn)
+          setRegion(r.inputs.region);
+          setSex(r.inputs.sex);
+          setAge(r.inputs.age);
+          setSmoker(r.inputs.smoker === 1);
+          setSbp(r.inputs.sbp);
+          setTc(r.inputs.tc);
+          setHdl(r.inputs.hdl);
+        }}
+      />
     </div>
   );
 }
