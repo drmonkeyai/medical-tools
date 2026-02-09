@@ -3,27 +3,28 @@ import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { specialties } from "../data/tools";
 
-// Existing calculators
-import ISI from "../calculators/ISI";
+// Calculators
 import EGFR from "../calculators/EGFR";
+import ISI from "../calculators/ISI";
 
 import SCORE2 from "../calculators/SCORE2";
 import SCORE2OP from "../calculators/SCORE2OP";
 import SCORE2ASIAN from "../calculators/SCORE2ASIAN";
 import SCORE2DIABETES from "../calculators/SCORE2DIABETES";
+import CVRiskESC from "../calculators/CVRiskESC";
+
+import CHA2DS2VASc from "../calculators/CHA2DS2VASc";
+import HASBLED from "../calculators/HASBLED";
+
+import Centor from "../calculators/Centor";
+import CURB65 from "../calculators/CURB65";
+import QSOFA from "../calculators/QSOFA";
+import ChildPugh from "../calculators/ChildPugh";
 
 import FamilyAPGAR from "../calculators/FamilyAPGAR";
 import SCREEM from "../calculators/SCREEM";
 import Pedigree from "../calculators/Pedigree";
 import BMI from "../calculators/BMI";
-
-// New calculators (make sure these files exist in src/calculators/)
-import Centor from "../calculators/Centor";
-import CHA2DS2VASc from "../calculators/CHA2DS2VASc";
-import HASBLED from "../calculators/HASBLED";
-import CURB65 from "../calculators/CURB65";
-import QSOFA from "../calculators/QSOFA";
-import ChildPugh from "../calculators/ChildPugh";
 
 export default function ToolPlaceholder() {
   const { slug } = useParams();
@@ -31,10 +32,8 @@ export default function ToolPlaceholder() {
   const location = useLocation();
 
   // =========================
-  // Special-case: Drug Interactions
+  // Special-case: Drug Interactions (iframe)
   // =========================
-  // - If sidebar points to /drug-interactions => slug can be undefined
-  // - If later you point /tools/drug-interactions => slug = "drug-interactions"
   const isDrugInteractions =
     location.pathname === "/drug-interactions" || slug === "drug-interactions";
 
@@ -70,7 +69,8 @@ export default function ToolPlaceholder() {
           </div>
 
           <div style={{ color: "var(--muted)", marginBottom: 12, marginTop: 10 }}>
-            Nguồn: Drugs.com • Chỉ mang tính tham khảo, không thay thế quyết định lâm sàng.
+            Nguồn: Drugs.com • Chỉ mang tính tham khảo, không thay thế quyết định
+            lâm sàng.
           </div>
 
           <div
@@ -122,7 +122,7 @@ export default function ToolPlaceholder() {
   // =========================
   // Map slug -> calculator component
   // =========================
-  const map: Record<string, ReactNode> = {
+  const componentMap: Record<string, ReactNode> = {
     // Thận – tiết niệu
     egfr: <EGFR />,
 
@@ -134,6 +134,7 @@ export default function ToolPlaceholder() {
     "score2-op": <SCORE2OP />,
     "score2-asian": <SCORE2ASIAN />,
     "score2-diabetes": <SCORE2DIABETES />,
+    "cv-risk-esc": <CVRiskESC />,
     "cha2ds2-vasc": <CHA2DS2VASc />,
     "has-bled": <HASBLED />,
 
@@ -156,7 +157,9 @@ export default function ToolPlaceholder() {
     bmi: <BMI />,
   };
 
-  if (slug && map[slug]) return <>{map[slug]}</>;
+  if (slug && componentMap[slug]) {
+    return <>{componentMap[slug]}</>;
+  }
 
   // =========================
   // Fallback: show placeholder if slug exists but calculator not implemented

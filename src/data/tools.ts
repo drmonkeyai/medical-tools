@@ -152,6 +152,19 @@ export const specialties: Specialty[] = [
         description: "Ước tính nguy cơ tim mạch cho bệnh nhân đái tháo đường",
         route: "/tools/score2-diabetes",
       },
+      
+      {
+  
+      id: "cv-risk-esc",
+      name: "Phân tầng nguy cơ tim mạch (ESC/EAS)",
+      description:
+        "Ưu tiên xác định ngay nhóm Cao/Rất cao theo bệnh nền; dùng SCORE2/SCORE2-OP khi cần; có bước điều chỉnh nguy cơ.",
+      route: "/tools/cv-risk-esc",
+      isQuick: true,
+      // domain: "BIO" // nếu bạn đang chuẩn hoá BIO/PSYCHO/SOCIAL
+      },
+  
+
       {
         id: "cha2ds2-vasc",
         name: "CHA₂DS₂-VASc",
