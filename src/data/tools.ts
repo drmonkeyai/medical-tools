@@ -1,11 +1,11 @@
 // src/data/tools.ts
 
 export interface Tool {
-  id: string;
+  id: string;            // cũng chính là "slug" dùng cho /tools/:slug
   name: string;
   description: string;
-  route: string;
-  isQuick?: boolean;
+  route: string;         // đường dẫn điều hướng
+  isQuick?: boolean;     // gợi ý quick tools (hoặc dùng làm mặc định thường dùng)
 }
 
 export interface Specialty {
@@ -152,19 +152,22 @@ export const specialties: Specialty[] = [
         description: "Ước tính nguy cơ tim mạch cho bệnh nhân đái tháo đường",
         route: "/tools/score2-diabetes",
       },
-      
       {
-  
-      id: "cv-risk-esc",
-      name: "Phân tầng nguy cơ tim mạch (ESC/EAS)",
-      description:
-        "Ưu tiên xác định ngay nhóm Cao/Rất cao theo bệnh nền; dùng SCORE2/SCORE2-OP khi cần; có bước điều chỉnh nguy cơ.",
-      route: "/tools/cv-risk-esc",
-      isQuick: true,
-      // domain: "BIO" // nếu bạn đang chuẩn hoá BIO/PSYCHO/SOCIAL
+        id: "cv-risk-esc",
+        name: "Phân tầng nguy cơ tim mạch (ESC/EAS)",
+        description:
+          "Ưu tiên xác định ngay nhóm Cao/Rất cao theo bệnh nền; dùng SCORE2/SCORE2-OP khi cần; có bước điều chỉnh nguy cơ.",
+        route: "/tools/cv-risk-esc",
+        isQuick: true,
       },
-  
-
+      {
+        id: "who-pen-hearts",
+        name: "WHO PEN/HEARTS – Phân tầng nguy cơ tim mạch",
+        description:
+          "WHO CVD risk 10 năm (Southeast Asia) + gợi ý can thiệp tuyến cơ sở",
+        route: "/tools/who-pen-hearts",
+        isQuick: true,
+      },
       {
         id: "cha2ds2-vasc",
         name: "CHA₂DS₂-VASc",
@@ -320,7 +323,8 @@ export const specialties: Specialty[] = [
       {
         id: "meld-na",
         name: "MELD-Na",
-        description: "Đánh giá tiên lượng bệnh gan mạn (placeholder – sẽ bổ sung sau)",
+        description:
+          "Đánh giá tiên lượng bệnh gan mạn (placeholder – sẽ bổ sung sau)",
         route: "/tools/meld-na",
       },
       {
@@ -338,7 +342,8 @@ export const specialties: Specialty[] = [
       {
         id: "gbs",
         name: "Glasgow–Blatchford Score",
-        description: "Phân tầng xuất huyết tiêu hoá trên (placeholder – sẽ bổ sung sau)",
+        description:
+          "Phân tầng xuất huyết tiêu hoá trên (placeholder – sẽ bổ sung sau)",
         route: "/tools/gbs",
       },
       {
@@ -367,7 +372,8 @@ export const specialties: Specialty[] = [
       {
         id: "sirs",
         name: "SIRS",
-        description: "Tiêu chuẩn phản ứng viêm hệ thống (placeholder – sẽ bổ sung sau)",
+        description:
+          "Tiêu chuẩn phản ứng viêm hệ thống (placeholder – sẽ bổ sung sau)",
         route: "/tools/sirs",
       },
       {
@@ -407,3 +413,6 @@ export const specialties: Specialty[] = [
     ],
   },
 ];
+
+// (tuỳ chọn) Export helper nếu bạn cần nơi khác dùng:
+export const allTools: Tool[] = specialties.flatMap((s) => s.tools);
