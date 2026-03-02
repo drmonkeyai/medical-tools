@@ -40,7 +40,7 @@ export default function Contact() {
             </div>
 
             <div style={{ marginTop: 6, lineHeight: 1.6 }}>
-              Bác sĩ gia đình - Bác sĩ Y học dự phòng
+              Bác sĩ gia đình
             </div>
 
             <div style={{ marginTop: 6, color: "var(--muted)", lineHeight: 1.6 }}>

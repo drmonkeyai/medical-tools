@@ -195,7 +195,7 @@ export default function Immunization() {
       {/* Header */}
       <div className="im-head">
         <div className="im-head-left">
-          <h1 className="im-title">Hướng dẫn tiêm chủng</h1>
+          <h1 className="im-title">Hướng dẫn tiêm chủng (tính năng đang phát triển)</h1>
           <p className="im-sub">
             Tra cứu nhanh theo <b>vắc xin</b> / <b>đối tượng</b> / <b>chỉ định</b> /
             <b> chống chỉ định</b>.

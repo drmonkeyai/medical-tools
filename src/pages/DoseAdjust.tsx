@@ -59,7 +59,7 @@ export default function DoseAdjust() {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
           <div>
-            <h2 style={{ margin: 0 }}>Điều chỉnh liều thuốc</h2>
+            <h2 style={{ margin: 0 }}>Điều chỉnh liều thuốc (tính năng đang phát triển)</h2>
             <div style={{ marginTop: 6, color: "var(--muted)" }}>
               Gợi ý điều chỉnh theo eGFR (thận) và Child-Pugh (gan) cho các thuốc thường dùng.
             </div>
