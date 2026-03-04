@@ -25,6 +25,10 @@ const items: Item[] = [
   { label: "Tương tác thuốc", to: "/drug-interactions", icon: "🔁" },
   { label: "Hướng dẫn tiêm chủng", to: "/immunization", icon: "💉" },
   { label: "Tra cứu ICD-10", to: "/icd10", icon: "📘" },
+
+  // ✅ new page
+  { label: "Quy trình BYT", to: "/byt-procedures", icon: "📑" },
+
   { label: "Liên hệ", to: "/contact", icon: "👤" },
 ];
 

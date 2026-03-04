@@ -2,20 +2,28 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import "./index.css";
+
 import Layout from "./components/Layout";
+import { CasesProvider } from "./context/CasesContext";
+
+// Pages
 import Home from "./pages/Home";
 import Tools from "./pages/Tools";
 import ToolPlaceholder from "./pages/ToolPlaceholder";
 import DoseAdjust from "./pages/DoseAdjust";
 import DrugInteractions from "./pages/DrugInteractions";
+import Immunization from "./pages/Immunization";
 import ICD10 from "./pages/ICD10";
 import Contact from "./pages/Contact";
-
-import Immunization from "./pages/Immunization";
 
 import CaseDetail from "./pages/CaseDetail";
 import CaseSummary from "./pages/CaseSummary";
 
+// ✅ New page: Quy trình BYT
+import BytProcedures from "./pages/BytProcedures";
+
+// Symptoms
 import SymptomsIndex from "./pages/symptoms/index";
 
 import Sot from "./pages/symptoms/sot";
@@ -46,25 +54,26 @@ import DauKhop from "./pages/symptoms/dau-khop";
 
 import DaLieu from "./pages/symptoms/ngua-ton-thuong-da";
 
-import { CasesProvider } from "./context/CasesContext";
-import "./index.css";
-
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
     <CasesProvider>
       <Routes>
         <Route element={<Layout />}>
+          {/* Core */}
           <Route path="/" element={<Home />} />
 
+          {/* Tools */}
           <Route path="/tools" element={<Tools />} />
           <Route path="/tools/:slug" element={<ToolPlaceholder />} />
 
+          {/* Medication */}
           <Route path="/dose-adjust" element={<DoseAdjust />} />
           <Route path="/drug-interactions" element={<DrugInteractions />} />
 
+          {/* Immunization */}
           <Route path="/immunization" element={<Immunization />} />
 
-          {/* Tiếp cận theo chứng */}
+          {/* Symptoms */}
           <Route path="/symptoms" element={<SymptomsIndex />} />
           <Route path="/symptoms/sot" element={<Sot />} />
           <Route path="/symptoms/met-moi-ue-oai" element={<MetMoi />} />
@@ -97,9 +106,16 @@ createRoot(document.getElementById("root")!).render(
 
           <Route path="/symptoms/ngua-ton-thuong-da" element={<DaLieu />} />
 
+          {/* References */}
           <Route path="/icd10" element={<ICD10 />} />
+
+          {/* ✅ Quy trình BYT */}
+          <Route path="/byt-procedures" element={<BytProcedures />} />
+
+          {/* Contact */}
           <Route path="/contact" element={<Contact />} />
 
+          {/* Cases */}
           <Route path="/case-summary" element={<CaseSummary />} />
           <Route path="/cases/:caseId" element={<CaseDetail />} />
         </Route>
