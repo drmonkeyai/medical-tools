@@ -3,24 +3,25 @@ import { useEffect, useMemo, useState } from "react";
 
 type BYTProcedureDoc = {
   id: string;
+  filename?: string;
   title: string;
-
-  decisionNo?: string;
   issuedDate?: string;
-  year?: number;
-  issuer?: string;
+  decisionNo?: string;
   specialty?: string;
-  summary?: string;
-
+  year?: number;
   driveUrl: string;
   downloadUrl?: string;
-  tags?: string[];
+  previewUrl?: string;
+  issuer?: string;
+  updatedAt?: string;
 };
 
 const LS_KEY = "byt_procedures_v1";
+const GAS_URL =
+  "https://script.google.com/macros/s/AKfycbyXuexD2ldSpOPkobos62Uiu8vgiKG08cxZXWUr5Z5NisYPx1w4z6Kf1LeLsyI0n9sZHg/exec";
 
 function normalize(s: string) {
-  return s
+  return String(s || "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -51,33 +52,115 @@ function dedupeById(docs: BYTProcedureDoc[]) {
 }
 
 function toPreviewUrl(url: string) {
-  const m = url.match(/drive\.google\.com\/file\/d\/([^/]+)\//i);
+  const m = String(url || "").match(/drive\.google\.com\/file\/d\/([^/]+)\//i);
   if (m?.[1]) return `https://drive.google.com/file/d/${m[1]}/preview`;
   return url;
+}
+
+function mapApiItems(items: any[]): BYTProcedureDoc[] {
+  return items
+    .filter(
+      (x) =>
+        x &&
+        typeof x.id === "string" &&
+        typeof x.title === "string" &&
+        typeof x.driveUrl === "string"
+    )
+    .map((x) => ({
+      id: String(x.id),
+      filename: x.filename ? String(x.filename) : undefined,
+      title: String(x.title),
+      issuedDate: x.issuedDate ? String(x.issuedDate) : undefined,
+      decisionNo: x.decisionNo ? String(x.decisionNo) : undefined,
+      specialty: x.specialty ? String(x.specialty) : undefined,
+      year:
+        typeof x.year === "number"
+          ? x.year
+          : x.year
+          ? Number(x.year)
+          : undefined,
+      driveUrl: String(x.driveUrl),
+      downloadUrl: x.downloadUrl ? String(x.downloadUrl) : undefined,
+      previewUrl: x.previewUrl ? String(x.previewUrl) : undefined,
+      issuer: x.issuer ? String(x.issuer) : "Bộ Y tế",
+      updatedAt: x.updatedAt ? String(x.updatedAt) : undefined,
+    }));
+}
+
+function formatDateVN(iso?: string) {
+  if (!iso) return "";
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return iso;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+function buildSafeDownloadUrl(doc: BYTProcedureDoc | null) {
+  if (!doc) return "";
+  if (doc.downloadUrl) return doc.downloadUrl;
+  if (doc.id) {
+    return `https://drive.google.com/uc?export=download&id=${doc.id}`;
+  }
+  return "";
 }
 
 export default function BytProcedures() {
   const [docs, setDocs] = useState<BYTProcedureDoc[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
 
-  // filters/sort
   const [q, setQ] = useState("");
   const [specialty, setSpecialty] = useState<string>("all");
   const [year, setYear] = useState<string>("all");
-  const [sort, setSort] = useState<"newest" | "oldest" | "title">("newest");
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  async function loadFromApi() {
+    const url = `${GAS_URL}?t=${Date.now()}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    if (!json?.ok || !Array.isArray(json.items)) {
+      throw new Error(json?.error || "API trả về dữ liệu không hợp lệ");
+    }
+
+    const nextDocs = dedupeById(mapApiItems(json.items));
+    localStorage.setItem(LS_KEY, JSON.stringify(nextDocs));
+    return nextDocs;
+  }
 
   useEffect(() => {
     const raw = localStorage.getItem(LS_KEY);
-    const parsed = raw ? safeParseDocs(raw) : [];
-    const cleaned = dedupeById(parsed);
-    setDocs(cleaned);
-    if (cleaned.length > 0) setSelectedId(cleaned[0].id);
+    const cached = raw ? dedupeById(safeParseDocs(raw)) : [];
+
+    if (cached.length > 0) {
+      setDocs(cached);
+      setSelectedId(cached[0].id);
+    }
+
+    setIsLoading(true);
+    loadFromApi()
+      .then((nextDocs) => {
+        setDocs(nextDocs);
+        setLoadError("");
+        if (nextDocs.length > 0) {
+          setSelectedId((prev) =>
+            nextDocs.some((d) => d.id === prev) ? prev : nextDocs[0].id
+          );
+        }
+      })
+      .catch((e: any) => {
+        if (cached.length === 0) {
+          setLoadError(`Không tải được dữ liệu: ${e?.message || String(e)}`);
+        }
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const specialties = useMemo(() => {
     const s = new Set<string>();
     docs.forEach((d) => d.specialty && s.add(d.specialty));
-    return ["all", ...Array.from(s).sort((a, b) => a.localeCompare(b))];
+    return ["all", ...Array.from(s).sort((a, b) => a.localeCompare(b, "vi"))];
   }, [docs]);
 
   const years = useMemo(() => {
@@ -88,33 +171,28 @@ export default function BytProcedures() {
 
   const filtered = useMemo(() => {
     const nq = normalize(q);
-    let arr = docs.filter((d) => {
+
+    return docs.filter((d) => {
       const matchesQ =
         !nq ||
         normalize(d.title).includes(nq) ||
         normalize(d.specialty ?? "").includes(nq) ||
         normalize(d.issuer ?? "").includes(nq) ||
         normalize(d.decisionNo ?? "").includes(nq) ||
-        normalize((d.tags ?? []).join(" ")).includes(nq);
+        normalize(d.filename ?? "").includes(nq);
 
       const matchesSpecialty = specialty === "all" || d.specialty === specialty;
       const matchesYear = year === "all" || String(d.year ?? "") === year;
 
       return matchesQ && matchesSpecialty && matchesYear;
     });
-
-    arr = arr.sort((a, b) => {
-      if (sort === "title") return a.title.localeCompare(b.title);
-      const ay = a.year ?? -1;
-      const by = b.year ?? -1;
-      return sort === "newest" ? by - ay : ay - by;
-    });
-
-    return arr;
-  }, [docs, q, specialty, year, sort]);
+  }, [docs, q, specialty, year]);
 
   useEffect(() => {
-    if (filtered.length === 0) return;
+    if (filtered.length === 0) {
+      setSelectedId("");
+      return;
+    }
     const stillExists = filtered.some((d) => d.id === selectedId);
     if (!stillExists) setSelectedId(filtered[0].id);
   }, [filtered, selectedId]);
@@ -124,7 +202,6 @@ export default function BytProcedures() {
     [filtered, selectedId]
   );
 
-  // UI: danh sách tài liệu gọn -> dropdown
   const listOptions = useMemo(() => {
     return filtered.map((d) => ({
       id: d.id,
@@ -139,36 +216,39 @@ export default function BytProcedures() {
     }));
   }, [filtered]);
 
+  const safeDownloadUrl = buildSafeDownloadUrl(selected);
+
   return (
-    // dùng flex column để phần nội dung ăn hết chiều cao
-    <div style={{ padding: 16, height: "calc(100vh - 32px)", display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* =========================
-          DẢI TRÊN (COMPACT) - trong khung đỏ
-         ========================= */}
+    <div
+      style={{
+        padding: 12,
+        height: "calc(100vh - 24px)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
       <section
         style={{
           border: "1px solid #EAECF0",
           borderRadius: 14,
-          padding: 12,
+          padding: 10,
           background: "white",
+          flexShrink: 0,
         }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div style={{ minWidth: 240 }}>
-            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2 }}>Tổng hợp hướng dẫn quy trình kĩ thuật của Bộ Y tế</div>
-            <div style={{ color: "#667085", marginTop: 4, fontSize: 13 }}>Tìm nhanh theo chuyên khoa</div>
-          </div>
-
-          <div style={{ color: "#667085", fontSize: 13 }}>
-            {filtered.length} tài liệu
-          </div>
-        </div>
-
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 200px 140px 220px", gap: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.3fr 210px 140px 1.2fr auto auto auto",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Tìm theo tên / số quyết định / chuyên khoa…"
+            placeholder="Tìm theo tên / số quyết định / chuyên khoa..."
             style={{
               padding: "10px 12px",
               borderRadius: 10,
@@ -214,25 +294,6 @@ export default function BytProcedures() {
           </select>
 
           <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as any)}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 10,
-              border: "1px solid #D0D5DD",
-              background: "white",
-              width: "100%",
-            }}
-          >
-            <option value="newest">Mới → cũ (theo năm)</option>
-            <option value="oldest">Cũ → mới (theo năm)</option>
-            <option value="title">A → Z (theo tên)</option>
-          </select>
-        </div>
-
-        {/* Dropdown chọn tài liệu (gọn thay vì list dài) */}
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-          <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
             disabled={filtered.length === 0}
@@ -245,7 +306,7 @@ export default function BytProcedures() {
             }}
           >
             {filtered.length === 0 ? (
-              <option value="">Chưa có tài liệu hoặc không có kết quả phù hợp</option>
+              <option value="">Chưa có tài liệu phù hợp</option>
             ) : null}
             {listOptions.map((o) => (
               <option key={o.id} value={o.id}>
@@ -253,86 +314,113 @@ export default function BytProcedures() {
               </option>
             ))}
           </select>
+
+          <div
+            style={{
+              color: "#667085",
+              fontSize: 13,
+              whiteSpace: "nowrap",
+              textAlign: "right",
+            }}
+          >
+            {isLoading ? "Đang tải..." : `${filtered.length} tài liệu`}
+          </div>
+
+          <a
+            href={selected?.driveUrl || "#"}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #1D4ED8",
+              background: selected ? "#2563EB" : "#94A3B8",
+              color: "white",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              textDecoration: "none",
+              pointerEvents: selected ? "auto" : "none",
+            }}
+          >
+            Xem toàn bộ
+          </a>
+
+          <a
+            href={safeDownloadUrl || "#"}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #111827",
+              background: safeDownloadUrl ? "#111827" : "#94A3B8",
+              color: "white",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              textDecoration: "none",
+              pointerEvents: safeDownloadUrl ? "auto" : "none",
+            }}
+          >
+            Tải về
+          </a>
         </div>
-      </section>
 
-      {/* =========================
-          DẢI GIỮA (COMPACT) - trong khung đỏ
-         ========================= */}
-      <section
-        style={{
-          border: "1px solid #EAECF0",
-          borderRadius: 14,
-          padding: "10px 12px",
-          background: "white",
-        }}
-      >
-        {!selected ? (
-          <div style={{ color: "#667085" }}>Chọn một tài liệu để xem nội dung.</div>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-            {/* Tóm tắt 1 dòng */}
-            <div style={{ minWidth: 260 }}>
-              <div style={{ fontWeight: 800, lineHeight: 1.25 }}>{selected.title}</div>
-              <div style={{ marginTop: 3, color: "#667085", fontSize: 13, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {selected.decisionNo ? <span>{selected.decisionNo}</span> : null}
-                {selected.issuedDate ? <span>Ngày: {selected.issuedDate}</span> : null}
-                {selected.year ? <span>Năm: {selected.year}</span> : null}
-                {selected.specialty ? <span>{selected.specialty}</span> : null}
-              </div>
-            </div>
-
-            {/* Nút hành động */}
-            <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
-              <a
-                href={selected.driveUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #D0D5DD",
-                  textDecoration: "none",
-                  color: "#111827",
-                  background: "white",
-                }}
-              >
-                Mở Drive
-              </a>
-
-              {selected.downloadUrl ? (
-                <a
-                  href={selected.downloadUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #D0D5DD",
-                    textDecoration: "none",
-                    color: "#111827",
-                    background: "white",
-                  }}
-                >
-                  Tải
-                </a>
-              ) : null}
+        {(selected || loadError) && (
+          <div
+            style={{
+              marginTop: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                minWidth: 260,
+                color: loadError ? "#B42318" : "#667085",
+                fontSize: 13,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={
+                loadError
+                  ? loadError
+                  : selected
+                  ? `${selected.title} • ${selected.decisionNo || ""} • ${
+                      selected.specialty || ""
+                    } • ${selected.issuedDate ? formatDateVN(selected.issuedDate) : ""}`
+                  : ""
+              }
+            >
+              {loadError
+                ? loadError
+                : selected
+                ? `${selected.title}${
+                    selected.decisionNo ? ` • ${selected.decisionNo}` : ""
+                  }${
+                    selected.specialty ? ` • ${selected.specialty}` : ""
+                  }${
+                    selected.issuedDate
+                      ? ` • ${formatDateVN(selected.issuedDate)}`
+                      : ""
+                  }`
+                : ""}
             </div>
           </div>
         )}
       </section>
 
-      {/* =========================
-          NỘI DUNG (ĂN HẾT DIỆN TÍCH CÒN LẠI)
-         ========================= */}
       <section
         style={{
           border: "1px solid #EAECF0",
           borderRadius: 14,
           background: "white",
           overflow: "hidden",
-          flex: 1, // ✅ phần này ăn hết
-          minHeight: 320,
+          flex: 1,
+          minHeight: 0,
         }}
       >
         {!selected ? (
@@ -342,7 +430,7 @@ export default function BytProcedures() {
         ) : (
           <iframe
             title={selected.title}
-            src={toPreviewUrl(selected.driveUrl)}
+            src={selected.previewUrl || toPreviewUrl(selected.driveUrl)}
             style={{ width: "100%", height: "100%", border: 0 }}
             allow="autoplay"
           />
