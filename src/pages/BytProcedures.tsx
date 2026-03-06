@@ -157,17 +157,38 @@ export default function BytProcedures() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Đếm số tài liệu theo chuyên khoa
+  const specialtyCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    docs.forEach((d) => {
+      const key = (d.specialty || "").trim();
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [docs]);
+
   const specialties = useMemo(() => {
-    const s = new Set<string>();
-    docs.forEach((d) => d.specialty && s.add(d.specialty));
-    return ["all", ...Array.from(s).sort((a, b) => a.localeCompare(b, "vi"))];
+    const names = Array.from(specialtyCounts.keys()).sort((a, b) =>
+      a.localeCompare(b, "vi")
+    );
+    return ["all", ...names];
+  }, [specialtyCounts]);
+
+  // Đếm số tài liệu theo năm
+  const yearCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    docs.forEach((d) => {
+      if (typeof d.year !== "number") return;
+      counts.set(d.year, (counts.get(d.year) || 0) + 1);
+    });
+    return counts;
   }, [docs]);
 
   const years = useMemo(() => {
-    const y = new Set<number>();
-    docs.forEach((d) => typeof d.year === "number" && y.add(d.year));
-    return ["all", ...Array.from(y).sort((a, b) => b - a).map(String)];
-  }, [docs]);
+    const values = Array.from(yearCounts.keys()).sort((a, b) => b - a);
+    return ["all", ...values.map(String)];
+  }, [yearCounts]);
 
   const filtered = useMemo(() => {
     const nq = normalize(q);
@@ -240,7 +261,7 @@ export default function BytProcedures() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.3fr 210px 140px 1.2fr auto auto auto",
+            gridTemplateColumns: "1.3fr 230px 150px 1.2fr auto auto auto",
             gap: 10,
             alignItems: "center",
           }}
@@ -270,7 +291,9 @@ export default function BytProcedures() {
           >
             {specialties.map((s) => (
               <option key={s} value={s}>
-                {s === "all" ? "Tất cả chuyên khoa" : s}
+                {s === "all"
+                  ? `Tất cả chuyên khoa (${docs.length})`
+                  : `${s} (${specialtyCounts.get(s) || 0})`}
               </option>
             ))}
           </select>
@@ -288,7 +311,9 @@ export default function BytProcedures() {
           >
             {years.map((y) => (
               <option key={y} value={y}>
-                {y === "all" ? "Tất cả năm" : y}
+                {y === "all"
+                  ? `Tất cả năm (${docs.length})`
+                  : `${y} (${yearCounts.get(Number(y)) || 0})`}
               </option>
             ))}
           </select>
@@ -317,10 +342,16 @@ export default function BytProcedures() {
 
           <div
             style={{
-              color: "#667085",
-              fontSize: 13,
+              color: "#1D4ED8",
+              background: "#EFF6FF",
+              border: "1px solid #BFDBFE",
+              fontSize: 14,
+              fontWeight: 800,
               whiteSpace: "nowrap",
-              textAlign: "right",
+              textAlign: "center",
+              padding: "10px 12px",
+              borderRadius: 10,
+              minWidth: 92,
             }}
           >
             {isLoading ? "Đang tải..." : `${filtered.length} tài liệu`}
@@ -391,7 +422,9 @@ export default function BytProcedures() {
                   : selected
                   ? `${selected.title} • ${selected.decisionNo || ""} • ${
                       selected.specialty || ""
-                    } • ${selected.issuedDate ? formatDateVN(selected.issuedDate) : ""}`
+                    } • ${
+                      selected.issuedDate ? formatDateVN(selected.issuedDate) : ""
+                    }`
                   : ""
               }
             >
