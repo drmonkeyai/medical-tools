@@ -97,9 +97,7 @@ function formatDateVN(iso?: string) {
 function buildSafeDownloadUrl(doc: BYTProcedureDoc | null) {
   if (!doc) return "";
   if (doc.downloadUrl) return doc.downloadUrl;
-  if (doc.id) {
-    return `https://drive.google.com/uc?export=download&id=${doc.id}`;
-  }
+  if (doc.id) return `https://drive.google.com/uc?export=download&id=${doc.id}`;
   return "";
 }
 
@@ -157,40 +155,20 @@ export default function BytProcedures() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  // Đếm số tài liệu theo chuyên khoa
-  const specialtyCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    docs.forEach((d) => {
-      const key = (d.specialty || "").trim();
-      if (!key) return;
-      counts.set(key, (counts.get(key) || 0) + 1);
-    });
-    return counts;
-  }, [docs]);
+  function handleSearchChange(value: string) {
+    const wasEmpty = q.trim() === "";
+    const isNowFilled = value.trim() !== "";
 
-  const specialties = useMemo(() => {
-    const names = Array.from(specialtyCounts.keys()).sort((a, b) =>
-      a.localeCompare(b, "vi")
-    );
-    return ["all", ...names];
-  }, [specialtyCounts]);
+    setQ(value);
 
-  // Đếm số tài liệu theo năm
-  const yearCounts = useMemo(() => {
-    const counts = new Map<number, number>();
-    docs.forEach((d) => {
-      if (typeof d.year !== "number") return;
-      counts.set(d.year, (counts.get(d.year) || 0) + 1);
-    });
-    return counts;
-  }, [docs]);
+    // Chỉ reset khi chuyển từ rỗng -> có nội dung
+    if (wasEmpty && isNowFilled) {
+      setSpecialty("all");
+      setYear("all");
+    }
+  }
 
-  const years = useMemo(() => {
-    const values = Array.from(yearCounts.keys()).sort((a, b) => b - a);
-    return ["all", ...values.map(String)];
-  }, [yearCounts]);
-
-  const filtered = useMemo(() => {
+  const textFilteredDocs = useMemo(() => {
     const nq = normalize(q);
 
     return docs.filter((d) => {
@@ -202,26 +180,57 @@ export default function BytProcedures() {
         normalize(d.decisionNo ?? "").includes(nq) ||
         normalize(d.filename ?? "").includes(nq);
 
-      const matchesSpecialty = specialty === "all" || d.specialty === specialty;
-      const matchesYear = year === "all" || String(d.year ?? "") === year;
-
-      return matchesQ && matchesSpecialty && matchesYear;
+      return matchesQ;
     });
-  }, [docs, q, specialty, year]);
+  }, [docs, q]);
+
+  const specialtyCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    textFilteredDocs.forEach((d) => {
+      const key = (d.specialty || "").trim();
+      if (!key) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [textFilteredDocs]);
+
+  const specialties = useMemo(() => {
+    const names = Array.from(specialtyCounts.keys()).sort((a, b) =>
+      a.localeCompare(b, "vi")
+    );
+    return ["all", ...names];
+  }, [specialtyCounts]);
+
+  const specialtyFilteredDocs = useMemo(() => {
+    if (specialty === "all") return textFilteredDocs;
+    return textFilteredDocs.filter((d) => d.specialty === specialty);
+  }, [textFilteredDocs, specialty]);
+
+  const yearCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    specialtyFilteredDocs.forEach((d) => {
+      if (typeof d.year !== "number") return;
+      counts.set(d.year, (counts.get(d.year) || 0) + 1);
+    });
+    return counts;
+  }, [specialtyFilteredDocs]);
+
+  const years = useMemo(() => {
+    const values = Array.from(yearCounts.keys()).sort((a, b) => b - a);
+    return ["all", ...values.map(String)];
+  }, [yearCounts]);
 
   useEffect(() => {
-    if (filtered.length === 0) {
-      setSelectedId("");
-      return;
+    if (year === "all") return;
+    if (!years.includes(year)) {
+      setYear("all");
     }
-    const stillExists = filtered.some((d) => d.id === selectedId);
-    if (!stillExists) setSelectedId(filtered[0].id);
-  }, [filtered, selectedId]);
+  }, [years, year]);
 
-  const selected = useMemo(
-    () => filtered.find((d) => d.id === selectedId) ?? null,
-    [filtered, selectedId]
-  );
+  const filtered = useMemo(() => {
+    if (year === "all") return specialtyFilteredDocs;
+    return specialtyFilteredDocs.filter((d) => String(d.year ?? "") === year);
+  }, [specialtyFilteredDocs, year]);
 
   const listOptions = useMemo(() => {
     return filtered.map((d) => ({
@@ -237,7 +246,30 @@ export default function BytProcedures() {
     }));
   }, [filtered]);
 
+  useEffect(() => {
+    if (filtered.length === 0) {
+      setSelectedId("");
+      return;
+    }
+    const stillExists = filtered.some((d) => d.id === selectedId);
+    if (!stillExists) setSelectedId(filtered[0].id);
+  }, [filtered, selectedId]);
+
+  const selected = useMemo(
+    () => filtered.find((d) => d.id === selectedId) ?? null,
+    [filtered, selectedId]
+  );
+
   const safeDownloadUrl = buildSafeDownloadUrl(selected);
+
+  const hasActiveFilters =
+    q.trim() !== "" || specialty !== "all" || year !== "all";
+
+  function clearFilters() {
+    setQ("");
+    setSpecialty("all");
+    setYear("all");
+  }
 
   return (
     <div
@@ -261,14 +293,14 @@ export default function BytProcedures() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.3fr 230px 150px 1.2fr auto auto auto",
+            gridTemplateColumns: "1.25fr 240px 170px 1.15fr auto auto auto auto",
             gap: 10,
             alignItems: "center",
           }}
         >
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Tìm theo tên / số quyết định / chuyên khoa..."
             style={{
               padding: "10px 12px",
@@ -292,7 +324,7 @@ export default function BytProcedures() {
             {specialties.map((s) => (
               <option key={s} value={s}>
                 {s === "all"
-                  ? `Tất cả chuyên khoa (${docs.length})`
+                  ? `Tất cả chuyên khoa (${textFilteredDocs.length})`
                   : `${s} (${specialtyCounts.get(s) || 0})`}
               </option>
             ))}
@@ -312,7 +344,7 @@ export default function BytProcedures() {
             {years.map((y) => (
               <option key={y} value={y}>
                 {y === "all"
-                  ? `Tất cả năm (${docs.length})`
+                  ? `Tất cả năm (${specialtyFilteredDocs.length})`
                   : `${y} (${yearCounts.get(Number(y)) || 0})`}
               </option>
             ))}
@@ -351,11 +383,31 @@ export default function BytProcedures() {
               textAlign: "center",
               padding: "10px 12px",
               borderRadius: 10,
-              minWidth: 92,
+              minWidth: 100,
             }}
           >
             {isLoading ? "Đang tải..." : `${filtered.length} tài liệu`}
           </div>
+
+          {hasActiveFilters ? (
+            <button
+              onClick={clearFilters}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #D0D5DD",
+                background: "white",
+                color: "#344054",
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+              }}
+            >
+              Bỏ lọc
+            </button>
+          ) : (
+            <div />
+          )}
 
           <a
             href={selected?.driveUrl || "#"}
