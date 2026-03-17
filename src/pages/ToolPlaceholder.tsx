@@ -28,6 +28,14 @@ import SCREEM from "../calculators/SCREEM";
 import Pedigree from "../calculators/Pedigree";
 import BMI from "../calculators/BMI";
 
+// NEW
+import PHQ9 from "../calculators/PHQ9";
+import GAD7 from "../calculators/GAD7";
+import AuditC from "../calculators/AuditC";
+import StopBang from "../calculators/StopBang";
+import Epworth from "../calculators/Epworth";
+import QTcCalculator from "../calculators/QTcCalculator";
+
 type ToolFlat = {
   name: string;
   description?: string;
@@ -73,9 +81,6 @@ export default function ToolPlaceholder() {
 
   const slugNorm = (slug ?? "").toLowerCase().trim();
 
-  // =========================
-  // Special-case: Drug Interactions (iframe)
-  // =========================
   const isDrugInteractions =
     location.pathname === "/drug-interactions" || slugNorm === "drug-interactions";
 
@@ -136,9 +141,6 @@ export default function ToolPlaceholder() {
     );
   }
 
-  // =========================
-  // Map slug -> calculator component
-  // =========================
   const componentRegistry: Record<string, ComponentType> = useMemo(
     () => ({
       // Thận – tiết niệu
@@ -146,6 +148,8 @@ export default function ToolPlaceholder() {
 
       // Giấc ngủ
       isi: ISI,
+      "stop-bang": StopBang,
+      epworth: Epworth,
 
       // Tim mạch
       score2: SCORE2,
@@ -153,11 +157,10 @@ export default function ToolPlaceholder() {
       "score2-asian": SCORE2ASIAN,
       "score2-diabetes": SCORE2DIABETES,
       "cv-risk-esc": CVRiskESC,
-
       "who-pen-hearts": WHOPenHearts,
-
       "cha2ds2-vasc": CHA2DS2VASc,
       "has-bled": HASBLED,
+      qtc: QTcCalculator,
 
       // Hô hấp
       centor: Centor,
@@ -173,6 +176,9 @@ export default function ToolPlaceholder() {
       "family-apgar": FamilyAPGAR,
       screem: SCREEM,
       pedigree: Pedigree,
+      phq9: PHQ9,
+      gad7: GAD7,
+      "audit-c": AuditC,
 
       // Nội tiết
       bmi: BMI,
@@ -186,9 +192,6 @@ export default function ToolPlaceholder() {
     return <ToolComponent />;
   }
 
-  // =========================
-  // Fallback: show placeholder if slug exists but calculator not implemented
-  // =========================
   const toolsFlat: ToolFlat[] = useMemo(() => {
     return specialties.flatMap((s: any) =>
       (s.tools ?? []).map((t: any) => ({
