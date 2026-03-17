@@ -1,4 +1,3 @@
-// src/pages/DoseAdjust.tsx
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { drugs, type Drug, type HepaticClass } from "../data/doseAdjust";
@@ -51,15 +50,32 @@ export default function DoseAdjust() {
     [selectedId, filtered]
   );
 
-  const renalText = useMemo(() => (selected ? pickRenalRule(selected, egfr) : null), [selected, egfr]);
-  const hepaticText = useMemo(() => (selected ? pickHepaticRule(selected, child) : null), [selected, child]);
+  const renalText = useMemo(
+    () => (selected ? pickRenalRule(selected, egfr) : null),
+    [selected, egfr]
+  );
+
+  const hepaticText = useMemo(
+    () => (selected ? pickHepaticRule(selected, child) : null),
+    [selected, child]
+  );
 
   return (
     <div className="page">
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <div>
-            <h2 style={{ margin: 0 }}>Điều chỉnh liều thuốc (tính năng đang phát triển)</h2>
+            <h2 style={{ margin: 0 }}>
+              Điều chỉnh liều thuốc (tính năng đang phát triển)
+            </h2>
             <div style={{ marginTop: 6, color: "var(--muted)" }}>
               Gợi ý điều chỉnh theo eGFR (thận) và Child-Pugh (gan) cho các thuốc thường dùng.
             </div>
@@ -80,7 +96,32 @@ export default function DoseAdjust() {
           </button>
         </div>
 
-        {/* Bộ lọc */}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontWeight: 900, marginBottom: 8 }}>
+            Công cụ trong nhóm thuốc
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            }}
+          >
+            <ToolCard
+              title="Điều chỉnh liều theo thận/gan"
+              desc="Tra cứu nhanh gợi ý điều chỉnh liều theo eGFR và Child-Pugh."
+              active
+            />
+
+            <ToolCard
+              title="Tính ngày hết thuốc"
+              desc="Ước tính số ngày đủ thuốc, ngày dùng liều cuối và ngày hết thuốc dựa trên số lượng cấp và liều dùng."
+              onClick={() => navigate("/medication/days-supply")}
+            />
+          </div>
+        </div>
+
         <div
           style={{
             marginTop: 14,
@@ -99,11 +140,20 @@ export default function DoseAdjust() {
           </Field>
 
           <Field label="eGFR (mL/min/1.73m²)">
-            <input type="number" value={egfr} onChange={(e) => setEgfr(Number(e.target.value))} style={inputStyle} />
+            <input
+              type="number"
+              value={egfr}
+              onChange={(e) => setEgfr(Number(e.target.value))}
+              style={inputStyle}
+            />
           </Field>
 
           <Field label="Chức năng gan (Child-Pugh)">
-            <select value={child} onChange={(e) => setChild(e.target.value as HepaticClass)} style={inputStyle}>
+            <select
+              value={child}
+              onChange={(e) => setChild(e.target.value as HepaticClass)}
+              style={inputStyle}
+            >
               <option value="None">Không/không rõ</option>
               <option value="Child-Pugh A">Child-Pugh A</option>
               <option value="Child-Pugh B">Child-Pugh B</option>
@@ -112,9 +162,14 @@ export default function DoseAdjust() {
           </Field>
         </div>
 
-        {/* Danh sách + kết quả */}
-        <div style={{ marginTop: 14, display: "grid", gap: 14, gridTemplateColumns: "minmax(260px, 360px) 1fr" }}>
-          {/* List */}
+        <div
+          style={{
+            marginTop: 14,
+            display: "grid",
+            gap: 14,
+            gridTemplateColumns: "minmax(260px, 360px) 1fr",
+          }}
+        >
           <div
             style={{
               border: "1px solid var(--line)",
@@ -123,7 +178,13 @@ export default function DoseAdjust() {
               overflow: "hidden",
             }}
           >
-            <div style={{ padding: 12, borderBottom: "1px solid var(--line)", fontWeight: 900 }}>
+            <div
+              style={{
+                padding: 12,
+                borderBottom: "1px solid var(--line)",
+                fontWeight: 900,
+              }}
+            >
               Danh sách thuốc ({filtered.length})
             </div>
 
@@ -154,7 +215,6 @@ export default function DoseAdjust() {
             </div>
           </div>
 
-          {/* Detail */}
           <div
             style={{
               border: "1px solid var(--line)",
@@ -167,23 +227,57 @@ export default function DoseAdjust() {
               <div style={{ color: "var(--muted)" }}>Không có thuốc phù hợp.</div>
             ) : (
               <>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 1000 }}>{selected.name}</div>
-                    <div style={{ marginTop: 6, color: "var(--muted)" }}>{selected.group ?? "—"}</div>
+                    <div style={{ fontSize: 18, fontWeight: 1000 }}>
+                      {selected.name}
+                    </div>
+                    <div style={{ marginTop: 6, color: "var(--muted)" }}>
+                      {selected.group ?? "—"}
+                    </div>
                   </div>
                 </div>
 
                 {selected.typicalDose ? (
-                  <div style={{ marginTop: 12, padding: 12, borderRadius: 14, border: "1px solid var(--line)", background: "rgba(0,0,0,0.02)" }}>
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 12,
+                      borderRadius: 14,
+                      border: "1px solid var(--line)",
+                      background: "rgba(0,0,0,0.02)",
+                    }}
+                  >
                     <div style={{ fontWeight: 900 }}>Liều thường dùng (tham khảo)</div>
-                    <div style={{ marginTop: 6, color: "var(--muted)" }}>{selected.typicalDose}</div>
+                    <div style={{ marginTop: 6, color: "var(--muted)" }}>
+                      {selected.typicalDose}
+                    </div>
                   </div>
                 ) : null}
 
-                <div style={{ marginTop: 12, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-                  <ResultBox title="Gợi ý theo thận (eGFR)" text={renalText ?? "Thuốc này chưa có dữ liệu chỉnh liều theo thận."} />
-                  <ResultBox title="Gợi ý theo gan (Child-Pugh)" text={hepaticText ?? "Thuốc này chưa có dữ liệu chỉnh liều theo gan."} />
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "grid",
+                    gap: 12,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                  }}
+                >
+                  <ResultBox
+                    title="Gợi ý theo thận (eGFR)"
+                    text={renalText ?? "Thuốc này chưa có dữ liệu chỉnh liều theo thận."}
+                  />
+                  <ResultBox
+                    title="Gợi ý theo gan (Child-Pugh)"
+                    text={hepaticText ?? "Thuốc này chưa có dữ liệu chỉnh liều theo gan."}
+                  />
                 </div>
 
                 {selected.notes ? (
@@ -197,7 +291,8 @@ export default function DoseAdjust() {
         </div>
 
         <div style={{ marginTop: 14, fontSize: 12, color: "var(--muted)" }}>
-          Lưu ý: Gợi ý hỗ trợ tham khảo; luôn đối chiếu khuyến cáo chính thức tại cơ sở, tình trạng lâm sàng, tương tác và liều theo chỉ định.
+          Lưu ý: Gợi ý hỗ trợ tham khảo; luôn đối chiếu khuyến cáo chính thức tại cơ sở,
+          tình trạng lâm sàng, tương tác và liều theo chỉ định.
         </div>
       </div>
     </div>
@@ -215,10 +310,44 @@ function Field(props: { label: string; children: React.ReactNode }) {
 
 function ResultBox(props: { title: string; text: string }) {
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 14, padding: 12, background: "rgba(0,0,0,0.02)" }}>
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 14,
+        padding: 12,
+        background: "rgba(0,0,0,0.02)",
+      }}
+    >
       <div style={{ fontWeight: 900 }}>{props.title}</div>
       <div style={{ marginTop: 6, color: "var(--muted)" }}>{props.text}</div>
     </div>
+  );
+}
+
+function ToolCard(props: {
+  title: string;
+  desc: string;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={props.onClick}
+      disabled={props.active}
+      style={{
+        textAlign: "left",
+        padding: 14,
+        borderRadius: 16,
+        border: "1px solid var(--line)",
+        background: props.active ? "rgba(29,78,216,0.08)" : "white",
+        cursor: props.active ? "default" : "pointer",
+      }}
+    >
+      <div style={{ fontWeight: 900 }}>{props.title}</div>
+      <div style={{ marginTop: 6, color: "var(--muted)", fontSize: 14 }}>
+        {props.desc}
+      </div>
+    </button>
   );
 }
 

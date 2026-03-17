@@ -12,6 +12,7 @@ import Home from "./pages/Home";
 import Tools from "./pages/Tools";
 import ToolPlaceholder from "./pages/ToolPlaceholder";
 import DoseAdjust from "./pages/DoseAdjust";
+import MedicationDaysSupply from "./pages/MedicationDaysSupply";
 import DrugInteractions from "./pages/DrugInteractions";
 import Immunization from "./pages/Immunization";
 import ICD10 from "./pages/ICD10";
@@ -68,6 +69,7 @@ createRoot(document.getElementById("root")!).render(
 
           {/* Medication */}
           <Route path="/dose-adjust" element={<DoseAdjust />} />
+          <Route path="/medication/days-supply" element={<MedicationDaysSupply />} />
           <Route path="/drug-interactions" element={<DrugInteractions />} />
 
           {/* Immunization */}
