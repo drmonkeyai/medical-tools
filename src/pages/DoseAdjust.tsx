@@ -201,12 +201,24 @@ export default function DoseAdjust() {
                       padding: 12,
                       border: "none",
                       borderBottom: "1px solid var(--line)",
-                      background: active ? "rgba(29,78,216,0.08)" : "white",
+                      background: active
+                        ? "linear-gradient(180deg, rgba(29,78,216,0.14), rgba(29,78,216,0.08))"
+                        : "white",
                       cursor: "pointer",
+                      position: "relative",
+                      boxShadow: active ? "inset 4px 0 0 rgb(29,78,216)" : "none",
                     }}
                   >
-                    <div style={{ fontWeight: 900 }}>{d.name}</div>
-                    <div style={{ color: "var(--muted)", fontSize: 12 }}>
+                    <div style={{ fontWeight: active ? 1000 : 900 }}>
+                      {d.name}
+                    </div>
+                    <div
+                      style={{
+                        color: active ? "rgb(71,85,105)" : "var(--muted)",
+                        fontSize: 12,
+                        marginTop: 2,
+                      }}
+                    >
                       {d.group ?? "—"} {d.aliases?.length ? `• ${d.aliases[0]}` : ""}
                     </div>
                   </button>
@@ -338,13 +350,72 @@ function ToolCard(props: {
         textAlign: "left",
         padding: 14,
         borderRadius: 16,
-        border: "1px solid var(--line)",
-        background: props.active ? "rgba(29,78,216,0.08)" : "white",
+        border: props.active
+          ? "2px solid rgba(29,78,216,0.45)"
+          : "1px solid var(--line)",
+        background: props.active
+          ? "linear-gradient(180deg, rgba(29,78,216,0.14), rgba(29,78,216,0.08))"
+          : "white",
         cursor: props.active ? "default" : "pointer",
+        boxShadow: props.active
+          ? "0 6px 18px rgba(29,78,216,0.10)"
+          : "none",
+        position: "relative",
+        opacity: 1,
       }}
     >
-      <div style={{ fontWeight: 900 }}>{props.title}</div>
-      <div style={{ marginTop: 6, color: "var(--muted)", fontSize: 14 }}>
+      {props.active ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 10,
+            bottom: 10,
+            width: 5,
+            borderRadius: 999,
+            background: "rgb(29,78,216)",
+          }}
+        />
+      ) : null}
+
+      <div
+        style={{
+          fontWeight: props.active ? 1000 : 900,
+          color: props.active ? "rgb(17,24,39)" : "inherit",
+          paddingLeft: props.active ? 10 : 0,
+        }}
+      >
+        {props.title}
+      </div>
+
+      {props.active ? (
+        <div
+          style={{
+            display: "inline-block",
+            marginTop: 6,
+            marginBottom: 2,
+            marginLeft: props.active ? 10 : 0,
+            padding: "4px 8px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 900,
+            background: "rgba(29,78,216,0.12)",
+            color: "rgb(29,78,216)",
+          }}
+        >
+          Đang chọn
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          marginTop: 6,
+          color: props.active ? "rgb(71,85,105)" : "var(--muted)",
+          fontSize: 14,
+          lineHeight: 1.5,
+          paddingLeft: props.active ? 10 : 0,
+        }}
+      >
         {props.desc}
       </div>
     </button>
