@@ -79,10 +79,6 @@ function formatSolarDate(date: Date) {
   )}/${date.getFullYear()}`;
 }
 
-function formatTime(date: Date) {
-  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-}
-
 function formatLunarDateApprox(date: Date) {
   try {
     const fmt = new Intl.DateTimeFormat("vi-VN-u-ca-chinese", {
