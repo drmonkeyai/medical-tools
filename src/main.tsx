@@ -55,6 +55,7 @@ import GaitSpeed from "./calculators/GaitSpeed";
 import GripStrength from "./calculators/GripStrength";
 import MMSE from "./calculators/MMSE";
 import MoCA from "./calculators/MoCA";
+import MyCases from "./pages/MyCases";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
@@ -145,6 +146,7 @@ createRoot(document.getElementById("root")!).render(
             {/* Cases */}
             <Route path="/case-summary" element={<CaseSummary />} />
             <Route path="/cases/:caseId" element={<CaseDetail />} />
+            <Route path="/my-cases" element={<MyCases />} />
           </Route>
         </Routes>
       </CasesProvider>

@@ -1,16 +1,21 @@
-// src/pages/Login.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
+  const { login, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
-  const { login, user } = useAuth();
 
-  const [email, setEmail] = useState("admin@medicaltools.local");
-  const [password, setPassword] = useState("12345678");
+  const [email, setEmail] = useState("user@email.com");
+  const [password, setPassword] = useState("123");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -18,10 +23,11 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      await login(email, password);
-      navigate("/");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Đăng nhập thất bại");
+      await login(email.trim(), password);
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      console.error("LOGIN PAGE ERROR:", err);
+      setError(err?.message || "Email hoặc mật khẩu không đúng");
     } finally {
       setSubmitting(false);
     }
@@ -30,67 +36,134 @@ export default function Login() {
   return (
     <div
       style={{
-        maxWidth: 420,
-        margin: "40px auto",
-        padding: 16,
-        background: "#fff",
-        borderRadius: 12,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+        minHeight: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
       }}
     >
-      <h1 style={{ marginBottom: 8 }}>Đăng nhập</h1>
-      <p style={{ marginTop: 0, color: "#666" }}>
-        Dùng tài khoản được admin cấp để đăng nhập.
-      </p>
-
-      {user ? (
-        <div style={{ color: "green", marginBottom: 12 }}>
-          Đã đăng nhập với tài khoản {user.full_name}
-        </div>
-      ) : null}
-
-      <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Nhập email"
-            style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-          />
-        </label>
-
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Mật khẩu</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Nhập mật khẩu"
-            style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-          />
-        </label>
-
-        {error ? (
-          <div style={{ color: "crimson", fontSize: 14 }}>{error}</div>
-        ) : null}
-
-        <button
-          type="submit"
-          disabled={submitting}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 430,
+          background: "#fff",
+          borderRadius: 18,
+          boxShadow: "0 20px 60px rgba(15,23,42,0.10)",
+          padding: 28,
+        }}
+      >
+        <h1
           style={{
-            padding: 12,
-            borderRadius: 8,
-            border: "none",
-            background: "#2563eb",
-            color: "#fff",
-            cursor: "pointer",
+            margin: 0,
+            fontSize: 28,
+            fontWeight: 900,
+            color: "#0f172a",
           }}
         >
-          {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
-        </button>
-      </form>
+          Đăng nhập
+        </h1>
+
+        <p style={{ marginTop: 10, marginBottom: 20, color: "#64748b" }}>
+          Đăng nhập bằng tài khoản Supabase của bạn.
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+          <div>
+            <label
+              htmlFor="email"
+              style={{
+                display: "block",
+                marginBottom: 6,
+                fontWeight: 700,
+                color: "#0f172a",
+              }}
+            >
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={submitting}
+              style={{
+                width: "100%",
+                height: 44,
+                borderRadius: 12,
+                border: "1px solid #cbd5e1",
+                padding: "0 14px",
+                fontSize: 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              style={{
+                display: "block",
+                marginBottom: 6,
+                fontWeight: 700,
+                color: "#0f172a",
+              }}
+            >
+              Mật khẩu
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
+              style={{
+                width: "100%",
+                height: 44,
+                borderRadius: 12,
+                border: "1px solid #cbd5e1",
+                padding: "0 14px",
+                fontSize: 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {error ? (
+            <div
+              style={{
+                color: "#dc2626",
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              height: 46,
+              borderRadius: 12,
+              border: "none",
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: 16,
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.8 : 1,
+            }}
+          >
+            {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

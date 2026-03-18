@@ -1,52 +1,65 @@
-// src/components/Topbar.tsx
-import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useCases } from "../context/CasesContext";
+import { useAuth } from "../context/AuthContext";
 import CaseTabs from "./CaseTabs";
 
 type TopbarProps = {
   onToggleSidebar?: () => void;
 };
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-// ✅ Ví dụ: "Thứ Ba ngày 03 tháng 02 năm 2026 12h30 chiều"
-function formatDateTimeVNFull(d: Date) {
-  const weekdays = [
-    "Chủ nhật",
-    "Thứ Hai",
-    "Thứ Ba",
-    "Thứ Tư",
-    "Thứ Năm",
-    "Thứ Sáu",
-    "Thứ Bảy",
-  ];
-
-  const wd = weekdays[d.getDay()];
-  const dd = pad2(d.getDate());
-  const mm = pad2(d.getMonth() + 1);
-  const yyyy = d.getFullYear();
-
-  const hh = d.getHours();
-  const min = pad2(d.getMinutes());
-  const buoi = hh < 12 ? "sáng" : "chiều";
-
-  return `${wd} ngày ${dd} tháng ${mm} năm ${yyyy} ${pad2(hh)}h${min} ${buoi}`;
-}
-
 export default function Topbar({ onToggleSidebar }: TopbarProps) {
   const { cases, openNewCaseModal } = useCases();
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [now, setNow] = useState(() => new Date());
-  const [hover, setHover] = useState(false);
+  async function handleLogout() {
+    try {
+      await logout();
+      navigate("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  }
 
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
+  // HÀM MỚI THÊM: Xử lý logic khi bấm nút "Tạo ca mới"
+  function handleCreateCaseClick() {
+    if (!isAuthenticated) {
+      alert("Bác sĩ cần đăng nhập để sử dụng tính năng tạo ca.");
+      // Tùy chọn: Bạn có thể bỏ comment dòng dưới nếu muốn tự động chuyển hướng người dùng đến trang đăng nhập sau khi họ bấm OK
+      // navigate("/login");
+      return;
+    }
+    openNewCaseModal();
+  }
 
-  const text = useMemo(() => formatDateTimeVNFull(now), [now]);
+  const displayName =
+    user?.displayName?.trim() ||
+    user?.username?.trim() ||
+    user?.email?.trim() ||
+    "Administrator";
+
+  const simpleBtnStyle: CSSProperties = {
+    height: 38,
+    padding: "0 14px",
+    borderRadius: 10,
+    border: "1px solid rgba(37, 99, 235, 0.22)",
+    background: "#fff",
+    color: "#2563eb",
+    fontWeight: 700,
+    fontSize: 14,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    boxShadow: "none",
+    outline: "none",
+  };
+
+  const isMyCasesPage = location.pathname === "/my-cases";
 
   return (
     <div
@@ -56,6 +69,9 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
         alignItems: "center",
         gap: 12,
         minWidth: 0,
+        padding: "10px 14px",
+        borderBottom: "1px solid rgba(15, 23, 42, 0.06)",
+        background: "#fff",
       }}
     >
       <button
@@ -63,84 +79,136 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
         onClick={onToggleSidebar}
         title="Mở menu"
         type="button"
+        style={{ flex: "0 0 auto" }}
       >
         ☰
       </button>
 
-      {/* ✅ Time chip: co theo nội dung, không dàn trải */}
-      <div
-        className="tb__search"
+      <button
+        className="tb__btn"
+        type="button"
+        onClick={handleCreateCaseClick} // ĐÃ SỬA DÒNG NÀY: Gọi hàm mới thay vì gọi trực tiếp openNewCaseModal
         style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
-          width: "fit-content",
-          maxWidth: 520, // đủ cho format dài
-          minWidth: 260,
-          padding: "10px 12px",
-          borderRadius: 14,
-          borderStyle: "solid",
-          borderWidth: 1,
-          borderColor: hover
-            ? "rgba(37, 99, 235, 0.35)"
-            : "rgba(37, 99, 235, 0.22)",
-          background: hover
-            ? "linear-gradient(180deg, rgba(37,99,235,0.10), rgba(37,99,235,0.06))"
-            : "linear-gradient(180deg, rgba(37,99,235,0.08), rgba(37,99,235,0.04))",
-          boxShadow: hover
-            ? "0 6px 18px rgba(37,99,235,0.10)"
-            : "0 2px 10px rgba(0,0,0,0.04)",
-          transition: "all 160ms ease",
+          ...simpleBtnStyle,
+          background: "#2563eb",
+          color: "#fff",
+          border: "1px solid #2563eb",
           flex: "0 0 auto",
         }}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
-        title="Thời gian hiện tại"
       >
-        <span
-          style={{
-            opacity: 0.95,
-            fontSize: 15,
-            color: "rgba(37,99,235,0.95)",
-            lineHeight: 1,
-          }}
-        >
-          🕒
-        </span>
+        + Tạo ca mới
+      </button>
 
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 900,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            color: "rgba(15, 23, 42, 0.92)",
-            minWidth: 0,
-          }}
-          title={text}
-        >
-          {text}
-        </div>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          alignItems: "center",
+          overflow: "hidden",
+        }}
+      >
+        {cases.length ? (
+          <div style={{ minWidth: 0, width: "100%" }}>
+            <CaseTabs />
+          </div>
+        ) : (
+          <div
+            style={{
+              color: "var(--muted)",
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            Chưa chọn ca • bấm <b>+ Tạo ca mới</b>
+          </div>
+        )}
       </div>
-
-      {/* Case tabs */}
-      {cases.length ? (
-        <CaseTabs />
-      ) : (
-        <div style={{ flex: 1, color: "var(--muted)", fontWeight: 800 }}>
-          Chưa chọn ca • bấm <b>+ Tạo ca mới</b>
-        </div>
-      )}
 
       <div
         className="tb__right"
-        style={{ display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flex: "0 0 auto",
+          marginLeft: "auto",
+          border: "none",
+          background: "transparent",
+          boxShadow: "none",
+          outline: "none",
+          padding: 0,
+          borderRadius: 0,
+        }}
       >
-        <button className="tb__btn" type="button" onClick={openNewCaseModal}>
-          ＋ Tạo ca mới
-        </button>
-        <div className="tb__avatar">👤</div>
+        {isAuthenticated ? (
+          <>
+            <Link
+              to="/my-cases"
+              style={{
+                ...simpleBtnStyle,
+                background: isMyCasesPage ? "#2563eb" : "#fff",
+                color: isMyCasesPage ? "#fff" : "#2563eb",
+                border: "1px solid #2563eb",
+              }}
+            >
+              Ca của tôi
+            </Link>
+
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                color: "#0f172a",
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                border: "none",
+                background: "transparent",
+                boxShadow: "none",
+                padding: 0,
+              }}
+              title={user?.email || ""}
+            >
+              <span
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 999,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(37, 99, 235, 0.08)",
+                  fontSize: 14,
+                  lineHeight: 1,
+                }}
+              >
+                👤
+              </span>
+
+              <span
+                style={{
+                  maxWidth: 180,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {displayName}
+              </span>
+            </div>
+
+            <button type="button" onClick={handleLogout} style={simpleBtnStyle}>
+              Đăng xuất
+            </button>
+          </>
+        ) : (
+          <Link to="/login" style={simpleBtnStyle}>
+            Đăng nhập
+          </Link>
+        )}
       </div>
     </div>
   );
