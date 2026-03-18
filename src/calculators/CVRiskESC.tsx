@@ -388,7 +388,7 @@ export default function CVRiskESC() {
           <div>
             <h1 className="calcTitle">Phân tầng nguy cơ tim mạch (ESC/EAS)</h1>
             <div className="calcSub">
-              Ưu tiên xếp nhóm nguy cơ <b>không cần tính điểm</b>. Chỉ dùng SCORE khi chưa có bệnh nền “đẩy thẳng”.
+              Ưu tiên xếp nhóm nguy cơ <b>không cần tính điểm</b>. Chỉ dùng SCORE khi chưa có bệnh nền phân tầng nguy cơ ngay.
             </div>
           </div>
 
@@ -742,7 +742,7 @@ export default function CVRiskESC() {
         {/* SCORE area */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontWeight: 1100 }}>
-            Thang điểm SCORE (khi chưa có bệnh nền “đẩy thẳng”)
+            Thang điểm SCORE (khi chưa có bệnh nền phân tầng nguy cơ ngay)
             <div style={{ color: "var(--muted)", fontWeight: 900, marginTop: 4 }}>
               {eligibleForScore
                 ? "Bạn có thể tính SCORE trong POP-UP và áp dụng ngay cho phân tầng."
