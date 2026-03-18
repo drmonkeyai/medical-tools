@@ -1,11 +1,12 @@
 // src/data/tools.ts
 
 export interface Tool {
-  id: string;            // cũng chính là "slug" dùng cho /tools/:slug
+  id: string; // cũng chính là "slug" dùng cho /tools/:slug
   name: string;
   description: string;
-  route: string;         // đường dẫn điều hướng
-  isQuick?: boolean;     // gợi ý quick tools (hoặc dùng làm mặc định thường dùng)
+  route: string; // đường dẫn điều hướng
+  isQuick?: boolean; // gợi ý quick tools (hoặc dùng làm mặc định thường dùng)
+  icon?: string; // icon hiển thị trên card
 }
 
 export interface Specialty {
@@ -16,7 +17,7 @@ export interface Specialty {
 
 export const specialties: Specialty[] = [
   // =========================
-  // GIA ĐÌNH – XÃ HỘI (đưa lên đầu)
+  // GIA ĐÌNH – XÃ HỘI
   // =========================
   {
     id: "family",
@@ -28,41 +29,43 @@ export const specialties: Specialty[] = [
         description: "Đánh giá chức năng gia đình",
         route: "/tools/family-apgar",
         isQuick: true,
+        icon: "👨‍👩‍👧",
       },
       {
         id: "screem",
         name: "SCREEM",
         description: "Đánh giá nguồn lực gia đình",
         route: "/tools/screem",
+        icon: "🏠",
       },
       {
         id: "phq9",
         name: "PHQ-9",
-        description:
-          "Sàng lọc/trợ giúp phân tầng mức độ trầm cảm (placeholder – sẽ bổ sung sau)",
+        description: "Sàng lọc/trợ giúp phân tầng mức độ trầm cảm",
         route: "/tools/phq9",
         isQuick: true,
+        icon: "🧠",
       },
       {
         id: "gad7",
         name: "GAD-7",
-        description:
-          "Sàng lọc/trợ giúp phân tầng lo âu (placeholder – sẽ bổ sung sau)",
+        description: "Sàng lọc/trợ giúp phân tầng lo âu",
         route: "/tools/gad7",
+        icon: "😟",
       },
       {
         id: "audit-c",
         name: "AUDIT-C",
-        description:
-          "Sàng lọc sử dụng rượu nguy cơ (placeholder – sẽ bổ sung sau)",
+        description: "Sàng lọc sử dụng rượu nguy cơ",
         route: "/tools/audit-c",
+        icon: "🍷",
       },
       {
         id: "pedigree",
         name: "Cây phả hệ (Family Pedigree)",
-        description:
-          "Nhập gia sử sức khoẻ (3 thế hệ) và tự vẽ cây phả hệ để tham khảo",
+        description: "Nhập gia sử sức khoẻ (3 thế hệ) và tự vẽ cây phả hệ để tham khảo",
         route: "/tools/pedigree",
+        icon: "🌳",
       },
     ],
   },
@@ -80,32 +83,35 @@ export const specialties: Specialty[] = [
         description: "Tính mức lọc cầu thận theo CKD-EPI 2021 (creatinin)",
         route: "/tools/egfr",
         isQuick: true,
+        icon: "🫘",
       },
       {
         id: "cockcroft-gault",
         name: "ClCr – Cockcroft–Gault",
         description: "Ước tính độ thanh thải creatinin (phục vụ chỉnh liều)",
         route: "/tools/cockcroft-gault",
+        icon: "💧",
       },
       {
         id: "aki-kdigo",
         name: "Phân độ AKI – KDIGO",
         description: "Phân độ tổn thương thận cấp theo KDIGO (SCR/niệu lượng)",
         route: "/tools/aki-kdigo",
+        icon: "🚨",
       },
       {
         id: "fena",
         name: "FENa",
-        description:
-          "Fractional Excretion of Sodium (phân biệt nguyên nhân AKI)",
+        description: "Fractional Excretion of Sodium (phân biệt nguyên nhân AKI)",
         route: "/tools/fena",
+        icon: "🧂",
       },
       {
         id: "feurea",
         name: "FEUrea",
-        description:
-          "Fractional Excretion of Urea (hữu ích khi dùng lợi tiểu)",
+        description: "Fractional Excretion of Urea (hữu ích khi dùng lợi tiểu)",
         route: "/tools/feurea",
+        icon: "🧪",
       },
       {
         id: "dose-adjust",
@@ -113,6 +119,7 @@ export const specialties: Specialty[] = [
         description: "Gợi ý chỉnh liều theo eGFR (thận) và Child-Pugh (gan)",
         route: "/dose-adjust",
         isQuick: true,
+        icon: "💊",
       },
     ],
   },
@@ -127,30 +134,31 @@ export const specialties: Specialty[] = [
       {
         id: "score2",
         name: "SCORE2",
-        description:
-          "Ước tính nguy cơ tim mạch 10 năm (40–69 tuổi) — mặc định nguy cơ cao",
+        description: "Ước tính nguy cơ tim mạch 10 năm (40–69 tuổi) — mặc định nguy cơ cao",
         route: "/tools/score2",
         isQuick: true,
+        icon: "❤️",
       },
       {
         id: "score2-op",
         name: "SCORE2-OP",
-        description:
-          "Ước tính nguy cơ tim mạch cho người ≥70 tuổi — mặc định nguy cơ cao",
+        description: "Ước tính nguy cơ tim mạch cho người ≥70 tuổi — mặc định nguy cơ cao",
         route: "/tools/score2-op",
+        icon: "🫀",
       },
       {
         id: "score2-asian",
         name: "SCORE2-ASIAN",
-        description:
-          "Phiên bản hiệu chỉnh cho quần thể châu Á — mặc định nguy cơ cao",
+        description: "Phiên bản hiệu chỉnh cho quần thể châu Á — mặc định nguy cơ cao",
         route: "/tools/score2-asian",
+        icon: "🌏",
       },
       {
         id: "score2-diabetes",
         name: "SCORE2-DIABETES",
         description: "Ước tính nguy cơ tim mạch cho bệnh nhân đái tháo đường",
         route: "/tools/score2-diabetes",
+        icon: "🩸",
       },
       {
         id: "cv-risk-esc",
@@ -159,41 +167,44 @@ export const specialties: Specialty[] = [
           "Ưu tiên xác định ngay nhóm Cao/Rất cao theo bệnh nền; dùng SCORE2/SCORE2-OP khi cần; có bước điều chỉnh nguy cơ.",
         route: "/tools/cv-risk-esc",
         isQuick: true,
+        icon: "📈",
       },
       {
         id: "who-pen-hearts",
         name: "WHO PEN/HEARTS – Phân tầng nguy cơ tim mạch",
-        description:
-          "WHO CVD risk 10 năm (Southeast Asia) + gợi ý can thiệp tuyến cơ sở",
+        description: "WHO CVD risk 10 năm (Southeast Asia) + gợi ý can thiệp tuyến cơ sở",
         route: "/tools/who-pen-hearts",
         isQuick: true,
+        icon: "🌍",
       },
       {
         id: "cha2ds2-vasc",
         name: "CHA₂DS₂-VASc",
-        description:
-          "Đánh giá nguy cơ đột quỵ ở rung nhĩ (gợi ý chỉ định kháng đông)",
+        description: "Đánh giá nguy cơ đột quỵ ở rung nhĩ (gợi ý chỉ định kháng đông)",
         route: "/tools/cha2ds2-vasc",
         isQuick: true,
+        icon: "🫀",
       },
       {
         id: "has-bled",
         name: "HAS-BLED",
-        description:
-          "Đánh giá nguy cơ chảy máu ở bệnh nhân rung nhĩ dùng kháng đông",
+        description: "Đánh giá nguy cơ chảy máu ở bệnh nhân rung nhĩ dùng kháng đông",
         route: "/tools/has-bled",
+        icon: "🩸",
       },
       {
         id: "ascvd-10y",
         name: "ASCVD 10-year (Pooled Cohort)",
-        description: "Nguy cơ ASCVD 10 năm (placeholder – sẽ bổ sung sau)",
+        description: "Nguy cơ ASCVD 10 năm",
         route: "/tools/ascvd-10y",
+        icon: "📊",
       },
       {
         id: "qtc",
         name: "QTc (Bazett/Fridericia)",
-        description: "Tính QTc từ QT và nhịp tim (placeholder – sẽ bổ sung sau)",
+        description: "Tính QTc từ QT và nhịp tim",
         route: "/tools/qtc",
+        icon: "📉",
       },
     ],
   },
@@ -211,32 +222,36 @@ export const specialties: Specialty[] = [
         description: "Phân tầng viêm họng do liên cầu",
         route: "/tools/centor",
         isQuick: true,
+        icon: "🫁",
       },
       {
         id: "curb65",
         name: "CURB-65",
-        description:
-          "Đánh giá mức độ nặng viêm phổi cộng đồng (gợi ý nơi điều trị)",
+        description: "Đánh giá mức độ nặng viêm phổi cộng đồng (gợi ý nơi điều trị)",
         route: "/tools/curb65",
         isQuick: true,
+        icon: "😮‍💨",
       },
       {
         id: "wells-pe",
         name: "Wells – Thuyên tắc phổi",
-        description: "Đánh giá khả năng PE (placeholder – sẽ bổ sung sau)",
+        description: "Đánh giá khả năng PE",
         route: "/tools/wells-pe",
+        icon: "🫁",
       },
       {
         id: "wells-dvt",
         name: "Wells – Huyết khối TM sâu",
-        description: "Đánh giá khả năng DVT (placeholder – sẽ bổ sung sau)",
+        description: "Đánh giá khả năng DVT",
         route: "/tools/wells-dvt",
+        icon: "🦵",
       },
       {
         id: "perc",
         name: "PERC Rule",
-        description: "Loại trừ PE nguy cơ thấp (placeholder – sẽ bổ sung sau)",
+        description: "Loại trừ PE nguy cơ thấp",
         route: "/tools/perc",
+        icon: "✅",
       },
     ],
   },
@@ -254,18 +269,21 @@ export const specialties: Specialty[] = [
         description: "Insomnia Severity Index (7 câu)",
         route: "/tools/isi",
         isQuick: true,
+        icon: "😴",
       },
       {
         id: "stop-bang",
         name: "STOP-Bang",
-        description: "Sàng lọc nguy cơ OSA (placeholder – sẽ bổ sung sau)",
+        description: "Sàng lọc nguy cơ OSA",
         route: "/tools/stop-bang",
+        icon: "💤",
       },
       {
         id: "epworth",
         name: "Epworth Sleepiness Scale",
-        description: "Thang buồn ngủ ban ngày (placeholder – sẽ bổ sung sau)",
+        description: "Thang buồn ngủ ban ngày",
         route: "/tools/epworth",
+        icon: "🥱",
       },
     ],
   },
@@ -283,25 +301,28 @@ export const specialties: Specialty[] = [
         description: "Tính BMI và phân loại theo ngưỡng người Châu Á",
         route: "/tools/bmi",
         isQuick: true,
+        icon: "⚖️",
       },
       {
         id: "bsa",
         name: "BSA (Mosteller)",
-        description: "Diện tích da cơ thể (placeholder – sẽ bổ sung sau)",
+        description: "Diện tích da cơ thể",
         route: "/tools/bsa",
+        icon: "📐",
       },
       {
         id: "hba1c-eag",
         name: "HbA1c → eAG",
-        description:
-          "Quy đổi HbA1c sang đường huyết trung bình ước tính (placeholder – sẽ bổ sung sau)",
+        description: "Quy đổi HbA1c sang đường huyết trung bình ước tính",
         route: "/tools/hba1c-eag",
+        icon: "🍬",
       },
       {
         id: "corrected-calcium",
         name: "Calci hiệu chỉnh theo albumin",
-        description: "Tính calci hiệu chỉnh (placeholder – sẽ bổ sung sau)",
+        description: "Tính calci hiệu chỉnh",
         route: "/tools/corrected-calcium",
+        icon: "🦴",
       },
     ],
   },
@@ -319,38 +340,42 @@ export const specialties: Specialty[] = [
         description: "Đánh giá mức độ xơ gan / chức năng gan",
         route: "/tools/child-pugh",
         isQuick: true,
+        icon: "🧫",
       },
       {
         id: "meld-na",
         name: "MELD-Na",
-        description:
-          "Đánh giá tiên lượng bệnh gan mạn (placeholder – sẽ bổ sung sau)",
+        description: "Đánh giá tiên lượng bệnh gan mạn",
         route: "/tools/meld-na",
+        icon: "🧪",
       },
       {
         id: "fib-4",
         name: "FIB-4",
-        description: "Sàng lọc xơ hoá gan (placeholder – sẽ bổ sung sau)",
+        description: "Sàng lọc xơ hoá gan",
         route: "/tools/fib-4",
+        icon: "🫓",
       },
       {
         id: "apri",
         name: "APRI",
-        description: "Sàng lọc xơ hoá gan (placeholder – sẽ bổ sung sau)",
+        description: "Sàng lọc xơ hoá gan",
         route: "/tools/apri",
+        icon: "📋",
       },
       {
         id: "gbs",
         name: "Glasgow–Blatchford Score",
-        description:
-          "Phân tầng xuất huyết tiêu hoá trên (placeholder – sẽ bổ sung sau)",
+        description: "Phân tầng xuất huyết tiêu hoá trên",
         route: "/tools/gbs",
+        icon: "🩸",
       },
       {
         id: "bisap",
         name: "BISAP",
-        description: "Đánh giá mức độ nặng viêm tuỵ cấp (placeholder – sẽ bổ sung sau)",
+        description: "Đánh giá mức độ nặng viêm tuỵ cấp",
         route: "/tools/bisap",
+        icon: "🔥",
       },
     ],
   },
@@ -368,19 +393,21 @@ export const specialties: Specialty[] = [
         description: "Sàng lọc nguy cơ sepsis (Sepsis-3) — nhanh tại giường",
         route: "/tools/qsofa",
         isQuick: true,
+        icon: "🦠",
       },
       {
         id: "sirs",
         name: "SIRS",
-        description:
-          "Tiêu chuẩn phản ứng viêm hệ thống (placeholder – sẽ bổ sung sau)",
+        description: "Tiêu chuẩn phản ứng viêm hệ thống",
         route: "/tools/sirs",
+        icon: "🌡️",
       },
       {
         id: "news2",
         name: "NEWS2",
-        description: "Early warning score (placeholder – sẽ bổ sung sau)",
+        description: "Early warning score",
         route: "/tools/news2",
+        icon: "🚑",
       },
     ],
   },
@@ -395,24 +422,26 @@ export const specialties: Specialty[] = [
       {
         id: "gcs",
         name: "Glasgow Coma Scale (GCS)",
-        description: "Đánh giá tri giác (placeholder – sẽ bổ sung sau)",
+        description: "Đánh giá tri giác",
         route: "/tools/gcs",
+        icon: "🧠",
       },
       {
         id: "abcd2",
         name: "ABCD²",
-        description: "Nguy cơ đột quỵ sau TIA (placeholder – sẽ bổ sung sau)",
+        description: "Nguy cơ đột quỵ sau TIA",
         route: "/tools/abcd2",
+        icon: "⚡",
       },
       {
         id: "nihss",
         name: "NIHSS",
-        description: "Đánh giá mức độ đột quỵ cấp (placeholder – sẽ bổ sung sau)",
+        description: "Đánh giá mức độ đột quỵ cấp",
         route: "/tools/nihss",
+        icon: "🧠",
       },
     ],
   },
 ];
 
-// (tuỳ chọn) Export helper nếu bạn cần nơi khác dùng:
 export const allTools: Tool[] = specialties.flatMap((s) => s.tools);

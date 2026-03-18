@@ -1,5 +1,5 @@
 // src/components/CalculatorTemplate.tsx
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 type CalculatorTemplateProps = {
@@ -160,7 +160,7 @@ export default function CalculatorTemplate(props: CalculatorTemplateProps) {
 
 type CalculatorBoxProps = {
   children: ReactNode;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 };
 
 export function CalculatorBox({ children, style }: CalculatorBoxProps) {
@@ -182,7 +182,7 @@ export function CalculatorBox({ children, style }: CalculatorBoxProps) {
 type CalculatorSectionProps = {
   title?: ReactNode;
   children: ReactNode;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 };
 
 export function CalculatorSection({

@@ -4,7 +4,7 @@ import type { ComponentType } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { specialties } from "../data/tools";
 
-// Calculators
+// Existing calculators
 import EGFR from "../calculators/EGFR";
 import ISI from "../calculators/ISI";
 
@@ -28,7 +28,6 @@ import SCREEM from "../calculators/SCREEM";
 import Pedigree from "../calculators/Pedigree";
 import BMI from "../calculators/BMI";
 
-// NEW
 import PHQ9 from "../calculators/PHQ9";
 import GAD7 from "../calculators/GAD7";
 import AuditC from "../calculators/AuditC";
@@ -36,7 +35,17 @@ import StopBang from "../calculators/StopBang";
 import Epworth from "../calculators/Epworth";
 import QTcCalculator from "../calculators/QTcCalculator";
 
+// Batch 1 calculators
+import BSA from "../calculators/BSA";
+import Hba1cEag from "../calculators/Hba1cEag";
+import CorrectedCalcium from "../calculators/CorrectedCalcium";
+import CockcroftGault from "../calculators/CockcroftGault";
+import FENa from "../calculators/FENa";
+import FEUrea from "../calculators/FEUrea";
+import AKIKDIGO from "../calculators/AKIKDIGO";
+
 type ToolFlat = {
+  id: string;
   name: string;
   description?: string;
   route: string;
@@ -81,6 +90,7 @@ export default function ToolPlaceholder() {
 
   const slugNorm = (slug ?? "").toLowerCase().trim();
 
+  // Special-case legacy route
   const isDrugInteractions =
     location.pathname === "/drug-interactions" || slugNorm === "drug-interactions";
 
@@ -143,15 +153,28 @@ export default function ToolPlaceholder() {
 
   const componentRegistry: Record<string, ComponentType> = useMemo(
     () => ({
-      // Thận – tiết niệu
+      // =========================
+      // GIA ĐÌNH – XÃ HỘI
+      // =========================
+      "family-apgar": FamilyAPGAR,
+      screem: SCREEM,
+      phq9: PHQ9,
+      gad7: GAD7,
+      "audit-c": AuditC,
+      pedigree: Pedigree,
+
+      // =========================
+      // THẬN – TIẾT NIỆU
+      // =========================
       egfr: EGFR,
+      "cockcroft-gault": CockcroftGault,
+      "aki-kdigo": AKIKDIGO,
+      fena: FENa,
+      feurea: FEUrea,
 
-      // Giấc ngủ
-      isi: ISI,
-      "stop-bang": StopBang,
-      epworth: Epworth,
-
-      // Tim mạch
+      // =========================
+      // TIM MẠCH
+      // =========================
       score2: SCORE2,
       "score2-op": SCORE2OP,
       "score2-asian": SCORE2ASIAN,
@@ -162,26 +185,36 @@ export default function ToolPlaceholder() {
       "has-bled": HASBLED,
       qtc: QTcCalculator,
 
-      // Hô hấp
+      // =========================
+      // HÔ HẤP
+      // =========================
       centor: Centor,
       curb65: CURB65,
 
-      // Truyền nhiễm
-      qsofa: QSOFA,
+      // =========================
+      // GIẤC NGỦ
+      // =========================
+      isi: ISI,
+      "stop-bang": StopBang,
+      epworth: Epworth,
 
-      // Tiêu hoá
+      // =========================
+      // NỘI TIẾT
+      // =========================
+      bmi: BMI,
+      bsa: BSA,
+      "hba1c-eag": Hba1cEag,
+      "corrected-calcium": CorrectedCalcium,
+
+      // =========================
+      // TIÊU HOÁ
+      // =========================
       "child-pugh": ChildPugh,
 
-      // Gia đình – xã hội
-      "family-apgar": FamilyAPGAR,
-      screem: SCREEM,
-      pedigree: Pedigree,
-      phq9: PHQ9,
-      gad7: GAD7,
-      "audit-c": AuditC,
-
-      // Nội tiết
-      bmi: BMI,
+      // =========================
+      // TRUYỀN NHIỄM
+      // =========================
+      qsofa: QSOFA,
     }),
     []
   );
@@ -193,9 +226,12 @@ export default function ToolPlaceholder() {
   }
 
   const toolsFlat: ToolFlat[] = useMemo(() => {
-    return specialties.flatMap((s: any) =>
-      (s.tools ?? []).map((t: any) => ({
-        ...t,
+    return specialties.flatMap((s) =>
+      (s.tools ?? []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        route: t.route,
         specialtyName: s.name,
       }))
     );
@@ -203,8 +239,13 @@ export default function ToolPlaceholder() {
 
   const tool = useMemo(() => {
     if (!slugNorm) return undefined;
-    const route = `/tools/${slugNorm}`;
-    return toolsFlat.find((t) => t.route === route);
+
+    return toolsFlat.find((t) => {
+      const routeSlug = t.route.startsWith("/tools/")
+        ? t.route.replace("/tools/", "").toLowerCase().trim()
+        : "";
+      return routeSlug === slugNorm;
+    });
   }, [slugNorm, toolsFlat]);
 
   return (

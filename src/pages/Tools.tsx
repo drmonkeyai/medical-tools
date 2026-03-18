@@ -42,6 +42,27 @@ function clampFavorites(ids: string[]) {
   return uniqKeepOrder(ids).slice(0, MAX_FAVORITES);
 }
 
+function ToolIcon({ icon }: { icon?: string }) {
+  return (
+    <div
+      style={{
+        width: 42,
+        height: 42,
+        borderRadius: 12,
+        border: "1px solid var(--line)",
+        background: "rgba(29,78,216,0.06)",
+        display: "grid",
+        placeItems: "center",
+        fontSize: 20,
+        flexShrink: 0,
+      }}
+      aria-hidden="true"
+    >
+      {icon ?? "🩺"}
+    </div>
+  );
+}
+
 function ToolCard(props: {
   tool: Tool;
   isFavorite: boolean;
@@ -63,7 +84,6 @@ function ToolCard(props: {
         position: "relative",
       }}
     >
-      {/* ⭐ */}
       <button
         type="button"
         onClick={(e) => {
@@ -93,9 +113,28 @@ function ToolCard(props: {
         {isFavorite ? "★" : "☆"}
       </button>
 
-      <div style={{ fontWeight: 1000, marginBottom: 6, paddingRight: 44 }}>{tool.name}</div>
-      <div style={{ color: "var(--muted)", fontWeight: 700, lineHeight: 1.45, paddingRight: 44 }}>
-        {tool.description}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          paddingRight: 44,
+        }}
+      >
+        <ToolIcon icon={tool.icon} />
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 1000, marginBottom: 6 }}>{tool.name}</div>
+          <div
+            style={{
+              color: "var(--muted)",
+              fontWeight: 700,
+              lineHeight: 1.45,
+            }}
+          >
+            {tool.description}
+          </div>
+        </div>
       </div>
     </Link>
   );
@@ -190,7 +229,6 @@ function FavoritesModal(props: {
           flexDirection: "column",
         }}
       >
-        {/* header */}
         <div
           style={{
             padding: 14,
@@ -222,10 +260,23 @@ function FavoritesModal(props: {
           </button>
         </div>
 
-        {/* body */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 0, flex: 1, minHeight: 0 }}>
-          {/* left: all tools */}
-          <div style={{ borderRight: "1px solid var(--line)", minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 0.8fr",
+            gap: 0,
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{
+              borderRight: "1px solid var(--line)",
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
             <div style={{ padding: 14, borderBottom: "1px solid var(--line)" }}>
               <input
                 className="input"
@@ -243,6 +294,7 @@ function FavoritesModal(props: {
                 {filteredTools.map((t) => {
                   const checked = favoriteIds.includes(t.id);
                   const disabled = !checked && favoriteIds.length >= MAX_FAVORITES;
+
                   return (
                     <label
                       key={t.id}
@@ -265,9 +317,30 @@ function FavoritesModal(props: {
                         onChange={() => toggle(t.id)}
                         style={{ marginTop: 3 }}
                       />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 1000 }}>{t.name}</div>
-                        <div style={{ color: "var(--muted)", fontWeight: 700, marginTop: 2 }}>{t.description}</div>
+
+                      <div style={{ display: "flex", gap: 10, flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 10,
+                            border: "1px solid var(--line)",
+                            background: "rgba(29,78,216,0.06)",
+                            display: "grid",
+                            placeItems: "center",
+                            fontSize: 16,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {t.icon ?? "🩺"}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 1000 }}>{t.name}</div>
+                          <div style={{ color: "var(--muted)", fontWeight: 700, marginTop: 2 }}>
+                            {t.description}
+                          </div>
+                        </div>
                       </div>
                     </label>
                   );
@@ -276,7 +349,6 @@ function FavoritesModal(props: {
             </div>
           </div>
 
-          {/* right: selected */}
           <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: 14, borderBottom: "1px solid var(--line)", fontWeight: 1000 }}>
               Danh sách đã chọn (hiển thị theo thứ tự)
@@ -303,22 +375,65 @@ function FavoritesModal(props: {
                         gap: 10,
                       }}
                     >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 1000, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {t.name}
+                      <div
+                        style={{
+                          minWidth: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 10,
+                            border: "1px solid var(--line)",
+                            background: "rgba(29,78,216,0.06)",
+                            display: "grid",
+                            placeItems: "center",
+                            fontSize: 16,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {t.icon ?? "🩺"}
                         </div>
-                        <div style={{ color: "var(--muted)", fontWeight: 700, fontSize: 12 }}>
-                          {t.route}
+
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontWeight: 1000,
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {t.name}
+                          </div>
+                          <div style={{ color: "var(--muted)", fontWeight: 700, fontSize: 12 }}>
+                            {t.route}
+                          </div>
                         </div>
                       </div>
 
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          justifyContent: "flex-end",
+                        }}
+                      >
                         <button
                           type="button"
                           className="btn"
                           onClick={() => move(t.id, -1)}
                           title="Lên"
-                          style={{ background: "white", border: "1px solid var(--line)", fontWeight: 900 }}
+                          style={{
+                            background: "white",
+                            border: "1px solid var(--line)",
+                            fontWeight: 900,
+                          }}
                         >
                           ↑
                         </button>
@@ -327,7 +442,11 @@ function FavoritesModal(props: {
                           className="btn"
                           onClick={() => move(t.id, 1)}
                           title="Xuống"
-                          style={{ background: "white", border: "1px solid var(--line)", fontWeight: 900 }}
+                          style={{
+                            background: "white",
+                            border: "1px solid var(--line)",
+                            fontWeight: 900,
+                          }}
                         >
                           ↓
                         </button>
@@ -336,7 +455,11 @@ function FavoritesModal(props: {
                           className="btn"
                           onClick={() => onChange(favoriteIds.filter((x) => x !== t.id))}
                           title="Bỏ"
-                          style={{ background: "white", border: "1px solid var(--line)", fontWeight: 900 }}
+                          style={{
+                            background: "white",
+                            border: "1px solid var(--line)",
+                            fontWeight: 900,
+                          }}
                         >
                           Bỏ
                         </button>
@@ -358,21 +481,19 @@ function FavoritesModal(props: {
 }
 
 export default function Tools() {
-  // ====== data ======
   const allTools = useMemo(() => specialties.flatMap((s) => s.tools), []);
+
   const toolMap = useMemo(() => {
     const m = new Map<string, Tool>();
     for (const t of allTools) m.set(t.id, t);
     return m;
   }, [allTools]);
 
-  // ====== favorites (localStorage) ======
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
     const stored = safeReadFavorites();
     const valid = stored.filter((id) => allTools.some((t) => t.id === id));
     if (valid.length > 0) return clampFavorites(valid);
 
-    // fallback: dùng isQuick nếu có, hoặc lấy 8 tool đầu tiên
     const quick = allTools.filter((t) => t.isQuick).map((t) => t.id);
     if (quick.length > 0) return clampFavorites(quick);
 
@@ -380,7 +501,6 @@ export default function Tools() {
   });
 
   useEffect(() => {
-    // lọc id không tồn tại (nếu sau này bạn đổi tool.id)
     const cleaned = favoriteIds.filter((id) => toolMap.has(id));
     if (cleaned.length !== favoriteIds.length) setFavoriteIds(cleaned);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -395,6 +515,7 @@ export default function Tools() {
   }, [favoriteIds, toolMap]);
 
   const [warn, setWarn] = useState<string>("");
+
   useEffect(() => {
     if (!warn) return;
     const t = setTimeout(() => setWarn(""), 2200);
@@ -410,17 +531,20 @@ export default function Tools() {
         setWarn(`Bạn chỉ có thể chọn tối đa ${MAX_FAVORITES} công cụ thường dùng.`);
         return prev;
       }
+
       return [...prev, toolId];
     });
   }
 
-  // ====== filters ======
   const [specialtyId, setSpecialtyId] = useState<string>("all");
   const [query, setQuery] = useState<string>("");
 
   const filteredSpecialties = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const picked = specialtyId === "all" ? specialties : specialties.filter((s) => s.id === specialtyId);
+    const picked =
+      specialtyId === "all"
+        ? specialties
+        : specialties.filter((s) => s.id === specialtyId);
 
     if (!q) return picked;
 
@@ -446,7 +570,6 @@ export default function Tools() {
           </div>
         </div>
 
-        {/* banner warning */}
         {warn && (
           <div
             style={{
@@ -463,16 +586,29 @@ export default function Tools() {
           </div>
         )}
 
-        {/* Favorites */}
-        <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
           <div>
             <div style={{ fontWeight: 1000 }}>Công cụ thường dùng</div>
             <div style={{ color: "var(--muted)", fontWeight: 800, marginTop: 4 }}>
-              Bấm ⭐ trên thẻ công cụ để thêm/bỏ • Tối đa {MAX_FAVORITES} công cụ • {favoriteIds.length}/{MAX_FAVORITES}
+              Bấm ⭐ trên thẻ công cụ để thêm/bỏ • Tối đa {MAX_FAVORITES} công cụ •{" "}
+              {favoriteIds.length}/{MAX_FAVORITES}
             </div>
           </div>
 
-          <button className="btn" onClick={() => setManageOpen(true)} style={{ fontWeight: 1000 }}>
+          <button
+            className="btn"
+            onClick={() => setManageOpen(true)}
+            style={{ fontWeight: 1000 }}
+          >
             Chọn / Sắp xếp
           </button>
         </div>
@@ -491,14 +627,18 @@ export default function Tools() {
             </div>
           ) : (
             favoriteTools.map((t) => (
-              <ToolCard key={t.id} tool={t} isFavorite={true} onToggleFavorite={toggleFavorite} />
+              <ToolCard
+                key={t.id}
+                tool={t}
+                isFavorite={true}
+                onToggleFavorite={toggleFavorite}
+              />
             ))
           )}
         </div>
 
         <div className="divider" />
 
-        {/* Filters */}
         <div
           style={{
             display: "grid",
@@ -509,7 +649,11 @@ export default function Tools() {
         >
           <div className="field field--wide">
             <label className="label">Chuyên khoa</label>
-            <select className="select" value={specialtyId} onChange={(e) => setSpecialtyId(e.target.value)}>
+            <select
+              className="select"
+              value={specialtyId}
+              onChange={(e) => setSpecialtyId(e.target.value)}
+            >
               <option value="all">Tất cả chuyên khoa</option>
               {specialties.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -534,10 +678,17 @@ export default function Tools() {
 
         <div style={{ height: 10 }} />
 
-        {/* List by specialty */}
         <div style={{ display: "grid", gap: 14 }}>
           {filteredSpecialties.map((s: Specialty) => (
-            <div key={s.id} style={{ borderRadius: 16, border: "1px solid var(--line)", background: "white", padding: 12 }}>
+            <div
+              key={s.id}
+              style={{
+                borderRadius: 16,
+                border: "1px solid var(--line)",
+                background: "white",
+                padding: 12,
+              }}
+            >
               <div style={{ fontWeight: 1000, marginBottom: 10 }}>{s.name}</div>
 
               <div
@@ -548,7 +699,12 @@ export default function Tools() {
                 }}
               >
                 {s.tools.map((t) => (
-                  <ToolCard key={t.id} tool={t} isFavorite={favoriteIds.includes(t.id)} onToggleFavorite={toggleFavorite} />
+                  <ToolCard
+                    key={t.id}
+                    tool={t}
+                    isFavorite={favoriteIds.includes(t.id)}
+                    onToggleFavorite={toggleFavorite}
+                  />
                 ))}
               </div>
             </div>
