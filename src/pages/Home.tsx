@@ -56,6 +56,21 @@ const MONTH_NAMES = [
 
 const WEEKDAY_SHORT = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
+
+  useEffect(() => {
+    function onResize() {
+      setIsMobile(window.innerWidth <= breakpoint);
+    }
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 function pad2(n: number) {
   return n.toString().padStart(2, "0");
 }
@@ -75,6 +90,12 @@ function getVietnameseWeekday(date: Date) {
 
 function formatSolarDate(date: Date) {
   return `${getVietnameseWeekday(date)}, ngày ${pad2(date.getDate())}/${pad2(
+    date.getMonth() + 1
+  )}/${date.getFullYear()}`;
+}
+
+function formatSolarDateShort(date: Date) {
+  return `${getVietnameseWeekday(date)}, ${pad2(date.getDate())}/${pad2(
     date.getMonth() + 1
   )}/${date.getFullYear()}`;
 }
@@ -116,7 +137,6 @@ function isSameDate(a: Date, b: Date) {
 function buildCalendarGrid(baseDate: Date): CalendarCell[] {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
-
   const firstOfMonth = new Date(year, month, 1);
   const firstDay = firstOfMonth.getDay();
   const startDate = new Date(year, month, 1 - firstDay);
@@ -256,17 +276,18 @@ function SearchBar(props: {
   onChange: (v: string) => void;
   onSearch: () => void;
   onClear: () => void;
+  isMobile?: boolean;
 }) {
-  const { value, onChange, onSearch, onClear } = props;
+  const { value, onChange, onSearch, onClear, isMobile } = props;
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "1fr auto auto",
+        gridTemplateColumns: isMobile ? "1fr" : "1fr auto auto",
         gap: 10,
         width: "100%",
-        maxWidth: 680,
+        maxWidth: isMobile ? "100%" : 680,
       }}
     >
       <div
@@ -308,13 +329,14 @@ function SearchBar(props: {
           minHeight: 52,
           borderRadius: 16,
           border: "none",
-          padding: "0 18px",
+          padding: isMobile ? "0 16px" : "0 18px",
           background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
           color: "white",
           fontWeight: 900,
           cursor: "pointer",
           boxShadow: "0 10px 24px rgba(29,78,216,0.20)",
           whiteSpace: "nowrap",
+          width: isMobile ? "100%" : "auto",
         }}
       >
         Tìm kiếm
@@ -327,12 +349,13 @@ function SearchBar(props: {
           minHeight: 52,
           borderRadius: 16,
           border: "1px solid var(--line)",
-          padding: "0 16px",
+          padding: isMobile ? "0 16px" : "0 16px",
           background: "white",
           color: "#0f172a",
           fontWeight: 900,
           cursor: "pointer",
           whiteSpace: "nowrap",
+          width: isMobile ? "100%" : "auto",
         }}
       >
         Xóa
@@ -694,8 +717,8 @@ function HighlightCard(props: {
   );
 }
 
-function CalendarPanel(props: { now: Date }) {
-  const { now } = props;
+function CalendarPanel(props: { now: Date; isMobile?: boolean }) {
+  const { now, isMobile } = props;
 
   const [viewDate, setViewDate] = useState<Date>(
     new Date(now.getFullYear(), now.getMonth(), 1)
@@ -704,7 +727,7 @@ function CalendarPanel(props: { now: Date }) {
 
   const cells = useMemo(() => buildCalendarGrid(viewDate), [viewDate]);
 
-  const selectedSolarText = formatSolarDate(selectedDate);
+  const selectedSolarText = formatSolarDateShort(selectedDate);
   const selectedLunarText = formatLunarDateApprox(selectedDate);
 
   function moveMonth(delta: number) {
@@ -731,7 +754,7 @@ function CalendarPanel(props: { now: Date }) {
         border: "1px solid rgba(255,255,255,0.70)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
         overflow: "hidden",
-        padding: 18,
+        padding: isMobile ? 12 : 18,
       }}
     >
       <div
@@ -746,19 +769,18 @@ function CalendarPanel(props: { now: Date }) {
       <div style={{ position: "relative" }}>
         <div
           style={{
-            padding: 14,
+            padding: isMobile ? 10 : 14,
             borderRadius: 22,
             background: "rgba(255,255,255,0.84)",
             border: "1px solid rgba(15,23,42,0.06)",
             boxShadow: "0 8px 20px rgba(15,23,42,0.04)",
           }}
         >
-          {/* Header gọn theo mock */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "flex-start",
+              alignItems: isMobile ? "stretch" : "flex-start",
               gap: 12,
               flexWrap: "wrap",
               marginBottom: 12,
@@ -767,7 +789,7 @@ function CalendarPanel(props: { now: Date }) {
             <div style={{ minWidth: 0, flex: 1 }}>
               <div
                 style={{
-                  fontSize: 15,
+                  fontSize: isMobile ? 14 : 15,
                   fontWeight: 1000,
                   color: "#0f172a",
                   lineHeight: 1.45,
@@ -781,7 +803,7 @@ function CalendarPanel(props: { now: Date }) {
                   marginTop: 6,
                   color: "#475569",
                   lineHeight: 1.45,
-                  fontSize: 14,
+                  fontSize: isMobile ? 13 : 14,
                 }}
               >
                 Âm lịch: <b>{selectedLunarText}</b>
@@ -800,13 +822,13 @@ function CalendarPanel(props: { now: Date }) {
                 cursor: "pointer",
                 whiteSpace: "nowrap",
                 flexShrink: 0,
+                width: isMobile ? "100%" : "auto",
               }}
             >
               Hôm nay
             </button>
           </div>
 
-          {/* Điều hướng lịch */}
           <div
             style={{
               display: "flex",
@@ -876,7 +898,6 @@ function CalendarPanel(props: { now: Date }) {
             </button>
           </div>
 
-          {/* Dòng tháng/năm đang xem */}
           <div
             style={{
               marginBottom: 10,
@@ -888,7 +909,6 @@ function CalendarPanel(props: { now: Date }) {
             {MONTH_NAMES[viewDate.getMonth()]} / {viewDate.getFullYear()}
           </div>
 
-          {/* Lưới lịch */}
           <div
             style={{
               display: "grid",
@@ -941,7 +961,7 @@ function CalendarPanel(props: { now: Date }) {
                   type="button"
                   onClick={() => setSelectedDate(new Date(cell.date))}
                   style={{
-                    minHeight: 66,
+                    minHeight: isMobile ? 52 : 66,
                     padding: 6,
                     border: "none",
                     borderRight: "1px solid rgba(15,23,42,0.08)",
@@ -960,7 +980,7 @@ function CalendarPanel(props: { now: Date }) {
                   <div
                     style={{
                       fontWeight: 1000,
-                      fontSize: 16,
+                      fontSize: isMobile ? 14 : 16,
                       lineHeight: 1.1,
                       color: dayColor,
                     }}
@@ -971,7 +991,7 @@ function CalendarPanel(props: { now: Date }) {
                   <div
                     style={{
                       marginTop: 6,
-                      fontSize: 10,
+                      fontSize: isMobile ? 9 : 10,
                       fontWeight: 800,
                       color: lunarColor,
                       lineHeight: 1.2,
@@ -1005,6 +1025,8 @@ function CalendarPanel(props: { now: Date }) {
 
 export default function Home() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [now, setNow] = useState<Date>(new Date());
@@ -1142,13 +1164,12 @@ export default function Home() {
   return (
     <div className="page">
       <div className="card">
-        {/* HERO */}
         <div
           style={{
             position: "relative",
             overflow: "hidden",
             borderRadius: 28,
-            padding: "28px 26px",
+            padding: isMobile ? "18px 14px" : "28px 26px",
             background:
               "radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 28%), linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%)",
             border: "1px solid rgba(29,78,216,0.10)",
@@ -1157,9 +1178,11 @@ export default function Home() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(320px, 1.02fr) minmax(460px, 0.98fr)",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : "minmax(320px, 1.02fr) minmax(460px, 0.98fr)",
               gap: 24,
-              alignItems: "start",
+              alignItems: isMobile ? "stretch" : "start",
             }}
           >
             <div>
@@ -1183,7 +1206,7 @@ export default function Home() {
               <h1
                 style={{
                   margin: 0,
-                  fontSize: 44,
+                  fontSize: isMobile ? 28 : 44,
                   lineHeight: 1.15,
                   letterSpacing: "-0.02em",
                   color: "#0f172a",
@@ -1198,7 +1221,7 @@ export default function Home() {
                 style={{
                   marginTop: 14,
                   color: "#475569",
-                  fontSize: 18,
+                  fontSize: isMobile ? 16 : 18,
                   lineHeight: 1.6,
                   maxWidth: 720,
                 }}
@@ -1213,6 +1236,7 @@ export default function Home() {
                   onChange={setSearch}
                   onSearch={handleSearch}
                   onClear={handleClearSearch}
+                  isMobile={isMobile}
                 />
               </div>
 
@@ -1233,7 +1257,7 @@ export default function Home() {
                       border: "1px solid rgba(15,23,42,0.08)",
                       background: "rgba(255,255,255,0.88)",
                       borderRadius: 999,
-                      padding: "10px 14px",
+                      padding: isMobile ? "8px 12px" : "10px 14px",
                       cursor: "pointer",
                       fontWeight: 900,
                       color: "#0f172a",
@@ -1245,11 +1269,10 @@ export default function Home() {
               </div>
             </div>
 
-            <CalendarPanel now={now} />
+            <CalendarPanel now={now} isMobile={isMobile} />
           </div>
         </div>
 
-        {/* SEARCH RESULT */}
         {hasSearch && (
           <div
             style={{
@@ -1271,7 +1294,7 @@ export default function Home() {
               }}
             >
               <div>
-                <div style={{ fontWeight: 1000, fontSize: 24, color: "#0f172a" }}>
+                <div style={{ fontWeight: 1000, fontSize: isMobile ? 20 : 24, color: "#0f172a" }}>
                   Kết quả tìm kiếm
                 </div>
                 <div style={{ marginTop: 6, color: "var(--muted)" }}>
@@ -1289,6 +1312,7 @@ export default function Home() {
                   padding: "10px 14px",
                   fontWeight: 900,
                   cursor: "pointer",
+                  width: isMobile ? "100%" : "auto",
                 }}
               >
                 Đóng kết quả
@@ -1312,7 +1336,9 @@ export default function Home() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gridTemplateColumns: isMobile
+                    ? "1fr"
+                    : "repeat(auto-fit, minmax(260px, 1fr))",
                   gap: 12,
                 }}
               >
@@ -1328,7 +1354,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* QUICK */}
         <div style={{ marginTop: 26 }}>
           <div
             style={{
@@ -1341,7 +1366,9 @@ export default function Home() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 1000, fontSize: 28, color: "#0f172a" }}>Truy cập nhanh</div>
+              <div style={{ fontWeight: 1000, fontSize: isMobile ? 24 : 28, color: "#0f172a" }}>
+                Truy cập nhanh
+              </div>
               <div style={{ marginTop: 6, color: "var(--muted)", lineHeight: 1.5 }}>
                 Các công cụ hay dùng nhất cho thực hành hàng ngày.
               </div>
@@ -1362,7 +1389,9 @@ export default function Home() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : "repeat(auto-fit, minmax(220px, 1fr))",
               gap: 14,
             }}
           >
@@ -1372,16 +1401,17 @@ export default function Home() {
           </div>
         </div>
 
-        {/* USE CASE */}
         <div style={{ marginTop: 30 }}>
-          <div style={{ fontWeight: 1000, fontSize: 28, color: "#0f172a", marginBottom: 12 }}>
+          <div style={{ fontWeight: 1000, fontSize: isMobile ? 24 : 28, color: "#0f172a", marginBottom: 12 }}>
             Bạn đang cần gì?
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : "repeat(auto-fit, minmax(220px, 1fr))",
               gap: 14,
             }}
           >
@@ -1391,16 +1421,17 @@ export default function Home() {
           </div>
         </div>
 
-        {/* SPECIALTY */}
         <div style={{ marginTop: 30 }}>
-          <div style={{ fontWeight: 1000, fontSize: 28, color: "#0f172a", marginBottom: 12 }}>
+          <div style={{ fontWeight: 1000, fontSize: isMobile ? 24 : 28, color: "#0f172a", marginBottom: 12 }}>
             Khám phá theo chuyên khoa
           </div>
 
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : "repeat(auto-fit, minmax(240px, 1fr))",
               gap: 14,
             }}
           >
@@ -1416,9 +1447,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* HIGHLIGHT */}
         <div style={{ marginTop: 30 }}>
-          <div style={{ fontWeight: 1000, fontSize: 28, color: "#0f172a", marginBottom: 12 }}>
+          <div style={{ fontWeight: 1000, fontSize: isMobile ? 24 : 28, color: "#0f172a", marginBottom: 12 }}>
             Công cụ nổi bật hôm nay
           </div>
 
@@ -1429,7 +1459,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* FOOTER */}
         <div
           style={{
             marginTop: 24,
