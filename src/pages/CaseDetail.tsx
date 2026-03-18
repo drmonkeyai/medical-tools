@@ -315,7 +315,7 @@ export default function CaseDetail() {
                     <div style={{ display: "grid", gap: 10 }}>
                       {rows.map((t) => {
                         const r = latestByTool.get(t.id);
-                        const summary = r?.summary || r?.outputs?.summary || "";
+                        const summary = r?.summary || (r?.outputs as any)?.summary || "";
                         return (
                           <button
                             key={t.id}
