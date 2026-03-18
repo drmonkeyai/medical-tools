@@ -28,6 +28,42 @@ function pickHepaticRule(drug: Drug, child: HepaticClass) {
   return null;
 }
 
+function tinhCockcroftGault(params: {
+  tuoi: number;
+  canNang: number;
+  creatininMgDl: number;
+  gioi: "nam" | "nu";
+}) {
+  const { tuoi, canNang, creatininMgDl, gioi } = params;
+  if (tuoi <= 0 || canNang <= 0 || creatininMgDl <= 0) return 0;
+
+  let crcl = ((140 - tuoi) * canNang) / (72 * creatininMgDl);
+  if (gioi === "nu") crcl *= 0.85;
+  return crcl;
+}
+
+function tinhChildPughDiem(params: {
+  bilirubin: number;
+  albumin: number;
+  inr: number;
+  coTruong: number;
+  naoGan: number;
+}) {
+  return (
+    params.bilirubin +
+    params.albumin +
+    params.inr +
+    params.coTruong +
+    params.naoGan
+  );
+}
+
+function xepLoaiChildPugh(diem: number): HepaticClass {
+  if (diem <= 6) return "Child-Pugh A";
+  if (diem <= 9) return "Child-Pugh B";
+  return "Child-Pugh C";
+}
+
 export default function DoseAdjust() {
   const navigate = useNavigate();
 
@@ -35,6 +71,44 @@ export default function DoseAdjust() {
   const [egfr, setEgfr] = useState<number>(60);
   const [child, setChild] = useState<HepaticClass>("None");
   const [selectedId, setSelectedId] = useState<string>(drugs[0]?.id ?? "");
+
+  const [showCrclModal, setShowCrclModal] = useState(false);
+  const [showChildPughModal, setShowChildPughModal] = useState(false);
+
+  // Cockcroft-Gault
+  const [tuoi, setTuoi] = useState<number>(60);
+  const [canNang, setCanNang] = useState<number>(60);
+  const [creatininMgDl, setCreatininMgDl] = useState<number>(1);
+  const [gioi, setGioi] = useState<"nam" | "nu">("nam");
+
+  const crcl = useMemo(
+    () => tinhCockcroftGault({ tuoi, canNang, creatininMgDl, gioi }),
+    [tuoi, canNang, creatininMgDl, gioi]
+  );
+
+  // Child-Pugh
+  const [bilirubinScore, setBilirubinScore] = useState<number>(1);
+  const [albuminScore, setAlbuminScore] = useState<number>(1);
+  const [inrScore, setInrScore] = useState<number>(1);
+  const [coTruongScore, setCoTruongScore] = useState<number>(1);
+  const [naoGanScore, setNaoGanScore] = useState<number>(1);
+
+  const childPughDiem = useMemo(
+    () =>
+      tinhChildPughDiem({
+        bilirubin: bilirubinScore,
+        albumin: albuminScore,
+        inr: inrScore,
+        coTruong: coTruongScore,
+        naoGan: naoGanScore,
+      }),
+    [bilirubinScore, albuminScore, inrScore, coTruongScore, naoGanScore]
+  );
+
+  const childPughClass = useMemo(
+    () => xepLoaiChildPugh(childPughDiem),
+    [childPughDiem]
+  );
 
   const filtered = useMemo(() => {
     const nq = normalize(q);
@@ -77,20 +151,13 @@ export default function DoseAdjust() {
               Điều chỉnh liều thuốc (tính năng đang phát triển)
             </h2>
             <div style={{ marginTop: 6, color: "var(--muted)" }}>
-              Gợi ý điều chỉnh theo eGFR (thận) và Child-Pugh (gan) cho các thuốc thường dùng.
+              Gợi ý điều chỉnh theo eGFR/CrCl (thận) và Child-Pugh (gan) cho các thuốc thường dùng.
             </div>
           </div>
 
           <button
             onClick={() => navigate(-1)}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid var(--line)",
-              background: "white",
-              cursor: "pointer",
-              fontWeight: 900,
-            }}
+            style={actionBtnStyle}
           >
             ← Trở về trang trước
           </button>
@@ -139,7 +206,20 @@ export default function DoseAdjust() {
             />
           </Field>
 
-          <Field label="eGFR (mL/min/1.73m²)">
+          <Field
+            label={
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <span>eGFR (mL/min/1.73m²)</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCrclModal(true)}
+                  style={miniBtnStyle}
+                >
+                  Tính CrCl
+                </button>
+              </div>
+            }
+          >
             <input
               type="number"
               value={egfr}
@@ -148,7 +228,20 @@ export default function DoseAdjust() {
             />
           </Field>
 
-          <Field label="Chức năng gan (Child-Pugh)">
+          <Field
+            label={
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <span>Chức năng gan (Child-Pugh)</span>
+                <button
+                  type="button"
+                  onClick={() => setShowChildPughModal(true)}
+                  style={miniBtnStyle}
+                >
+                  Tính Child-Pugh
+                </button>
+              </div>
+            }
+          >
             <select
               value={child}
               onChange={(e) => setChild(e.target.value as HepaticClass)}
@@ -307,11 +400,188 @@ export default function DoseAdjust() {
           tình trạng lâm sàng, tương tác và liều theo chỉ định.
         </div>
       </div>
+
+      {showCrclModal ? (
+        <Modal
+          title="Tính mức độ thanh thải creatinin theo Cockcroft–Gault"
+          onClose={() => setShowCrclModal(false)}
+        >
+          <div style={{ display: "grid", gap: 12 }}>
+            <Field label="Tuổi">
+              <input
+                type="number"
+                value={tuoi}
+                onChange={(e) => setTuoi(Number(e.target.value))}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Cân nặng (kg)">
+              <input
+                type="number"
+                value={canNang}
+                onChange={(e) => setCanNang(Number(e.target.value))}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Creatinin huyết thanh (mg/dL)">
+              <input
+                type="number"
+                step="0.1"
+                value={creatininMgDl}
+                onChange={(e) => setCreatininMgDl(Number(e.target.value))}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="Giới">
+              <select
+                value={gioi}
+                onChange={(e) => setGioi(e.target.value as "nam" | "nu")}
+                style={inputStyle}
+              >
+                <option value="nam">Nam</option>
+                <option value="nu">Nữ</option>
+              </select>
+            </Field>
+
+            <div style={resultPanelStyle}>
+              <div style={{ fontWeight: 900 }}>Kết quả CrCl</div>
+              <div style={{ marginTop: 8, fontSize: 24, fontWeight: 1000 }}>
+                {crcl > 0 ? `${crcl.toFixed(1)} mL/phút` : "—"}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+                Công thức: CrCl = ((140 - tuổi) × cân nặng) / (72 × creatinin); nữ × 0,85
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowCrclModal(false)}
+                style={actionBtnStyle}
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEgfr(Number(crcl.toFixed(1)));
+                  setShowCrclModal(false);
+                }}
+                style={primaryBtnStyle}
+              >
+                Dùng kết quả này
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {showChildPughModal ? (
+        <Modal
+          title="Tính điểm Child-Pugh"
+          onClose={() => setShowChildPughModal(false)}
+        >
+          <div style={{ display: "grid", gap: 12 }}>
+            <Field label="Bilirubin toàn phần">
+              <select
+                value={bilirubinScore}
+                onChange={(e) => setBilirubinScore(Number(e.target.value))}
+                style={inputStyle}
+              >
+                <option value={1}>&lt; 2 mg/dL = 1 điểm</option>
+                <option value={2}>2–3 mg/dL = 2 điểm</option>
+                <option value={3}>&gt; 3 mg/dL = 3 điểm</option>
+              </select>
+            </Field>
+
+            <Field label="Albumin">
+              <select
+                value={albuminScore}
+                onChange={(e) => setAlbuminScore(Number(e.target.value))}
+                style={inputStyle}
+              >
+                <option value={1}>&gt; 3,5 g/dL = 1 điểm</option>
+                <option value={2}>2,8–3,5 g/dL = 2 điểm</option>
+                <option value={3}>&lt; 2,8 g/dL = 3 điểm</option>
+              </select>
+            </Field>
+
+            <Field label="INR">
+              <select
+                value={inrScore}
+                onChange={(e) => setInrScore(Number(e.target.value))}
+                style={inputStyle}
+              >
+                <option value={1}>&lt; 1,7 = 1 điểm</option>
+                <option value={2}>1,7–2,3 = 2 điểm</option>
+                <option value={3}>&gt; 2,3 = 3 điểm</option>
+              </select>
+            </Field>
+
+            <Field label="Cổ trướng">
+              <select
+                value={coTruongScore}
+                onChange={(e) => setCoTruongScore(Number(e.target.value))}
+                style={inputStyle}
+              >
+                <option value={1}>Không = 1 điểm</option>
+                <option value={2}>Nhẹ/kiểm soát được = 2 điểm</option>
+                <option value={3}>Nhiều/khó kiểm soát = 3 điểm</option>
+              </select>
+            </Field>
+
+            <Field label="Não gan">
+              <select
+                value={naoGanScore}
+                onChange={(e) => setNaoGanScore(Number(e.target.value))}
+                style={inputStyle}
+              >
+                <option value={1}>Không = 1 điểm</option>
+                <option value={2}>Độ I–II = 2 điểm</option>
+                <option value={3}>Độ III–IV = 3 điểm</option>
+              </select>
+            </Field>
+
+            <div style={resultPanelStyle}>
+              <div style={{ fontWeight: 900 }}>Kết quả Child-Pugh</div>
+              <div style={{ marginTop: 8, fontSize: 18, fontWeight: 1000 }}>
+                {childPughClass}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 16 }}>
+                Tổng điểm: <b>{childPughDiem}</b>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowChildPughModal(false)}
+                style={actionBtnStyle}
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChild(childPughClass);
+                  setShowChildPughModal(false);
+                }}
+                style={primaryBtnStyle}
+              >
+                Dùng kết quả này
+              </button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }
 
-function Field(props: { label: string; children: React.ReactNode }) {
+function Field(props: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
       <div style={{ fontWeight: 800, marginBottom: 6 }}>{props.label}</div>
@@ -422,6 +692,57 @@ function ToolCard(props: {
   );
 }
 
+function Modal(props: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      onClick={props.onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.35)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 9999,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          background: "white",
+          borderRadius: 20,
+          border: "1px solid var(--line)",
+          boxShadow: "0 20px 60px rgba(15,23,42,0.18)",
+          padding: 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ fontWeight: 1000, fontSize: 18 }}>{props.title}</div>
+          <button onClick={props.onClose} style={actionBtnStyle}>
+            Đóng
+          </button>
+        </div>
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "11px 12px",
@@ -429,4 +750,42 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid var(--line)",
   outline: "none",
   background: "white",
+};
+
+const actionBtnStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid var(--line)",
+  background: "white",
+  cursor: "pointer",
+  fontWeight: 900,
+};
+
+const primaryBtnStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(29,78,216,0.3)",
+  background: "rgba(29,78,216,0.1)",
+  color: "rgb(29,78,216)",
+  cursor: "pointer",
+  fontWeight: 900,
+};
+
+const miniBtnStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(29,78,216,0.25)",
+  background: "rgba(29,78,216,0.08)",
+  color: "rgb(29,78,216)",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 12,
+  whiteSpace: "nowrap",
+};
+
+const resultPanelStyle: React.CSSProperties = {
+  border: "1px solid var(--line)",
+  borderRadius: 14,
+  padding: 12,
+  background: "rgba(0,0,0,0.02)",
 };
