@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { drugs, type Drug, type HepaticClass } from "../data/doseAdjust";
 
@@ -64,8 +64,21 @@ function xepLoaiChildPugh(diem: number): HepaticClass {
   return "Child-Pugh C";
 }
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 export default function DoseAdjust() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile(768);
 
   const [q, setQ] = useState("");
   const [egfr, setEgfr] = useState<number>(60);
@@ -143,21 +156,26 @@ export default function DoseAdjust() {
             justifyContent: "space-between",
             gap: 12,
             flexWrap: "wrap",
-            alignItems: "center",
+            alignItems: isMobile ? "stretch" : "center",
+            flexDirection: isMobile ? "column" : "row",
           }}
         >
-          <div>
-            <h2 style={{ margin: 0 }}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 28 : undefined }}>
               Điều chỉnh liều thuốc (tính năng đang phát triển)
             </h2>
-            <div style={{ marginTop: 6, color: "var(--muted)" }}>
+            <div style={{ marginTop: 6, color: "var(--muted)", lineHeight: 1.5 }}>
               Gợi ý điều chỉnh theo eGFR/CrCl (thận) và Child-Pugh (gan) cho các thuốc thường dùng.
             </div>
           </div>
 
           <button
             onClick={() => navigate(-1)}
-            style={actionBtnStyle}
+            style={{
+              ...actionBtnStyle,
+              width: isMobile ? "100%" : "auto",
+              justifyContent: "center",
+            }}
           >
             ← Trở về trang trước
           </button>
@@ -172,7 +190,9 @@ export default function DoseAdjust() {
             style={{
               display: "grid",
               gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gridTemplateColumns: isMobile
+                ? "1fr"
+                : "repeat(auto-fit, minmax(280px, 1fr))",
             }}
           >
             <ToolCard
@@ -194,7 +214,9 @@ export default function DoseAdjust() {
             marginTop: 14,
             display: "grid",
             gap: 12,
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gridTemplateColumns: isMobile
+              ? "1fr"
+              : "repeat(auto-fit, minmax(240px, 1fr))",
           }}
         >
           <Field label="Tìm thuốc">
@@ -208,12 +230,23 @@ export default function DoseAdjust() {
 
           <Field
             label={
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: isMobile ? "stretch" : "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
                 <span>eGFR (mL/min/1.73m²)</span>
                 <button
                   type="button"
                   onClick={() => setShowCrclModal(true)}
-                  style={miniBtnStyle}
+                  style={{
+                    ...miniBtnStyle,
+                    width: isMobile ? "100%" : "auto",
+                  }}
                 >
                   Tính CrCl
                 </button>
@@ -230,12 +263,23 @@ export default function DoseAdjust() {
 
           <Field
             label={
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: isMobile ? "stretch" : "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  flexDirection: isMobile ? "column" : "row",
+                }}
+              >
                 <span>Chức năng gan (Child-Pugh)</span>
                 <button
                   type="button"
                   onClick={() => setShowChildPughModal(true)}
-                  style={miniBtnStyle}
+                  style={{
+                    ...miniBtnStyle,
+                    width: isMobile ? "100%" : "auto",
+                  }}
                 >
                   Tính Child-Pugh
                 </button>
@@ -260,7 +304,7 @@ export default function DoseAdjust() {
             marginTop: 14,
             display: "grid",
             gap: 14,
-            gridTemplateColumns: "minmax(260px, 360px) 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "minmax(280px, 360px) 1fr",
           }}
         >
           <div
@@ -269,6 +313,7 @@ export default function DoseAdjust() {
               borderRadius: 16,
               background: "white",
               overflow: "hidden",
+              order: isMobile ? 2 : 1,
             }}
           >
             <div
@@ -281,7 +326,12 @@ export default function DoseAdjust() {
               Danh sách thuốc ({filtered.length})
             </div>
 
-            <div style={{ maxHeight: 420, overflow: "auto" }}>
+            <div
+              style={{
+                maxHeight: isMobile ? 320 : 420,
+                overflow: "auto",
+              }}
+            >
               {filtered.map((d) => {
                 const active = d.id === selected?.id;
                 return (
@@ -302,7 +352,7 @@ export default function DoseAdjust() {
                       boxShadow: active ? "inset 4px 0 0 rgb(29,78,216)" : "none",
                     }}
                   >
-                    <div style={{ fontWeight: active ? 1000 : 900 }}>
+                    <div style={{ fontWeight: active ? 1000 : 900, lineHeight: 1.4 }}>
                       {d.name}
                     </div>
                     <div
@@ -310,6 +360,7 @@ export default function DoseAdjust() {
                         color: active ? "rgb(71,85,105)" : "var(--muted)",
                         fontSize: 12,
                         marginTop: 2,
+                        lineHeight: 1.4,
                       }}
                     >
                       {d.group ?? "—"} {d.aliases?.length ? `• ${d.aliases[0]}` : ""}
@@ -326,6 +377,7 @@ export default function DoseAdjust() {
               borderRadius: 16,
               background: "white",
               padding: 14,
+              order: isMobile ? 1 : 2,
             }}
           >
             {!selected ? (
@@ -341,7 +393,13 @@ export default function DoseAdjust() {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 1000 }}>
+                    <div
+                      style={{
+                        fontSize: isMobile ? 24 : 18,
+                        fontWeight: 1000,
+                        lineHeight: 1.3,
+                      }}
+                    >
                       {selected.name}
                     </div>
                     <div style={{ marginTop: 6, color: "var(--muted)" }}>
@@ -361,7 +419,7 @@ export default function DoseAdjust() {
                     }}
                   >
                     <div style={{ fontWeight: 900 }}>Liều thường dùng (tham khảo)</div>
-                    <div style={{ marginTop: 6, color: "var(--muted)" }}>
+                    <div style={{ marginTop: 6, color: "var(--muted)", lineHeight: 1.5 }}>
                       {selected.typicalDose}
                     </div>
                   </div>
@@ -372,7 +430,9 @@ export default function DoseAdjust() {
                     marginTop: 12,
                     display: "grid",
                     gap: 12,
-                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gridTemplateColumns: isMobile
+                      ? "1fr"
+                      : "repeat(auto-fit, minmax(240px, 1fr))",
                   }}
                 >
                   <ResultBox
@@ -386,7 +446,14 @@ export default function DoseAdjust() {
                 </div>
 
                 {selected.notes ? (
-                  <div style={{ marginTop: 12, fontSize: 12, color: "var(--muted)" }}>
+                  <div
+                    style={{
+                      marginTop: 12,
+                      fontSize: 12,
+                      color: "var(--muted)",
+                      lineHeight: 1.5,
+                    }}
+                  >
                     {selected.notes}
                   </div>
                 ) : null}
@@ -395,7 +462,14 @@ export default function DoseAdjust() {
           </div>
         </div>
 
-        <div style={{ marginTop: 14, fontSize: 12, color: "var(--muted)" }}>
+        <div
+          style={{
+            marginTop: 14,
+            fontSize: 12,
+            color: "var(--muted)",
+            lineHeight: 1.5,
+          }}
+        >
           Lưu ý: Gợi ý hỗ trợ tham khảo; luôn đối chiếu khuyến cáo chính thức tại cơ sở,
           tình trạng lâm sàng, tương tác và liều theo chỉ định.
         </div>
@@ -405,6 +479,7 @@ export default function DoseAdjust() {
         <Modal
           title="Tính mức độ thanh thải creatinin theo Cockcroft–Gault"
           onClose={() => setShowCrclModal(false)}
+          isMobile={isMobile}
         >
           <div style={{ display: "grid", gap: 12 }}>
             <Field label="Tuổi">
@@ -451,16 +526,23 @@ export default function DoseAdjust() {
               <div style={{ marginTop: 8, fontSize: 24, fontWeight: 1000 }}>
                 {crcl > 0 ? `${crcl.toFixed(1)} mL/phút` : "—"}
               </div>
-              <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
                 Công thức: CrCl = ((140 - tuổi) × cân nặng) / (72 × creatinin); nữ × 0,85
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                flexDirection: isMobile ? "column" : "row",
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setShowCrclModal(false)}
-                style={actionBtnStyle}
+                style={{ ...actionBtnStyle, width: isMobile ? "100%" : "auto" }}
               >
                 Đóng
               </button>
@@ -470,7 +552,7 @@ export default function DoseAdjust() {
                   setEgfr(Number(crcl.toFixed(1)));
                   setShowCrclModal(false);
                 }}
-                style={primaryBtnStyle}
+                style={{ ...primaryBtnStyle, width: isMobile ? "100%" : "auto" }}
               >
                 Dùng kết quả này
               </button>
@@ -483,6 +565,7 @@ export default function DoseAdjust() {
         <Modal
           title="Tính điểm Child-Pugh"
           onClose={() => setShowChildPughModal(false)}
+          isMobile={isMobile}
         >
           <div style={{ display: "grid", gap: 12 }}>
             <Field label="Bilirubin toàn phần">
@@ -555,11 +638,18 @@ export default function DoseAdjust() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                flexDirection: isMobile ? "column" : "row",
+              }}
+            >
               <button
                 type="button"
                 onClick={() => setShowChildPughModal(false)}
-                style={actionBtnStyle}
+                style={{ ...actionBtnStyle, width: isMobile ? "100%" : "auto" }}
               >
                 Đóng
               </button>
@@ -569,7 +659,7 @@ export default function DoseAdjust() {
                   setChild(childPughClass);
                   setShowChildPughModal(false);
                 }}
-                style={primaryBtnStyle}
+                style={{ ...primaryBtnStyle, width: isMobile ? "100%" : "auto" }}
               >
                 Dùng kết quả này
               </button>
@@ -600,8 +690,10 @@ function ResultBox(props: { title: string; text: string }) {
         background: "rgba(0,0,0,0.02)",
       }}
     >
-      <div style={{ fontWeight: 900 }}>{props.title}</div>
-      <div style={{ marginTop: 6, color: "var(--muted)" }}>{props.text}</div>
+      <div style={{ fontWeight: 900, lineHeight: 1.4 }}>{props.title}</div>
+      <div style={{ marginTop: 6, color: "var(--muted)", lineHeight: 1.5 }}>
+        {props.text}
+      </div>
     </div>
   );
 }
@@ -653,6 +745,7 @@ function ToolCard(props: {
           fontWeight: props.active ? 1000 : 900,
           color: props.active ? "rgb(17,24,39)" : "inherit",
           paddingLeft: props.active ? 10 : 0,
+          lineHeight: 1.4,
         }}
       >
         {props.title}
@@ -696,6 +789,7 @@ function Modal(props: {
   title: string;
   children: React.ReactNode;
   onClose: () => void;
+  isMobile?: boolean;
 }) {
   return (
     <div
@@ -705,9 +799,9 @@ function Modal(props: {
         inset: 0,
         background: "rgba(15,23,42,0.35)",
         display: "flex",
-        alignItems: "center",
+        alignItems: props.isMobile ? "flex-end" : "center",
         justifyContent: "center",
-        padding: 16,
+        padding: props.isMobile ? 0 : 16,
         zIndex: 9999,
       }}
     >
@@ -715,12 +809,14 @@ function Modal(props: {
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
-          maxWidth: 560,
+          maxWidth: props.isMobile ? "100%" : 560,
           background: "white",
-          borderRadius: 20,
+          borderRadius: props.isMobile ? "20px 20px 0 0" : 20,
           border: "1px solid var(--line)",
           boxShadow: "0 20px 60px rgba(15,23,42,0.18)",
           padding: 16,
+          maxHeight: props.isMobile ? "90vh" : "85vh",
+          overflow: "auto",
         }}
       >
         <div
@@ -730,9 +826,16 @@ function Modal(props: {
             gap: 12,
             alignItems: "center",
             marginBottom: 12,
+            position: "sticky",
+            top: 0,
+            background: "white",
+            paddingBottom: 8,
+            zIndex: 1,
           }}
         >
-          <div style={{ fontWeight: 1000, fontSize: 18 }}>{props.title}</div>
+          <div style={{ fontWeight: 1000, fontSize: props.isMobile ? 17 : 18, lineHeight: 1.4 }}>
+            {props.title}
+          </div>
           <button onClick={props.onClose} style={actionBtnStyle}>
             Đóng
           </button>
@@ -745,11 +848,12 @@ function Modal(props: {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: "11px 12px",
+  padding: "12px 12px",
   borderRadius: 12,
   border: "1px solid var(--line)",
   outline: "none",
   background: "white",
+  fontSize: 16,
 };
 
 const actionBtnStyle: React.CSSProperties = {
@@ -759,6 +863,8 @@ const actionBtnStyle: React.CSSProperties = {
   background: "white",
   cursor: "pointer",
   fontWeight: 900,
+  display: "inline-flex",
+  alignItems: "center",
 };
 
 const primaryBtnStyle: React.CSSProperties = {
@@ -772,7 +878,7 @@ const primaryBtnStyle: React.CSSProperties = {
 };
 
 const miniBtnStyle: React.CSSProperties = {
-  padding: "6px 10px",
+  padding: "8px 10px",
   borderRadius: 999,
   border: "1px solid rgba(29,78,216,0.25)",
   background: "rgba(29,78,216,0.08)",
