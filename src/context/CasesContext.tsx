@@ -1,4 +1,3 @@
-// src/context/CasesContext.tsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 export type SexLabel = "Nam" | "Nữ";
@@ -8,30 +7,29 @@ export type Patient = {
   name: string;
   yob: number;
   sex: SexLabel;
-  // optional
   weightKg?: number;
   heightCm?: number;
 };
 
 export type ToolResult = {
-  tool: string; // e.g. "egfr"
-  when: string; // ISO string
-  inputs: any;
-  outputs: any;
-  summary?: string; // optional human summary
+  tool: string;
+  when: string;
+  inputs: unknown;
+  outputs: unknown;
+  summary?: string;
 };
 
 export type CaseItem = {
   id: string;
   createdAt: string;
   patient: Patient;
-  results: ToolResult[]; // lưu tất cả lần đánh giá
+  results: ToolResult[];
 };
 
 type PendingSave = {
   tool: string;
-  inputs: any;
-  outputs: any;
+  inputs: unknown;
+  outputs: unknown;
   summary?: string;
 };
 
@@ -43,20 +41,21 @@ export type CasesContextValue = {
   setActiveCaseId: (id: string | null) => void;
   closeCase: (id: string) => void;
 
-  // modal create case
   isNewCaseModalOpen: boolean;
   openNewCaseModal: () => void;
   closeNewCaseModal: () => void;
 
   createCase: (patient: Patient) => CaseItem;
 
-  // save tool result
-  saveToActiveCase: (payload: { tool: string; inputs: any; outputs: any; summary?: string }) => void;
+  saveToActiveCase: (payload: {
+    tool: string;
+    inputs: unknown;
+    outputs: unknown;
+    summary?: string;
+  }) => void;
 
-  // ✅ NEW: update patient info
   updateCasePatient: (id: string, patient: Patient) => void;
 
-  // ✅ label helpers
   getCaseLabel: (c: CaseItem, opts?: { compact?: boolean }) => string;
   getActiveCaseLabel: (opts?: { compact?: boolean; fallback?: string }) => string;
 };
@@ -83,6 +82,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
   const [cases, setCases] = useState<CaseItem[]>(() =>
     safeParse<CaseItem[]>(localStorage.getItem(LS_CASES), [])
   );
+
   const [activeCaseId, setActiveCaseId] = useState<string | null>(() =>
     safeParse<string | null>(localStorage.getItem(LS_ACTIVE), null)
   );
@@ -90,7 +90,6 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
 
-  // persist
   useEffect(() => {
     localStorage.setItem(LS_CASES, JSON.stringify(cases));
   }, [cases]);
@@ -99,11 +98,12 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(LS_ACTIVE, JSON.stringify(activeCaseId));
   }, [activeCaseId]);
 
-  // keep activeCaseId valid
   useEffect(() => {
     if (!activeCaseId) return;
     const exists = cases.some((c) => c.id === activeCaseId);
-    if (!exists) setActiveCaseId(cases[0]?.id ?? null);
+    if (!exists) {
+      setActiveCaseId(cases[0]?.id ?? null);
+    }
   }, [cases, activeCaseId]);
 
   const activeCase = useMemo(() => {
@@ -114,17 +114,18 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
   const closeNewCaseModal = () => {
     setIsNewCaseModalOpen(false);
-    // không xoá pendingSave để tránh user bấm X nhầm
   };
 
   const closeCase = (id: string) => {
-    setCases((prev) => prev.filter((c) => c.id !== id));
+    setCases((prev) => {
+      const next = prev.filter((c) => c.id !== id);
 
-    setActiveCaseId((prevActive) => {
-      if (prevActive !== id) return prevActive;
-      // nếu đóng ca đang active → chọn ca khác
-      const remaining = cases.filter((c) => c.id !== id);
-      return remaining[0]?.id ?? null;
+      setActiveCaseId((prevActive) => {
+        if (prevActive !== id) return prevActive;
+        return next[0]?.id ?? null;
+      });
+
+      return next;
     });
   };
 
@@ -133,42 +134,33 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       id: uid(),
       createdAt: new Date().toISOString(),
       patient,
-      results: [],
+      results: pendingSave
+        ? [
+            {
+              tool: pendingSave.tool,
+              when: new Date().toISOString(),
+              inputs: pendingSave.inputs,
+              outputs: pendingSave.outputs,
+              summary: pendingSave.summary,
+            },
+          ]
+        : [],
     };
 
     setCases((prev) => [newCase, ...prev]);
     setActiveCaseId(newCase.id);
     setIsNewCaseModalOpen(false);
-
-    // nếu có pending save (bấm Lưu vào ca khi chưa có ca)
-    if (pendingSave) {
-      const ps = pendingSave;
-      setPendingSave(null);
-      setCases((prev) =>
-        prev.map((c) => {
-          if (c.id !== newCase.id) return c;
-          return {
-            ...c,
-            results: [
-              {
-                tool: ps.tool,
-                when: new Date().toISOString(),
-                inputs: ps.inputs,
-                outputs: ps.outputs,
-                summary: ps.summary,
-              },
-              ...c.results,
-            ],
-          };
-        })
-      );
-    }
+    setPendingSave(null);
 
     return newCase;
   };
 
-  const saveToActiveCase = (payload: { tool: string; inputs: any; outputs: any; summary?: string }) => {
-    // chưa có ca → mở modal tạo ca và pending
+  const saveToActiveCase = (payload: {
+    tool: string;
+    inputs: unknown;
+    outputs: unknown;
+    summary?: string;
+  }) => {
     if (!activeCaseId) {
       setPendingSave({
         tool: payload.tool,
@@ -183,6 +175,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     setCases((prev) =>
       prev.map((c) => {
         if (c.id !== activeCaseId) return c;
+
         const item: ToolResult = {
           tool: payload.tool,
           when: new Date().toISOString(),
@@ -190,12 +183,15 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           outputs: payload.outputs,
           summary: payload.summary,
         };
-        return { ...c, results: [item, ...c.results] };
+
+        return {
+          ...c,
+          results: [item, ...c.results],
+        };
       })
     );
   };
 
-  // ✅ Update patient info
   const updateCasePatient = (id: string, patient: Patient) => {
     setCases((prev) =>
       prev.map((c) => {
@@ -205,10 +201,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // ✅ Label helpers
   const getCaseLabel = (c: CaseItem, opts?: { compact?: boolean }) => {
-    const compact = !!opts?.compact;
-    if (compact) return `${c.patient.name} • ${c.patient.yob}`;
+    if (opts?.compact) return `${c.patient.name} • ${c.patient.yob}`;
     return `${c.patient.name} • ${c.patient.yob} • ${c.patient.sex}`;
   };
 
@@ -244,6 +238,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
 export function useCases() {
   const ctx = useContext(CasesContext);
-  if (!ctx) throw new Error("useCases must be used within CasesProvider");
+  if (!ctx) {
+    throw new Error("useCases must be used within CasesProvider");
+  }
   return ctx;
 }

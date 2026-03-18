@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./index.css";
 
 import Layout from "./components/Layout";
+import { AuthProvider } from "./context/AuthContext";
 import { CasesProvider } from "./context/CasesContext";
 
 // Pages
@@ -20,6 +21,7 @@ import Contact from "./pages/Contact";
 import CaseDetail from "./pages/CaseDetail";
 import CaseSummary from "./pages/CaseSummary";
 import BytProcedures from "./pages/BytProcedures";
+import Login from "./pages/Login";
 
 // Symptoms
 import SymptomsIndex from "./pages/symptoms/index";
@@ -56,94 +58,96 @@ import MoCA from "./calculators/MoCA";
 
 createRoot(document.getElementById("root")!).render(
   <BrowserRouter>
-    <CasesProvider>
-      <Routes>
-        <Route element={<Layout />}>
-          {/* Core */}
-          <Route path="/" element={<Home />} />
+    <AuthProvider>
+      <CasesProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            {/* Core */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
 
-          {/* Tools */}
-          <Route path="/tools" element={<Tools />} />
-          <Route path="/tools/:slug" element={<ToolPlaceholder />} />
+            {/* Tools */}
+            <Route path="/tools" element={<Tools />} />
+            <Route path="/tools/:slug" element={<ToolPlaceholder />} />
 
-          {/* Geriatric calculators */}
-          <Route
-            path="/calculators/geriatric-assessment"
-            element={<GeriatricAssessmentCalculator />}
-          />
-          <Route path="/calculators/katz-adl" element={<KatzADL />} />
-          <Route path="/calculators/lawton-iadl" element={<LawtonIADL />} />
-          <Route path="/calculators/gait-speed" element={<GaitSpeed />} />
-          <Route path="/calculators/grip-strength" element={<GripStrength />} />
-          <Route path="/calculators/mmse" element={<MMSE />} />
-          <Route path="/calculators/moca" element={<MoCA />} />
+            {/* Geriatric calculators */}
+            <Route
+              path="/calculators/geriatric-assessment"
+              element={<GeriatricAssessmentCalculator />}
+            />
+            <Route path="/calculators/katz-adl" element={<KatzADL />} />
+            <Route path="/calculators/lawton-iadl" element={<LawtonIADL />} />
+            <Route path="/calculators/gait-speed" element={<GaitSpeed />} />
+            <Route path="/calculators/grip-strength" element={<GripStrength />} />
+            <Route path="/calculators/mmse" element={<MMSE />} />
+            <Route path="/calculators/moca" element={<MoCA />} />
 
-          {/* Medication */}
-          <Route path="/dose-adjust" element={<DoseAdjust />} />
-          <Route
-            path="/medication/days-supply"
-            element={<MedicationDaysSupply />}
-          />
-          <Route path="/drug-interactions" element={<DrugInteractions />} />
+            {/* Medication */}
+            <Route path="/dose-adjust" element={<DoseAdjust />} />
+            <Route
+              path="/medication/days-supply"
+              element={<MedicationDaysSupply />}
+            />
+            <Route path="/drug-interactions" element={<DrugInteractions />} />
 
-          {/* Immunization */}
-          <Route path="/immunization" element={<Immunization />} />
+            {/* Immunization */}
+            <Route path="/immunization" element={<Immunization />} />
 
-          {/* Symptoms */}
-          <Route path="/symptoms" element={<SymptomsIndex />} />
-          <Route path="/symptoms/sot" element={<Sot />} />
-          <Route path="/symptoms/met-moi-ue-oai" element={<MetMoi />} />
-          <Route
-            path="/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan"
-            element={<CanNang />}
-          />
+            {/* Symptoms */}
+            <Route path="/symptoms" element={<SymptomsIndex />} />
+            <Route path="/symptoms/sot" element={<Sot />} />
+            <Route path="/symptoms/met-moi-ue-oai" element={<MetMoi />} />
+            <Route
+              path="/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan"
+              element={<CanNang />}
+            />
+            <Route path="/symptoms/dau-nguc" element={<DauNguc />} />
+            <Route path="/symptoms/kho-tho" element={<KhoTho />} />
+            <Route
+              path="/symptoms/hoi-hop-danh-trong-nguc"
+              element={<HoiHop />}
+            />
+            <Route path="/symptoms/ho" element={<Ho />} />
+            <Route path="/symptoms/phu-chan" element={<PhuChan />} />
 
-          <Route path="/symptoms/dau-nguc" element={<DauNguc />} />
-          <Route path="/symptoms/kho-tho" element={<KhoTho />} />
-          <Route
-            path="/symptoms/hoi-hop-danh-trong-nguc"
-            element={<HoiHop />}
-          />
-          <Route path="/symptoms/ho" element={<Ho />} />
-          <Route path="/symptoms/phu-chan" element={<PhuChan />} />
+            <Route path="/symptoms/dau-dau" element={<DauDau />} />
+            <Route
+              path="/symptoms/chong-mat-choang-vang"
+              element={<ChongMat />}
+            />
+            <Route path="/symptoms/mat-ngu" element={<MatNgu />} />
+            <Route path="/symptoms/buon-chan-lo-au" element={<TamTrang />} />
 
-          <Route path="/symptoms/dau-dau" element={<DauDau />} />
-          <Route
-            path="/symptoms/chong-mat-choang-vang"
-            element={<ChongMat />}
-          />
-          <Route path="/symptoms/mat-ngu" element={<MatNgu />} />
-          <Route path="/symptoms/buon-chan-lo-au" element={<TamTrang />} />
+            <Route path="/symptoms/dau-bung" element={<DauBung />} />
+            <Route
+              path="/symptoms/roi-loan-tieu-hoa"
+              element={<RoiLoanTieuHoa />}
+            />
+            <Route path="/symptoms/buon-non-non" element={<BuonNon />} />
+            <Route path="/symptoms/vang-da" element={<VangDa />} />
 
-          <Route path="/symptoms/dau-bung" element={<DauBung />} />
-          <Route
-            path="/symptoms/roi-loan-tieu-hoa"
-            element={<RoiLoanTieuHoa />}
-          />
-          <Route path="/symptoms/buon-non-non" element={<BuonNon />} />
-          <Route path="/symptoms/vang-da" element={<VangDa />} />
+            <Route path="/symptoms/tieu-buot-tieu-rat" element={<TieuBuot />} />
+            <Route path="/symptoms/tieu-mau" element={<TieuMau />} />
 
-          <Route path="/symptoms/tieu-buot-tieu-rat" element={<TieuBuot />} />
-          <Route path="/symptoms/tieu-mau" element={<TieuMau />} />
+            <Route path="/symptoms/dau-lung" element={<DauLung />} />
+            <Route path="/symptoms/dau-khop" element={<DauKhop />} />
+            <Route path="/symptoms/ngua-ton-thuong-da" element={<DaLieu />} />
 
-          <Route path="/symptoms/dau-lung" element={<DauLung />} />
-          <Route path="/symptoms/dau-khop" element={<DauKhop />} />
-          <Route path="/symptoms/ngua-ton-thuong-da" element={<DaLieu />} />
+            {/* References */}
+            <Route path="/icd10" element={<ICD10 />} />
 
-          {/* References */}
-          <Route path="/icd10" element={<ICD10 />} />
+            {/* BYT Procedures */}
+            <Route path="/byt-procedures" element={<BytProcedures />} />
 
-          {/* BYT Procedures */}
-          <Route path="/byt-procedures" element={<BytProcedures />} />
+            {/* Contact */}
+            <Route path="/contact" element={<Contact />} />
 
-          {/* Contact */}
-          <Route path="/contact" element={<Contact />} />
-
-          {/* Cases */}
-          <Route path="/case-summary" element={<CaseSummary />} />
-          <Route path="/cases/:caseId" element={<CaseDetail />} />
-        </Route>
-      </Routes>
-    </CasesProvider>
+            {/* Cases */}
+            <Route path="/case-summary" element={<CaseSummary />} />
+            <Route path="/cases/:caseId" element={<CaseDetail />} />
+          </Route>
+        </Routes>
+      </CasesProvider>
+    </AuthProvider>
   </BrowserRouter>
 );
