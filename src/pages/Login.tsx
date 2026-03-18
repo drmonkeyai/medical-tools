@@ -65,7 +65,7 @@ export default function Login() {
         </h1>
 
         <p style={{ marginTop: 10, marginBottom: 20, color: "#64748b" }}>
-          Đăng nhập bằng tài khoản Supabase của bạn.
+          Đăng nhập bằng tài khoản Hổ trợ bác sĩ của bạn.
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
