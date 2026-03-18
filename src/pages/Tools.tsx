@@ -1,6 +1,6 @@
 // src/pages/Tools.tsx
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { specialties, type Specialty, type Tool } from "../data/tools";
 
 const STORAGE_KEY = "hotrobacsi:favTools:v1";
@@ -481,6 +481,8 @@ function FavoritesModal(props: {
 }
 
 export default function Tools() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const allTools = useMemo(() => specialties.flatMap((s) => s.tools), []);
 
   const toolMap = useMemo(() => {
@@ -536,8 +538,30 @@ export default function Tools() {
     });
   }
 
-  const [specialtyId, setSpecialtyId] = useState<string>("all");
-  const [query, setQuery] = useState<string>("");
+  const [specialtyId, setSpecialtyId] = useState<string>(
+    searchParams.get("specialty") || "all"
+  );
+  const [query, setQuery] = useState<string>(searchParams.get("q") || "");
+
+  useEffect(() => {
+    const nextQ = searchParams.get("q") || "";
+    const nextSpecialty = searchParams.get("specialty") || "all";
+    setQuery(nextQ);
+    setSpecialtyId(nextSpecialty);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+
+    if (query.trim()) next.set("q", query.trim());
+    if (specialtyId !== "all") next.set("specialty", specialtyId);
+
+    const current = searchParams.toString();
+    const upcoming = next.toString();
+    if (current !== upcoming) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [query, specialtyId, setSearchParams, searchParams]);
 
   const filteredSpecialties = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -566,7 +590,9 @@ export default function Tools() {
         <div className="calcHeader">
           <div>
             <h1 className="calcTitle">Công cụ tính toán hỗ trợ lâm sàng</h1>
-            <div className="calcSub"></div>
+            <div className="calcSub">
+              Tìm nhanh theo tên, mô tả hoặc mở theo chuyên khoa.
+            </div>
           </div>
         </div>
 
@@ -711,7 +737,16 @@ export default function Tools() {
           ))}
 
           {filteredSpecialties.length === 0 && (
-            <div style={{ color: "var(--muted)", fontWeight: 800 }}>
+            <div
+              style={{
+                color: "var(--muted)",
+                fontWeight: 800,
+                padding: 14,
+                borderRadius: 14,
+                border: "1px solid var(--line)",
+                background: "white",
+              }}
+            >
               Không tìm thấy công cụ phù hợp với bộ lọc hiện tại.
             </div>
           )}

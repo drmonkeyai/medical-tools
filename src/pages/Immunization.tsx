@@ -1,12 +1,13 @@
 // src/pages/Immunization.tsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { vaccines } from "../data/immunization";
 import type {
   ContraTag,
-  IndicationTag,
   TargetGroup,
-  VaccineCategory,
+  VaccineAccess,
   VaccineEntry,
+  VaccineKind,
+  VaccineProtocolSection,
 } from "../data/immunization";
 
 /* =========================
@@ -23,11 +24,16 @@ function toSearchText(v: VaccineEntry) {
     v.shortName ?? "",
     v.category,
     v.vaccineType,
+    v.kind,
+    v.access,
     ...(v.keywords ?? []),
     ...(v.targetGroups ?? []),
     ...(v.indications ?? []),
     ...(v.indicationNotes ?? []),
     ...(v.cautionNotes ?? []),
+    ...(v.scheduleSummary ?? []),
+    ...(v.protocols?.flatMap((p: VaccineProtocolSection) => [p.title, ...(p.items ?? [])]) ??
+      []),
   ]
     .join(" • ")
     .toLowerCase();
@@ -43,6 +49,21 @@ function cx(...parts: Array<string | false | undefined | null>) {
   return parts.filter(Boolean).join(" ");
 }
 
+function getProtocolLabel(kind: VaccineProtocolSection["kind"]) {
+  switch (kind) {
+    case "routine":
+      return "Cơ bản";
+    case "catchup":
+      return "Bắt kịp";
+    case "booster":
+      return "Nhắc lại";
+    case "special":
+      return "Đặc biệt";
+    default:
+      return "Khác";
+  }
+}
+
 /* =========================
    Small UI primitives
    ========================= */
@@ -53,29 +74,6 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="im-section-title">{children}</div>;
-}
-
-function Chip({
-  children,
-  active,
-  onClick,
-  title,
-}: {
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      className={cx("im-chip", active && "im-chip--active")}
-      onClick={onClick}
-      title={title}
-    >
-      {children}
-    </button>
-  );
 }
 
 function SmallBtn({
@@ -98,107 +96,313 @@ function SmallBtn({
   );
 }
 
+function ProtocolBlock({ protocol }: { protocol: VaccineProtocolSection }) {
+  return (
+    <div className="im-protocol">
+      <div className="im-protocol-head">
+        <div className="im-protocol-kind">{getProtocolLabel(protocol.kind)}</div>
+        <div className="im-protocol-title">{protocol.title}</div>
+      </div>
+
+      {protocol.summary ? <div className="im-protocol-summary">{protocol.summary}</div> : null}
+
+      {protocol.items?.length ? (
+        <ul className="im-list">
+          {protocol.items.map((item: string, idx: number) => (
+            <li key={idx}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <div className="im-muted">Chưa có chi tiết.</div>
+      )}
+
+      {protocol.note ? <div className="im-protocol-note">Lưu ý: {protocol.note}</div> : null}
+    </div>
+  );
+}
+
+function VaccineDetailModal({
+  vaccine,
+  onClose,
+}: {
+  vaccine: VaccineEntry | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!vaccine) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = oldOverflow;
+    };
+  }, [vaccine, onClose]);
+
+  if (!vaccine) return null;
+
+  return (
+    <div className="im-modal-backdrop" onClick={onClose}>
+      <div
+        className="im-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Chi tiết vaccine ${vaccine.name}`}
+      >
+        <div className="im-modal-head">
+          <div>
+            <div className="im-modal-title">
+              {vaccine.name}
+              {vaccine.shortName ? <span className="im-item-sub"> • {vaccine.shortName}</span> : null}
+            </div>
+
+            <div className="im-item-meta">
+              <Badge>{vaccine.access}</Badge>
+              <Badge>{vaccine.kind}</Badge>
+              <Badge>{vaccine.category}</Badge>
+            </div>
+          </div>
+
+          <button type="button" className="im-modal-close" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="im-modal-body">
+          <div className="im-chiprow">
+            <div className="im-chipbox">
+              <SectionTitle>Đối tượng</SectionTitle>
+              <div className="im-chips">
+                {vaccine.targetGroups.map((group: TargetGroup) => (
+                  <Badge key={group}>{group}</Badge>
+                ))}
+              </div>
+            </div>
+
+            <div className="im-chipbox">
+              <SectionTitle>Loại vắc xin</SectionTitle>
+              <div className="im-chips">
+                <Badge>{vaccine.vaccineType}</Badge>
+              </div>
+            </div>
+          </div>
+
+          {vaccine.scheduleSummary?.length ? (
+            <div className="im-summary">
+              <SectionTitle>Lịch cơ bản</SectionTitle>
+              <div className="im-summary-list">
+                {vaccine.scheduleSummary.map((summary: string, idx: number) => (
+                  <Badge key={idx}>{summary}</Badge>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="im-grid" style={{ marginTop: 12 }}>
+            <div className="im-panel">
+              <SectionTitle>Diễn giải chỉ định</SectionTitle>
+              {vaccine.indicationNotes?.length ? (
+                <ul className="im-list">
+                  {vaccine.indicationNotes.map((note: string, idx: number) => (
+                    <li key={idx}>{note}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="im-muted">Chưa có.</div>
+              )}
+            </div>
+
+            <div className="im-panel">
+              <SectionTitle>Chống chỉ định / hoãn</SectionTitle>
+              {vaccine.contraindications?.length ? (
+                <ul className="im-list">
+                  {vaccine.contraindications.map((contra: ContraTag) => (
+                    <li key={contra}>{contra}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="im-muted">Chưa có.</div>
+              )}
+            </div>
+
+            <div className="im-panel">
+              <SectionTitle>Lưu ý / thận trọng</SectionTitle>
+              {vaccine.cautionNotes?.length ? (
+                <ul className="im-list">
+                  {vaccine.cautionNotes.map((note: string, idx: number) => (
+                    <li key={idx}>{note}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="im-muted">Chưa có.</div>
+              )}
+            </div>
+
+            <div className="im-panel">
+              <SectionTitle>Lịch tiêm dạng mốc</SectionTitle>
+              {vaccine.schedule?.length ? (
+                <div className="im-schedule">
+                  {vaccine.schedule.map(
+                    (
+                      scheduleItem: { label: string; when: string; note?: string },
+                      idx: number
+                    ) => (
+                      <div key={idx} className="im-schedule-item">
+                        <div className="im-schedule-left">
+                          <b>{scheduleItem.label}</b>
+                          <div className="im-muted">{scheduleItem.when}</div>
+                        </div>
+                        {scheduleItem.note ? (
+                          <div className="im-schedule-note">{scheduleItem.note}</div>
+                        ) : null}
+                      </div>
+                    )
+                  )}
+                </div>
+              ) : (
+                <div className="im-muted">Chưa có.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="im-protocols-wrap">
+            <SectionTitle>Phác đồ và lịch tiêm</SectionTitle>
+            {vaccine.protocols?.length ? (
+              <div className="im-protocol-grid">
+                {vaccine.protocols.map((protocol: VaccineProtocolSection, idx: number) => (
+                  <ProtocolBlock key={`${vaccine.id}-${idx}`} protocol={protocol} />
+                ))}
+              </div>
+            ) : (
+              <div className="im-muted">Chưa có phác đồ chi tiết.</div>
+            )}
+          </div>
+
+          <div className="im-ref">
+            <SectionTitle>Nguồn tham khảo</SectionTitle>
+            {vaccine.references?.length ? (
+              <ul className="im-list">
+                {vaccine.references.map(
+                  (
+                    ref: { title: string; year?: number; note?: string },
+                    idx: number
+                  ) => (
+                    <li key={idx}>
+                      {ref.title}
+                      {ref.year ? ` (${ref.year})` : ""}
+                      {ref.note ? ` — ${ref.note}` : ""}
+                    </li>
+                  )
+                )}
+              </ul>
+            ) : (
+              <div className="im-muted">Chưa có.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* =========================
    Page
    ========================= */
 
-type AnyCategory = VaccineCategory | "all";
 type AnyTarget = TargetGroup | "all";
-type AnyIndication = IndicationTag | "any";
 type AnyContra = ContraTag | "any";
+type AnyAccess = "all" | VaccineAccess;
+type AnyKind = "all" | VaccineKind;
 
 export default function Immunization() {
-  // Filters
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState<AnyCategory>("all");
   const [target, setTarget] = useState<AnyTarget>("all");
-  const [needIndication, setNeedIndication] = useState<AnyIndication>("any");
   const [hasContra, setHasContra] = useState<AnyContra>("any");
-
-  // Quick toggles (optional)
-  const [onlyLive, setOnlyLive] = useState(false); // chỉ vắc xin sống
-  const [onlyInactivated, setOnlyInactivated] = useState(false); // chỉ vắc xin bất hoạt
-
-  // Open detail
-  const [openId, setOpenId] = useState<string | null>(null);
-
-  // Options from data
-  const categoryOptions = useMemo(
-    () =>
-      ["all", ...uniq(vaccines.map((v) => v.category))] as ReadonlyArray<
-        AnyCategory
-      >,
-    []
-  );
+  const [access, setAccess] = useState<AnyAccess>("all");
+  const [kind, setKind] = useState<AnyKind>("all");
+  const [selectedVaccine, setSelectedVaccine] = useState<VaccineEntry | null>(null);
 
   const targetOptions = useMemo(() => {
-    const all = vaccines.flatMap((v) => v.targetGroups);
-    return ["all", ...uniq(all)] as ReadonlyArray<AnyTarget>;
-  }, []);
-
-  const indicationOptions = useMemo(() => {
-    const all = vaccines.flatMap((v) => v.indications);
-    return ["any", ...uniq(all)] as ReadonlyArray<AnyIndication>;
+    const allTargets = vaccines.flatMap((v: VaccineEntry) => v.targetGroups);
+    return ["all", ...uniq(allTargets)] as ReadonlyArray<AnyTarget>;
   }, []);
 
   const contraOptions = useMemo(() => {
-    const all = vaccines.flatMap((v) => v.contraindications);
-    return ["any", ...uniq(all)] as ReadonlyArray<AnyContra>;
+    const allContras = vaccines.flatMap((v: VaccineEntry) => v.contraindications);
+    return ["any", ...uniq(allContras)] as ReadonlyArray<AnyContra>;
   }, []);
+
+  const accessOptions: ReadonlyArray<AnyAccess> = [
+    "all",
+    "Tiêm chủng mở rộng",
+    "Dịch vụ",
+  ];
+
+  const kindOptions: ReadonlyArray<AnyKind> = [
+    "all",
+    "Sống giảm độc lực",
+    "Bất hoạt / giải độc tố / tái tổ hợp / liên hợp",
+    "Khác",
+  ];
 
   const filtered = useMemo(() => {
     let list = vaccines.slice();
 
-    // search
-    list = list.filter((v) => matchQuery(v, q));
+    list = list.filter((v: VaccineEntry) => matchQuery(v, q));
 
-    // category
-    if (category !== "all") list = list.filter((v) => v.category === category);
-
-    // target
-    if (target !== "all") list = list.filter((v) => v.targetGroups.includes(target));
-
-    // indication
-    if (needIndication !== "any")
-      list = list.filter((v) => v.indications.includes(needIndication));
-
-    // contraindication
-    if (hasContra !== "any")
-      list = list.filter((v) => v.contraindications.includes(hasContra));
-
-    // vaccineType toggles
-    if (onlyLive && !onlyInactivated) {
-      list = list.filter((v) => v.vaccineType.toLowerCase().includes("sống"));
+    if (target !== "all") {
+      list = list.filter((v: VaccineEntry) => v.targetGroups.includes(target));
     }
-    if (onlyInactivated && !onlyLive) {
-      list = list.filter((v) => v.vaccineType.toLowerCase().includes("bất hoạt"));
+
+    if (hasContra !== "any") {
+      list = list.filter((v: VaccineEntry) => v.contraindications.includes(hasContra));
+    }
+
+    if (access !== "all") {
+      list = list.filter((v: VaccineEntry) => v.access === access);
+    }
+
+    if (kind !== "all") {
+      list = list.filter((v: VaccineEntry) => v.kind === kind);
     }
 
     return list;
-  }, [q, category, target, needIndication, hasContra, onlyLive, onlyInactivated]);
+  }, [q, target, hasContra, access, kind]);
+
+  const totalExpanded = useMemo(
+    () => vaccines.filter((v: VaccineEntry) => v.access === "Tiêm chủng mở rộng").length,
+    []
+  );
+
+  const totalService = useMemo(
+    () => vaccines.filter((v: VaccineEntry) => v.access === "Dịch vụ").length,
+    []
+  );
 
   const reset = () => {
     setQ("");
-    setCategory("all");
     setTarget("all");
-    setNeedIndication("any");
     setHasContra("any");
-    setOnlyLive(false);
-    setOnlyInactivated(false);
-    setOpenId(null);
+    setAccess("all");
+    setKind("all");
+    setSelectedVaccine(null);
   };
-
-  const toggleOpen = (id: string) => setOpenId((prev) => (prev === id ? null : id));
 
   return (
     <div className="im-page">
-      {/* Header */}
       <div className="im-head">
         <div className="im-head-left">
-          <h1 className="im-title">Hướng dẫn tiêm chủng (tính năng đang phát triển)</h1>
+          <h1 className="im-title">Hướng dẫn tiêm chủng</h1>
           <p className="im-sub">
-            Tra cứu nhanh theo <b>vắc xin</b> / <b>đối tượng</b> / <b>chỉ định</b> /
-            <b> chống chỉ định</b>.
+            Tra cứu nhanh theo <b>vắc xin</b> / <b>đối tượng</b> / <b>chống chỉ định</b> /{" "}
+            <b>loại vắc xin</b> / <b>tiêm chủng mở rộng - dịch vụ</b>.
             <span className="im-note">
               {" "}
               *Không thay thế hướng dẫn chính thức và quyết định lâm sàng.
@@ -211,32 +415,16 @@ export default function Immunization() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="im-card im-filters">
-        <div className="im-row">
-          <div className="im-field im-field--grow">
+        <div className="im-filter-grid">
+          <div className="im-field im-field--search">
             <label className="im-label">Tìm kiếm</label>
             <input
               className="im-input"
-              placeholder="VD: cúm, MMR, viêm gan B, influenza..."
+              placeholder="VD: cúm, MMR, viêm gan B, phế cầu, rota..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-          </div>
-
-          <div className="im-field">
-            <label className="im-label">Phân loại</label>
-            <select
-              className="im-select"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as AnyCategory)}
-            >
-              {categoryOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c === "all" ? "Tất cả" : c}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div className="im-field">
@@ -246,235 +434,145 @@ export default function Immunization() {
               value={target}
               onChange={(e) => setTarget(e.target.value as AnyTarget)}
             >
-              {targetOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t === "all" ? "Tất cả" : t}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="im-row">
-          <div className="im-field">
-            <label className="im-label">Chỉ định (lọc theo)</label>
-            <select
-              className="im-select"
-              value={needIndication}
-              onChange={(e) => setNeedIndication(e.target.value as AnyIndication)}
-            >
-              {indicationOptions.map((i) => (
-                <option key={i} value={i}>
-                  {i === "any" ? "Bất kỳ" : i}
+              {targetOptions.map((item: AnyTarget) => (
+                <option key={item} value={item}>
+                  {item === "all" ? "Tất cả" : item}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="im-field">
-            <label className="im-label">Chống chỉ định / hoãn (lọc theo)</label>
+            <label className="im-label">Chống chỉ định / hoãn</label>
             <select
               className="im-select"
               value={hasContra}
               onChange={(e) => setHasContra(e.target.value as AnyContra)}
             >
-              {contraOptions.map((c) => (
-                <option key={c} value={c}>
-                  {c === "any" ? "Bất kỳ" : c}
+              {contraOptions.map((item: AnyContra) => (
+                <option key={item} value={item}>
+                  {item === "any" ? "Bất kỳ" : item}
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="im-field im-field--right">
-            <label className="im-label">Bộ lọc nhanh</label>
-            <div className="im-quick">
-              <Chip
-                active={onlyLive}
-                onClick={() => {
-                  setOnlyLive((v) => !v);
-                  if (!onlyLive) setOnlyInactivated(false);
-                }}
-                title="Chỉ hiện vắc xin sống giảm độc lực"
-              >
-                Vắc xin sống
-              </Chip>
-              <Chip
-                active={onlyInactivated}
-                onClick={() => {
-                  setOnlyInactivated((v) => !v);
-                  if (!onlyInactivated) setOnlyLive(false);
-                }}
-                title="Chỉ hiện vắc xin bất hoạt"
-              >
-                Bất hoạt
-              </Chip>
-              <span className="im-count">
-                Kết quả: <b>{filtered.length}</b> / {vaccines.length}
-              </span>
-            </div>
+          <div className="im-field">
+            <label className="im-label">Loại vắc xin</label>
+            <select
+              className="im-select"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as AnyKind)}
+            >
+              {kindOptions.map((item: AnyKind) => (
+                <option key={item} value={item}>
+                  {item === "all" ? "Tất cả" : item}
+                </option>
+              ))}
+            </select>
           </div>
+
+          <div className="im-field">
+            <label className="im-label">Hình thức</label>
+            <select
+              className="im-select"
+              value={access}
+              onChange={(e) => setAccess(e.target.value as AnyAccess)}
+            >
+              {accessOptions.map((item: AnyAccess) => (
+                <option key={item} value={item}>
+                  {item === "all" ? "Tất cả" : item}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="im-filter-foot">
+          <div className="im-foot-left">
+            <Badge>TCMR: {totalExpanded}</Badge>
+            <Badge>Dịch vụ: {totalService}</Badge>
+            <Badge>Tổng: {vaccines.length}</Badge>
+          </div>
+
+          <span className="im-count">
+            Kết quả: <b>{filtered.length}</b> / {vaccines.length}
+          </span>
         </div>
       </div>
 
-      {/* Results */}
       <div className="im-results">
         {filtered.length === 0 ? (
           <div className="im-card im-empty">
             Không có kết quả phù hợp. Thử đổi bộ lọc hoặc từ khóa.
           </div>
         ) : (
-          filtered.map((v) => {
-            const opened = openId === v.id;
-
-            return (
-              <div key={v.id} className="im-card im-item">
-                <div className="im-item-head">
-                  <div className="im-item-left">
-                    <div className="im-item-title">
-                      {v.name}
-                      {v.shortName ? <span className="im-item-sub"> • {v.shortName}</span> : null}
-                    </div>
-
-                    <div className="im-item-meta">
-                      <Badge>{v.category}</Badge>
-                      <Badge>{v.vaccineType}</Badge>
-                    </div>
+          filtered.map((v: VaccineEntry) => (
+            <div key={v.id} className="im-card im-item">
+              <div className="im-item-head">
+                <div className="im-item-left">
+                  <div className="im-item-title">
+                    {v.name}
+                    {v.shortName ? <span className="im-item-sub"> • {v.shortName}</span> : null}
                   </div>
 
-                  <div className="im-item-right">
-                    <SmallBtn primary onClick={() => toggleOpen(v.id)}>
-                      {opened ? "Thu gọn" : "Xem chi tiết"}
-                    </SmallBtn>
+                  <div className="im-item-meta">
+                    <Badge>{v.access}</Badge>
+                    <Badge>{v.kind}</Badge>
+                    <Badge>{v.category}</Badge>
                   </div>
                 </div>
 
-                {/* chips row */}
-                <div className="im-chiprow">
-                  <div className="im-chipbox">
-                    <SectionTitle>Đối tượng</SectionTitle>
-                    <div className="im-chips">
-                      {v.targetGroups.slice(0, 7).map((t) => (
-                        <Chip
-                          key={t}
-                          active={target !== "all" && target === t}
-                          onClick={() => setTarget(target === t ? "all" : t)}
-                        >
-                          {t}
-                        </Chip>
-                      ))}
-                      {v.targetGroups.length > 7 ? (
-                        <span className="im-more">+{v.targetGroups.length - 7}…</span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="im-chipbox">
-                    <SectionTitle>Chỉ định</SectionTitle>
-                    <div className="im-chips">
-                      {v.indications.map((i) => (
-                        <Chip
-                          key={i}
-                          active={needIndication !== "any" && needIndication === i}
-                          onClick={() => setNeedIndication(needIndication === i ? "any" : i)}
-                        >
-                          {i}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
+                <div className="im-item-right">
+                  <SmallBtn primary onClick={() => setSelectedVaccine(v)}>
+                    Xem chi tiết
+                  </SmallBtn>
                 </div>
-
-                {/* details */}
-                {opened ? (
-                  <div className="im-detail">
-                    <div className="im-grid">
-                      <div className="im-panel">
-                        <SectionTitle>Diễn giải chỉ định</SectionTitle>
-                        {v.indicationNotes?.length ? (
-                          <ul className="im-list">
-                            {v.indicationNotes.map((x, idx) => (
-                              <li key={idx}>{x}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="im-muted">Chưa có.</div>
-                        )}
-                      </div>
-
-                      <div className="im-panel">
-                        <SectionTitle>Chống chỉ định / hoãn</SectionTitle>
-                        {v.contraindications?.length ? (
-                          <ul className="im-list">
-                            {v.contraindications.map((x) => (
-                              <li key={x}>{x}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="im-muted">Chưa có.</div>
-                        )}
-                      </div>
-
-                      <div className="im-panel">
-                        <SectionTitle>Lưu ý / thận trọng</SectionTitle>
-                        {v.cautionNotes?.length ? (
-                          <ul className="im-list">
-                            {v.cautionNotes.map((x, idx) => (
-                              <li key={idx}>{x}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="im-muted">Chưa có.</div>
-                        )}
-                      </div>
-
-                      <div className="im-panel">
-                        <SectionTitle>Lịch tiêm (khung gợi ý)</SectionTitle>
-                        {v.schedule?.length ? (
-                          <div className="im-schedule">
-                            {v.schedule.map((s, idx) => (
-                              <div key={idx} className="im-schedule-item">
-                                <div className="im-schedule-left">
-                                  <b>{s.label}</b>
-                                  <div className="im-muted">{s.when}</div>
-                                </div>
-                                {s.note ? <div className="im-schedule-note">{s.note}</div> : null}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="im-muted">Chưa có.</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="im-ref">
-                      <SectionTitle>Nguồn tham khảo</SectionTitle>
-                      {v.references?.length ? (
-                        <ul className="im-list">
-                          {v.references.map((r, idx) => (
-                            <li key={idx}>
-                              {r.title}
-                              {r.year ? ` (${r.year})` : ""}
-                              {r.note ? ` — ${r.note}` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="im-muted">
-                          Chưa có. Bạn nên điền nguồn (Bộ Y tế/WHO/CDC… theo hướng bạn chọn).
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
               </div>
-            );
-          })
+
+              <div className="im-chiprow">
+                <div className="im-chipbox">
+                  <SectionTitle>Đối tượng</SectionTitle>
+                  <div className="im-chips">
+                    {v.targetGroups.slice(0, 7).map((group: TargetGroup) => (
+                      <Badge key={group}>{group}</Badge>
+                    ))}
+                    {v.targetGroups.length > 7 ? (
+                      <span className="im-more">+{v.targetGroups.length - 7}…</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="im-chipbox">
+                  <SectionTitle>Chống chỉ định nổi bật</SectionTitle>
+                  <div className="im-chips">
+                    {v.contraindications.slice(0, 4).map((contra: ContraTag) => (
+                      <Badge key={contra}>{contra}</Badge>
+                    ))}
+                    {v.contraindications.length > 4 ? (
+                      <span className="im-more">+{v.contraindications.length - 4}…</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              {v.scheduleSummary?.length ? (
+                <div className="im-summary">
+                  <SectionTitle>Lịch cơ bản</SectionTitle>
+                  <div className="im-summary-list">
+                    {v.scheduleSummary.map((summary: string, idx: number) => (
+                      <Badge key={idx}>{summary}</Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))
         )}
       </div>
 
-      {/* Styles scoped */}
+      <VaccineDetailModal vaccine={selectedVaccine} onClose={() => setSelectedVaccine(null)} />
+
       <style>{`
         .im-page{ display:block; }
 
@@ -493,8 +591,19 @@ export default function Immunization() {
           gap:16px;
           margin: 6px 0 14px;
         }
-        .im-title{ margin:0; font-size:28px; letter-spacing:-0.2px; }
-        .im-sub{ margin:6px 0 0; color: var(--muted); line-height:1.45; }
+
+        .im-title{
+          margin:0;
+          font-size:28px;
+          letter-spacing:-0.2px;
+        }
+
+        .im-sub{
+          margin:6px 0 0;
+          color: var(--muted);
+          line-height:1.45;
+        }
+
         .im-note{ color: var(--muted); }
 
         .im-btn{
@@ -506,32 +615,47 @@ export default function Immunization() {
           font-weight:800;
           font-size:13px;
         }
+
         .im-btn:hover{ filter: brightness(0.98); }
+
         .im-btn--primary{
           border-color: rgba(29,78,216,0.35);
           color: var(--primary);
           background: rgba(29,78,216,0.04);
         }
 
-        .im-filters{ margin-bottom: 12px; }
-        .im-row{
-          display:flex;
+        .im-filters{
+          margin-bottom: 12px;
+          padding: 16px;
+        }
+
+        .im-filter-grid{
+          display:grid;
+          grid-template-columns: 2fr 1fr 1fr;
           gap:12px;
           align-items:end;
-          flex-wrap:wrap;
         }
+
         .im-field{
           display:flex;
           flex-direction:column;
           gap:6px;
-          min-width: 220px;
-          flex: 1;
+          min-width:0;
         }
-        .im-field--grow{ flex: 2; min-width: 280px; }
-        .im-field--right{ flex: 2; min-width: 260px; margin-left:auto; }
 
-        .im-label{ font-size:12px; color: var(--muted); font-weight:800; }
-        .im-input, .im-select{
+        .im-field--search{
+          grid-column: span 1;
+        }
+
+        .im-label{
+          font-size:12px;
+          color: var(--muted);
+          font-weight:800;
+        }
+
+        .im-input,
+        .im-select{
+          width:100%;
           border:1px solid var(--line);
           border-radius:12px;
           padding:10px 12px;
@@ -539,43 +663,63 @@ export default function Immunization() {
           outline:none;
           background:#fff;
         }
-        .im-input:focus, .im-select:focus{
+
+        .im-input:focus,
+        .im-select:focus{
           border-color: rgba(29,78,216,0.5);
           box-shadow: 0 0 0 3px rgba(29,78,216,0.12);
         }
 
-        .im-quick{
+        .im-filter-foot{
+          margin-top:12px;
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          gap:12px;
+          flex-wrap:wrap;
+        }
+
+        .im-foot-left{
           display:flex;
           gap:8px;
           flex-wrap:wrap;
           align-items:center;
         }
+
         .im-count{
           color: var(--muted);
-          margin-left:6px;
           font-size:13px;
         }
 
-        .im-results{ display:flex; flex-direction:column; gap:12px; }
+        .im-results{
+          display:flex;
+          flex-direction:column;
+          gap:12px;
+        }
+
         .im-empty{ color: var(--muted); }
 
         .im-item{ padding:14px; }
+
         .im-item-head{
           display:flex;
           align-items:flex-start;
           justify-content:space-between;
           gap:12px;
         }
+
         .im-item-title{
           font-size:16px;
           font-weight:900;
           color: var(--text);
         }
+
         .im-item-sub{
           font-weight:800;
           color: var(--muted);
           font-size:14px;
         }
+
         .im-item-meta{
           display:flex;
           gap:8px;
@@ -602,8 +746,9 @@ export default function Immunization() {
           gap:12px;
           margin-top: 12px;
         }
-        @media (max-width: 900px){
-          .im-chiprow{ grid-template-columns: 1fr; }
+
+        .im-chipbox{
+          min-width:0;
         }
 
         .im-section-title{
@@ -612,43 +757,36 @@ export default function Immunization() {
           color: var(--muted);
           margin-bottom:6px;
         }
+
         .im-chips{
           display:flex;
           gap:8px;
           flex-wrap:wrap;
           align-items:center;
         }
-        .im-chip{
-          border:1px solid var(--line);
-          background:#fff;
-          padding:6px 10px;
-          border-radius:999px;
-          cursor:pointer;
-          font-size:12px;
-          color: var(--text);
-          font-weight:900;
-        }
-        .im-chip:hover{ filter: brightness(0.985); }
-        .im-chip--active{
-          border-color: var(--primary);
-          color: var(--primary);
-          background: rgba(29,78,216,0.04);
-        }
-        .im-more{ color: var(--muted); font-size:12px; font-weight:800; }
 
-        .im-detail{
+        .im-more{
+          color: var(--muted);
+          font-size:12px;
+          font-weight:800;
+        }
+
+        .im-summary{
           margin-top: 12px;
-          border-top:1px dashed var(--line);
+          border-top: 1px dashed var(--line);
           padding-top: 12px;
+        }
+
+        .im-summary-list{
+          display:flex;
+          gap:8px;
+          flex-wrap:wrap;
         }
 
         .im-grid{
           display:grid;
           grid-template-columns: 1fr 1fr;
           gap:14px;
-        }
-        @media (max-width: 900px){
-          .im-grid{ grid-template-columns: 1fr; }
         }
 
         .im-panel{
@@ -664,14 +802,20 @@ export default function Immunization() {
           color: var(--text);
           line-height: 1.5;
         }
+
         .im-list li{ margin: 6px 0; }
-        .im-muted{ color: var(--muted); font-weight:700; }
+
+        .im-muted{
+          color: var(--muted);
+          font-weight:700;
+        }
 
         .im-schedule{
           display:flex;
           flex-direction:column;
           gap:10px;
         }
+
         .im-schedule-item{
           border:1px solid var(--line);
           border-radius:14px;
@@ -682,19 +826,166 @@ export default function Immunization() {
           align-items:flex-start;
           background:#fff;
         }
+
         .im-schedule-left{
           display:flex;
           flex-direction:column;
           gap:2px;
         }
+
         .im-schedule-note{
           color: var(--muted);
           font-size:12px;
           margin-top:2px;
           font-weight:800;
+          max-width: 40%;
+          text-align:right;
+        }
+
+        .im-protocols-wrap{
+          margin-top: 14px;
+        }
+
+        .im-protocol-grid{
+          display:grid;
+          grid-template-columns: 1fr 1fr;
+          gap:12px;
+        }
+
+        .im-protocol{
+          border:1px solid var(--line);
+          border-radius:14px;
+          padding:12px;
+          background:#fff;
+        }
+
+        .im-protocol-head{
+          display:flex;
+          gap:8px;
+          align-items:center;
+          margin-bottom:8px;
+          flex-wrap:wrap;
+        }
+
+        .im-protocol-kind{
+          border:1px solid rgba(29,78,216,0.18);
+          background:rgba(29,78,216,0.06);
+          color:var(--primary);
+          padding:4px 8px;
+          border-radius:999px;
+          font-size:11px;
+          font-weight:900;
+        }
+
+        .im-protocol-title{
+          font-size:14px;
+          font-weight:900;
+          color:var(--text);
+        }
+
+        .im-protocol-summary{
+          color: var(--muted);
+          font-size:13px;
+          line-height:1.45;
+          margin-bottom:8px;
+          font-weight:700;
+        }
+
+        .im-protocol-note{
+          margin-top:8px;
+          font-size:12px;
+          color: var(--muted);
+          font-weight:800;
         }
 
         .im-ref{ margin-top: 12px; }
+
+        .im-modal-backdrop{
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.48);
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding: 18px;
+          z-index: 1000;
+        }
+
+        .im-modal{
+          width:min(1080px, 100%);
+          max-height:min(88vh, 100%);
+          overflow:auto;
+          background: var(--card);
+          border:1px solid var(--line);
+          border-radius:20px;
+          box-shadow: 0 24px 80px rgba(2, 6, 23, 0.28);
+        }
+
+        .im-modal-head{
+          position: sticky;
+          top: 0;
+          z-index: 2;
+          display:flex;
+          justify-content:space-between;
+          gap:12px;
+          align-items:flex-start;
+          padding:16px 16px 12px;
+          border-bottom:1px solid var(--line);
+          background: var(--card);
+          border-top-left-radius:20px;
+          border-top-right-radius:20px;
+        }
+
+        .im-modal-title{
+          font-size:20px;
+          font-weight:900;
+          color: var(--text);
+        }
+
+        .im-modal-close{
+          width:40px;
+          height:40px;
+          border-radius:12px;
+          border:1px solid var(--line);
+          background:#fff;
+          cursor:pointer;
+          font-size:24px;
+          line-height:1;
+        }
+
+        .im-modal-body{
+          padding:16px;
+        }
+
+        @media (max-width: 1100px){
+          .im-filter-grid{
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+
+        @media (max-width: 900px){
+          .im-chiprow,
+          .im-grid,
+          .im-protocol-grid{
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 720px){
+          .im-filter-grid{
+            grid-template-columns: 1fr;
+          }
+
+          .im-item-head{
+            flex-direction:column;
+            align-items:stretch;
+          }
+
+          .im-modal{
+            width:100%;
+            max-height:92vh;
+          }
+        }
       `}</style>
     </div>
   );
