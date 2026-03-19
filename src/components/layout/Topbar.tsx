@@ -1,8 +1,8 @@
 import type { CSSProperties } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useCases } from "../context/CasesContext";
-import { useAuth } from "../context/AuthContext";
-import CaseTabs from "./CaseTabs";
+import { useCases } from "../../context/CasesContext";
+import { useAuth } from "../../context/AuthContext";
+import CaseTabs from "../case/CaseTabs";
 
 type TopbarProps = {
   onToggleSidebar?: () => void;
@@ -23,12 +23,9 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
     }
   }
 
-  // HÀM MỚI THÊM: Xử lý logic khi bấm nút "Tạo ca mới"
   function handleCreateCaseClick() {
     if (!isAuthenticated) {
       alert("Bác sĩ cần đăng nhập để sử dụng tính năng tạo ca.");
-      // Tùy chọn: Bạn có thể bỏ comment dòng dưới nếu muốn tự động chuyển hướng người dùng đến trang đăng nhập sau khi họ bấm OK
-      // navigate("/login");
       return;
     }
     openNewCaseModal();
@@ -87,7 +84,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
       <button
         className="tb__btn"
         type="button"
-        onClick={handleCreateCaseClick} // ĐÃ SỬA DÒNG NÀY: Gọi hàm mới thay vì gọi trực tiếp openNewCaseModal
+        onClick={handleCreateCaseClick}
         style={{
           ...simpleBtnStyle,
           background: "#2563eb",

@@ -1,13 +1,13 @@
 // src/components/ScorePopup.tsx
 import { useEffect, useMemo, useState } from "react";
-import type { RiskRegion, Sex } from "../calculators/score2Core";
+import type { RiskRegion, Sex } from "../../calculators/score2Core";
 import {
   calcSCORE2,
   calcSCORE2OP,
   calcSCORE2DIABETES,
   calcSCORE2ASIAN,
   clamp,
-} from "../calculators/score2Core";
+} from "../../calculators/score2Core";
 
 export type ScoreModel = "score2" | "score2-op" | "score2-diabetes" | "score2-asian";
 type RiskLevel = "low" | "moderate" | "high" | "very-high";

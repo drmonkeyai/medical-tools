@@ -2,9 +2,9 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 
-import "./index.css";
+import "./styles/index.css";
 
-import Layout from "./components/Layout";
+import Layout from "./components/layout/Layout";
 import { AuthProvider } from "./context/AuthContext";
 import { CasesProvider } from "./context/CasesContext";
 

@@ -1,8 +1,8 @@
 // src/components/RiskTargetsCard.tsx
 
 import { useMemo, useState } from "react";
-import type { RiskLevel } from "../calculators/riskBadge";
-import { riskBadgeClass, riskLabelVi } from "../calculators/riskBadge";
+import type { RiskLevel } from "../../calculators/riskBadge";
+import { riskBadgeClass, riskLabelVi } from "../../calculators/riskBadge";
 
 type Props = {
   riskLevel: RiskLevel;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { supabase } from "./lib/supabase";
-import "./App.css";
+import "./styles/App.css";
 
 function App() {
   const [message, setMessage] = useState("Chưa test");

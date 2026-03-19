@@ -1,13 +1,11 @@
-// src/components/CaseTabs.tsx
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCases } from "../context/CasesContext";
+import { useCases } from "../../context/CasesContext";
 
 function shortName(full: string) {
   const s = (full || "").trim();
   if (!s) return "Không tên";
   const parts = s.split(/\s+/).filter(Boolean);
-  // ưu tiên lấy 2 từ cuối để dễ nhận
   if (parts.length >= 2) return `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
   return parts[0];
 }
@@ -19,17 +17,15 @@ export default function CaseTabs() {
   const [openMore, setOpenMore] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
 
-  // ✅ active lên đầu, còn lại giữ thứ tự hiện tại
   const sorted = useMemo(() => {
     if (!cases.length) return [];
-    const active = cases.find((c) => c.id === activeCaseId) ?? null;
-    const others = cases.filter((c) => c.id !== activeCaseId);
+    const active = cases.find((c: any) => c.id === activeCaseId) ?? null;
+    const others = cases.filter((c: any) => c.id !== activeCaseId);
     return active ? [active, ...others] : others;
   }, [cases, activeCaseId]);
 
   if (!sorted.length) return null;
 
-  // ✅ hiển thị gọn: 1 active + tối đa 3 tab khác (tổng 4). Còn lại vào "+N"
   const INLINE_OTHERS = 3;
   const active = sorted[0];
   const others = sorted.slice(1);
@@ -55,7 +51,7 @@ export default function CaseTabs() {
     alignItems: "center",
     gap: 8,
     fontWeight: 900,
-    fontSize: 13, // ✅ nhỏ lại
+    fontSize: 13,
     whiteSpace: "nowrap",
   };
 
@@ -73,11 +69,9 @@ export default function CaseTabs() {
         display: "flex",
         alignItems: "center",
         gap: 8,
-        // ✅ quan trọng: không cho đè sang khu vực nút bên phải
         overflow: "hidden",
       }}
     >
-      {/* ✅ ACTIVE: hiển thị đầy đủ */}
       {active && (
         <button
           type="button"
@@ -129,7 +123,6 @@ export default function CaseTabs() {
         </button>
       )}
 
-      {/* ✅ INACTIVE: hiển thị rút gọn */}
       <div
         style={{
           display: "flex",
@@ -139,7 +132,7 @@ export default function CaseTabs() {
           flex: 1,
         }}
       >
-        {inlineOthers.map((c) => (
+        {inlineOthers.map((c: any) => (
           <button
             key={c.id}
             type="button"
@@ -147,7 +140,6 @@ export default function CaseTabs() {
             style={{
               ...chipBase,
               opacity: 0.96,
-              // ✅ nhỏ hơn nữa
               padding: "6px 9px",
               fontSize: 12.5,
             }}
@@ -183,7 +175,6 @@ export default function CaseTabs() {
         ))}
       </div>
 
-      {/* ✅ MORE: nếu còn nhiều ca thì gom vào +N */}
       {remaining.length > 0 && (
         <div ref={moreRef} style={{ position: "relative", flex: "0 0 auto" }}>
           <button
@@ -229,7 +220,7 @@ export default function CaseTabs() {
                 Các ca khác
               </div>
 
-              {remaining.map((c) => (
+              {remaining.map((c: any) => (
                 <button
                   key={c.id}
                   type="button"

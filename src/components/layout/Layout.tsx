@@ -3,7 +3,7 @@ import { Outlet } from "react-router-dom";
 import { useState } from "react";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
-import NewCaseModal from "./NewCaseModal";
+import NewCaseModal from "../case/NewCaseModal";
 
 export default function Layout() {
   const [sbOpen, setSbOpen] = useState(false);

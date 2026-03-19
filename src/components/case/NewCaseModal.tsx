@@ -1,6 +1,6 @@
 // src/components/NewCaseModal.tsx
 import { useMemo, useState } from "react";
-import { useCases, type Patient } from "../context/CasesContext";
+import { useCases, type Patient } from "../../context/CasesContext";
 
 function clampInt(v: number, min: number, max: number) {
   if (!Number.isFinite(v)) return min;

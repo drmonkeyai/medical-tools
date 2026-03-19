@@ -3,7 +3,7 @@ import { useCases } from "../context/CasesContext";
 import CalculatorTemplate, {
   CalculatorBox,
   CalculatorSection,
-} from "../components/CalculatorTemplate";
+} from "../components/calculator/CalculatorTemplate";
 
 function round2(x: number) {
   return Math.round(x * 100) / 100;

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import RiskTargetsCard from "../components/RiskTargetsCard";
+import RiskTargetsCard from "../components/calculator/RiskTargetsCard";
 import type { RiskLevel } from "./riskBadge";
 import { calcSCORE2DIABETES, type RiskRegion, type Sex, clamp } from "./score2Core";
 

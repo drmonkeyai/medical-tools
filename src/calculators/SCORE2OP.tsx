@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import RiskTargetsCard from "../components/RiskTargetsCard";
+import RiskTargetsCard from "../components/calculator/RiskTargetsCard";
 import type { RiskLevel } from "./riskBadge";
 import { calcSCORE2OP, type RiskRegion, type Sex, clamp } from "./score2Core";
 

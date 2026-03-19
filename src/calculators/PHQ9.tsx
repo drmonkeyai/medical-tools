@@ -3,7 +3,7 @@ import { useCases } from "../context/CasesContext";
 import CalculatorTemplate, {
   CalculatorBox,
   CalculatorSection,
-} from "../components/CalculatorTemplate";
+} from "../components/calculator/CalculatorTemplate";
 
 const QUESTIONS = [
   "Ít hứng thú hoặc ít thấy thích thú khi làm việc gì",

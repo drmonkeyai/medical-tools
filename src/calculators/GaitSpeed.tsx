@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import CalculatorTemplate, {
   CalculatorBox,
   CalculatorSection,
-} from "../components/CalculatorTemplate";
+} from "../components/calculator/CalculatorTemplate";
 
 function InputRow(props: {
   label: string;

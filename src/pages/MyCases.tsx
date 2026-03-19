@@ -36,10 +36,8 @@ export default function MyCases() {
   const [keyword, setKeyword] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // ca đang được chọn trong danh sách (1 click)
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
 
-  // popup chỉnh sửa
   const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editYob, setEditYob] = useState<number>(1990);
@@ -55,11 +53,11 @@ export default function MyCases() {
     const q = keyword.trim().toLowerCase();
     if (!q) return cases;
 
-    return cases.filter((c) => {
+    return cases.filter((c: any) => {
       const name = c.patient.name?.toLowerCase() ?? "";
       const yob = String(c.patient.yob ?? "");
       const sex = c.patient.sex?.toLowerCase() ?? "";
-      const resultsText = c.results.map((r) => r.tool.toLowerCase()).join(" ");
+      const resultsText = c.results.map((r: any) => r.tool.toLowerCase()).join(" ");
       return (
         name.includes(q) ||
         yob.includes(q) ||
@@ -69,7 +67,6 @@ export default function MyCases() {
     });
   }, [cases, keyword]);
 
-  // ĐÃ SỬA LỖI Ở ĐÂY: Chuyển hướng đến đúng route chi tiết ca bệnh
   async function handleOpenCase(id: string) {
     setActiveCaseId(id);
     navigate(`/cases/${id}`);
@@ -95,7 +92,7 @@ export default function MyCases() {
   }
 
   function openEditModal(id: string) {
-    const c = cases.find((item) => item.id === id);
+    const c = cases.find((item: any) => item.id === id);
     if (!c) return;
 
     setEditingCaseId(id);
@@ -269,7 +266,7 @@ export default function MyCases() {
           </div>
         ) : (
           <div style={{ maxHeight: "calc(100vh - 230px)", overflowY: "auto" }}>
-            {filteredCases.map((c, index) => {
+            {filteredCases.map((c: any, index: number) => {
               const isActive = c.id === activeCaseId;
               const isSelected = c.id === selectedCaseId;
               const latest = c.results?.[0];

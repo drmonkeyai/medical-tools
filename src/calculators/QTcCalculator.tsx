@@ -3,7 +3,7 @@ import { useCases } from "../context/CasesContext";
 import CalculatorTemplate, {
   CalculatorBox,
   CalculatorSection,
-} from "../components/CalculatorTemplate";
+} from "../components/calculator/CalculatorTemplate";
 
 type Sex = "male" | "female";
 type Method = "bazett" | "fridericia";

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCases } from "../context/CasesContext";
 
-import ScorePopup, { type ScoreModel, type ScorePopupResult } from "../components/ScorePopup";
+import ScorePopup, { type ScoreModel, type ScorePopupResult } from "../components/calculator/ScorePopup";
 import type { RiskRegion, Sex } from "./score2Core";
 
 type EscRisk = "low" | "moderate" | "high" | "very-high";
