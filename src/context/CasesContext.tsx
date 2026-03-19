@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
@@ -68,8 +74,6 @@ export type CasesContextValue = {
 
 const CasesContext = createContext<CasesContextValue | null>(null);
 
-const LS_ACTIVE = "medical_tools_active_case_v1";
-
 function safeParse<T>(s: string | null, fallback: T): T {
   if (!s) return fallback;
   try {
@@ -79,8 +83,32 @@ function safeParse<T>(s: string | null, fallback: T): T {
   }
 }
 
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
 function mapSexLabelToDbValue(sex: SexLabel): SexValue {
   return sex === "Nữ" ? "female" : "male";
+}
+
+function mapDbSexToLabel(sex?: string | null): SexLabel {
+  return sex === "female" ? "Nữ" : "Nam";
+}
+
+function buildActiveCaseStorageKey(userId?: string | null) {
+  return userId ? `medical_tools_active_case_${userId}` : "medical_tools_active_case_guest";
+}
+
+function mapDbResult(row: any): ToolResult {
+  return {
+    id: row.id,
+    tool: row.tool_type,
+    when: row.created_at,
+    inputs: row.input_json ?? {},
+    outputs: row.output_json ?? {},
+    summary: row.summary ?? undefined,
+  };
 }
 
 function mapDbCase(row: any, results: any[] = []): CaseItem {
@@ -90,37 +118,35 @@ function mapDbCase(row: any, results: any[] = []): CaseItem {
     patient: {
       name: row.patient_name ?? "",
       yob: row.patient_yob ?? new Date().getFullYear(),
-      sex: row.patient_sex === "female" ? "Nữ" : "Nam",
+      sex: mapDbSexToLabel(row.patient_sex),
       weightKg: row.patient_weight_kg ?? undefined,
       heightCm: row.patient_height_cm ?? undefined,
     },
-    results: Array.isArray(results)
-      ? results.map((r) => ({
-          id: r.id,
-          tool: r.tool_type,
-          when: r.created_at,
-          inputs: r.input_json ?? {},
-          outputs: r.output_json ?? {},
-          summary: r.summary ?? undefined,
-        }))
-      : [],
+    results: Array.isArray(results) ? results.map(mapDbResult) : [],
   };
 }
 
 export function CasesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuth();
 
+  const storageKey = useMemo(() => buildActiveCaseStorageKey(user?.id), [user?.id]);
+
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(() =>
-    safeParse<string | null>(localStorage.getItem(LS_ACTIVE), null)
+    safeParse<string | null>(localStorage.getItem("medical_tools_active_case_guest"), null)
   );
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem(LS_ACTIVE, JSON.stringify(activeCaseId));
-  }, [activeCaseId]);
+    const saved = safeParse<string | null>(localStorage.getItem(storageKey), null);
+    setActiveCaseId(saved);
+  }, [storageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, JSON.stringify(activeCaseId));
+  }, [storageKey, activeCaseId]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id) {
@@ -128,12 +154,12 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       setActiveCaseId(null);
       setPendingSave(null);
       setIsNewCaseModalOpen(false);
-      return;
     }
   }, [isAuthenticated, user?.id]);
 
   useEffect(() => {
     if (!activeCaseId) return;
+
     const exists = cases.some((c) => c.id === activeCaseId);
     if (!exists) {
       setActiveCaseId(cases[0]?.id ?? null);
@@ -157,6 +183,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       const { data: caseRows, error: caseError } = await supabase
         .from("cases")
         .select("*")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (caseError) throw caseError;
@@ -164,6 +191,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       const { data: resultRows, error: resultError } = await supabase
         .from("tool_results")
         .select("*")
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (resultError) throw resultError;
@@ -176,7 +204,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
         resultMap.set(row.case_id, arr);
       }
 
-      const mappedCases = (caseRows ?? []).map((row) =>
+      const mappedCases = (caseRows ?? []).map((row: any) =>
         mapDbCase(row, resultMap.get(row.id) ?? [])
       );
 
@@ -189,6 +217,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("REFRESH CASES ERROR:", error);
       setCases([]);
+      setActiveCaseId(null);
     } finally {
       setLoading(false);
     }
@@ -207,7 +236,11 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function closeCase(id: string) {
-    const { error } = await supabase.from("cases").delete().eq("id", id);
+    const { error } = await supabase
+      .from("cases")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user?.id ?? "");
 
     if (error) {
       console.error("DELETE CASE ERROR:", error);
@@ -231,17 +264,25 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Chưa đăng nhập");
     }
 
+    const normalizedPatient: Patient = {
+      name: patient.name.trim(),
+      yob: clampInt(patient.yob, 1900, new Date().getFullYear()),
+      sex: patient.sex,
+      weightKg: patient.weightKg,
+      heightCm: patient.heightCm,
+    };
+
     const { data: insertedCases, error } = await supabase
       .from("cases")
       .insert([
         {
           user_id: user.id,
-          title: patient.name ? `Ca - ${patient.name}` : "Ca mới",
-          patient_name: patient.name,
-          patient_yob: patient.yob,
-          patient_sex: mapSexLabelToDbValue(patient.sex),
-          patient_weight_kg: patient.weightKg ?? null,
-          patient_height_cm: patient.heightCm ?? null,
+          title: normalizedPatient.name ? `Ca - ${normalizedPatient.name}` : "Ca mới",
+          patient_name: normalizedPatient.name,
+          patient_yob: normalizedPatient.yob,
+          patient_sex: mapSexLabelToDbValue(normalizedPatient.sex),
+          patient_weight_kg: normalizedPatient.weightKg ?? null,
+          patient_height_cm: normalizedPatient.heightCm ?? null,
         },
       ])
       .select();
@@ -278,16 +319,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       const resultRow = insertedResults?.[0];
       if (resultRow) {
-        newCase.results = [
-          {
-            id: resultRow.id,
-            tool: resultRow.tool_type,
-            when: resultRow.created_at,
-            inputs: resultRow.input_json ?? {},
-            outputs: resultRow.output_json ?? {},
-            summary: resultRow.summary ?? undefined,
-          },
-        ];
+        newCase.results = [mapDbResult(resultRow)];
       }
     }
 
@@ -345,14 +377,15 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       prev.map((c) => {
         if (c.id !== activeCaseId) return c;
 
-        const item: ToolResult = {
-          id: created?.id,
-          tool: payload.tool,
-          when: created?.created_at ?? new Date().toISOString(),
-          inputs: payload.inputs,
-          outputs: payload.outputs,
-          summary: payload.summary,
-        };
+        const item: ToolResult = created
+          ? mapDbResult(created)
+          : {
+              tool: payload.tool,
+              when: new Date().toISOString(),
+              inputs: payload.inputs,
+              outputs: payload.outputs,
+              summary: payload.summary,
+            };
 
         return {
           ...c,
@@ -363,17 +396,26 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function updateCasePatient(id: string, patient: Patient) {
+    const normalizedPatient: Patient = {
+      name: patient.name.trim(),
+      yob: clampInt(patient.yob, 1900, new Date().getFullYear()),
+      sex: patient.sex,
+      weightKg: patient.weightKg,
+      heightCm: patient.heightCm,
+    };
+
     const { error } = await supabase
       .from("cases")
       .update({
-        title: patient.name ? `Ca - ${patient.name}` : "Ca mới",
-        patient_name: patient.name,
-        patient_yob: patient.yob,
-        patient_sex: mapSexLabelToDbValue(patient.sex),
-        patient_weight_kg: patient.weightKg ?? null,
-        patient_height_cm: patient.heightCm ?? null,
+        title: normalizedPatient.name ? `Ca - ${normalizedPatient.name}` : "Ca mới",
+        patient_name: normalizedPatient.name,
+        patient_yob: normalizedPatient.yob,
+        patient_sex: mapSexLabelToDbValue(normalizedPatient.sex),
+        patient_weight_kg: normalizedPatient.weightKg ?? null,
+        patient_height_cm: normalizedPatient.heightCm ?? null,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", user?.id ?? "");
 
     if (error) {
       console.error("UPDATE CASE PATIENT ERROR:", error);
@@ -383,13 +425,18 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     setCases((prev) =>
       prev.map((c) => {
         if (c.id !== id) return c;
-        return { ...c, patient: { ...patient } };
+        return {
+          ...c,
+          patient: { ...normalizedPatient },
+        };
       })
     );
   }
 
   function getCaseLabel(c: CaseItem, opts?: { compact?: boolean }) {
-    if (opts?.compact) return `${c.patient.name} • ${c.patient.yob}`;
+    if (opts?.compact) {
+      return `${c.patient.name} • ${c.patient.yob}`;
+    }
     return `${c.patient.name} • ${c.patient.yob} • ${c.patient.sex}`;
   }
 
@@ -399,27 +446,30 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     return getCaseLabel(activeCase, { compact: opts?.compact });
   }
 
-  const value: CasesContextValue = {
-    cases,
-    activeCaseId,
-    activeCase,
-    loading,
+  const value = useMemo<CasesContextValue>(
+    () => ({
+      cases,
+      activeCaseId,
+      activeCase,
+      loading,
 
-    setActiveCaseId,
-    closeCase,
+      setActiveCaseId,
+      closeCase,
 
-    isNewCaseModalOpen,
-    openNewCaseModal,
-    closeNewCaseModal,
+      isNewCaseModalOpen,
+      openNewCaseModal,
+      closeNewCaseModal,
 
-    createCase,
-    saveToActiveCase,
-    updateCasePatient,
+      createCase,
+      saveToActiveCase,
+      updateCasePatient,
 
-    getCaseLabel,
-    getActiveCaseLabel,
-    refreshCases,
-  };
+      getCaseLabel,
+      getActiveCaseLabel,
+      refreshCases,
+    }),
+    [cases, activeCaseId, activeCase, loading, isNewCaseModalOpen]
+  );
 
   return <CasesContext.Provider value={value}>{children}</CasesContext.Provider>;
 }
