@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCases, type Patient } from "../../context/CasesContext";
+import { useCases } from "../../context/CasesContext";
+
+type PatientSex = "Nam" | "Nữ" | "Khác";
 
 function clampInt(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
@@ -22,17 +24,13 @@ function getDefaultYob(nowYear: number) {
 }
 
 export default function NewCaseModal() {
-  const {
-    isNewCaseModalOpen,
-    closeNewCaseModal,
-    createCase,
-  } = useCases();
+  const { isNewCaseModalOpen, closeNewCaseModal, createCase } = useCases();
 
   const nowYear = useMemo(() => new Date().getFullYear(), []);
 
   const [name, setName] = useState("");
   const [yob, setYob] = useState<number>(getDefaultYob(nowYear));
-  const [sex, setSex] = useState<Patient["sex"]>("Nam");
+  const [sex, setSex] = useState<PatientSex>("Nam");
   const [weightKg, setWeightKg] = useState("");
   const [heightCm, setHeightCm] = useState("");
 
@@ -41,11 +39,9 @@ export default function NewCaseModal() {
 
   useEffect(() => {
     if (!isNewCaseModalOpen) {
-      setSubmitting(false);
-      setError("");
+      resetForm();
       return;
     }
-
     setError("");
   }, [isNewCaseModalOpen]);
 
@@ -55,8 +51,8 @@ export default function NewCaseModal() {
     setSex("Nam");
     setWeightKg("");
     setHeightCm("");
-    setError("");
     setSubmitting(false);
+    setError("");
   }
 
   function handleClose() {
@@ -69,13 +65,15 @@ export default function NewCaseModal() {
   const parsedHeight = parseOptionalNumber(heightCm);
 
   const yobValid = Number.isFinite(yob) && yob >= 1900 && yob <= nowYear;
-  const nameValid = trimmedName.length >= 1;
+  const nameValid = trimmedName.length > 0;
 
   const weightValid =
-    weightKg.trim() === "" || (parsedWeight !== undefined && parsedWeight > 0 && parsedWeight <= 500);
+    weightKg.trim() === "" ||
+    (parsedWeight !== undefined && parsedWeight > 0 && parsedWeight <= 500);
 
   const heightValid =
-    heightCm.trim() === "" || (parsedHeight !== undefined && parsedHeight > 0 && parsedHeight <= 300);
+    heightCm.trim() === "" ||
+    (parsedHeight !== undefined && parsedHeight > 0 && parsedHeight <= 300);
 
   const canCreate =
     nameValid &&
@@ -85,45 +83,55 @@ export default function NewCaseModal() {
     !submitting;
 
   async function handleCreate() {
-    if (!canCreate) {
-      if (!nameValid) {
-        setError("Vui lòng nhập họ tên.");
-        return;
-      }
-
-      if (!yobValid) {
-        setError(`Năm sinh phải nằm trong khoảng 1900 đến ${nowYear}.`);
-        return;
-      }
-
-      if (!weightValid) {
-        setError("Cân nặng không hợp lệ.");
-        return;
-      }
-
-      if (!heightValid) {
-        setError("Chiều cao không hợp lệ.");
-        return;
-      }
-
+    if (!nameValid) {
+      setError("Vui lòng nhập họ tên.");
       return;
     }
 
-    const patient: Patient = {
-      name: trimmedName,
-      yob: clampInt(yob, 1900, nowYear),
-      sex,
-      weightKg: parsedWeight,
-      heightCm: parsedHeight,
+    if (!yobValid) {
+      setError(`Năm sinh phải nằm trong khoảng 1900 đến ${nowYear}.`);
+      return;
+    }
+
+    if (!weightValid) {
+      setError("Cân nặng không hợp lệ.");
+      return;
+    }
+
+    if (!heightValid) {
+      setError("Chiều cao không hợp lệ.");
+      return;
+    }
+
+    const normalizedYob = clampInt(yob, 1900, nowYear);
+
+    const payload = {
+      patient: {
+        fullName: trimmedName,
+        sex,
+        dateOfBirth: `${normalizedYob}-01-01`,
+      },
+      initialAssessment: {
+        assessmentType: "initial" as const,
+        assessedAt: new Date().toISOString(),
+      },
+      initialVitals:
+        parsedWeight !== undefined || parsedHeight !== undefined
+          ? {
+              weightKg: parsedWeight,
+              heightCm: parsedHeight,
+            }
+          : undefined,
     };
 
     try {
       setSubmitting(true);
       setError("");
 
-      await createCase(patient);
+      await createCase(payload);
 
       resetForm();
+      closeNewCaseModal();
     } catch (err: any) {
       console.error("CREATE CASE MODAL ERROR:", err);
       setError(err?.message || "Không tạo được ca mới.");
@@ -265,7 +273,7 @@ export default function NewCaseModal() {
               <div style={{ fontWeight: 900, marginBottom: 6 }}>Giới</div>
               <select
                 value={sex}
-                onChange={(e) => setSex(e.target.value as Patient["sex"])}
+                onChange={(e) => setSex(e.target.value as PatientSex)}
                 disabled={submitting}
                 style={{
                   width: "100%",
@@ -281,6 +289,7 @@ export default function NewCaseModal() {
               >
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
+                <option value="Khác">Khác</option>
               </select>
             </div>
           </div>
