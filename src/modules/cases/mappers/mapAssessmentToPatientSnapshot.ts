@@ -24,7 +24,7 @@ export type CaseRow = {
 export type AssessmentRow = {
   id: string;
   case_id: string;
-  assessment_no: number;
+  assessment_no?: number | null;
   assessment_date?: string | null;
   chief_complaint?: string | null;
   is_red_flag_present?: boolean | null;

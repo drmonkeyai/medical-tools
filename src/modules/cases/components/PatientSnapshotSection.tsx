@@ -26,9 +26,18 @@ function InlineField({
   value?: string | null;
 }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-sm text-slate-900">{value?.trim() ? value : "—"}</span>
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "baseline",
+        minWidth: 180,
+      }}
+    >
+      <span style={{ fontSize: 14, color: "#64748b" }}>{label}</span>
+      <span style={{ fontSize: 14, color: "#0f172a", fontWeight: 500 }}>
+        {value?.trim() ? value : "—"}
+      </span>
     </div>
   );
 }
@@ -43,30 +52,52 @@ function VitalItem({
   highlight?: boolean;
 }) {
   return (
-    <div className="flex min-w-[120px] flex-col gap-1 border-r border-slate-200 pr-4 last:border-r-0">
-      <span className="text-xs text-slate-500">{label}</span>
-      <span
-        className={
-          highlight
-            ? "text-sm font-semibold text-red-600"
-            : "text-sm font-medium text-slate-900"
-        }
+    <div
+      style={{
+        minWidth: 110,
+        paddingRight: 16,
+        borderRight: "1px solid #e2e8f0",
+      }}
+    >
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>{label}</div>
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 600,
+          color: highlight ? "#dc2626" : "#0f172a",
+        }}
       >
         {value}
-      </span>
+      </div>
     </div>
   );
 }
 
 function AlertBadge({ alert }: { alert: SnapshotAlert }) {
-  const className =
+  const style =
     alert.severity === "danger"
-      ? "border-red-200 bg-red-50 text-red-700"
-      : "border-amber-200 bg-amber-50 text-amber-700";
+      ? {
+          border: "1px solid #fecaca",
+          background: "#fef2f2",
+          color: "#b91c1c",
+        }
+      : {
+          border: "1px solid #fde68a",
+          background: "#fffbeb",
+          color: "#b45309",
+        };
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${className}`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: 999,
+        padding: "6px 10px",
+        fontSize: 12,
+        fontWeight: 600,
+        ...style,
+      }}
     >
       {alert.label}
     </span>
@@ -95,110 +126,192 @@ export default function PatientSnapshotSection({ data, onPrint }: Props) {
   const lowSpo2 = vitals.spo2 !== null && vitals.spo2 < 94;
 
   return (
-    <section className="border-b border-slate-300 pb-4">
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-slate-900">
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        padding: 20,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 30,
+                lineHeight: 1.2,
+                fontWeight: 700,
+                color: "#0f172a",
+              }}
+            >
               {patient.fullName}
-            </h1>
+            </h2>
 
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "6px 18px",
+                fontSize: 14,
+                color: "#475569",
+              }}
+            >
               <span>Mã BN: {patient.patientCode || "—"}</span>
               <span>Mã ca: {patient.caseCode || "—"}</span>
             </div>
           </div>
 
-          <div className="flex flex-col items-start gap-2 md:items-end">
-            <div className="text-sm text-slate-600">
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 14, color: "#475569", marginBottom: 8 }}>
               Ngày đánh giá:{" "}
-              <span className="font-medium text-slate-900">
+              <span style={{ fontWeight: 600, color: "#0f172a" }}>
                 {assessment.assessmentDate || "—"}
               </span>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-2 print:hidden">
-              {assessment.hasRedFlag && (
-                <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              {assessment.hasRedFlag ? (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    borderRadius: 999,
+                    border: "1px solid #fecaca",
+                    background: "#fef2f2",
+                    color: "#b91c1c",
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                  }}
+                >
                   Red flag ({assessment.redFlagCount})
                 </span>
-              )}
+              ) : null}
 
-              {onPrint && (
+              {onPrint ? (
                 <button
                   type="button"
                   onClick={onPrint}
-                  className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+                  style={{
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
                 >
                   In / PDF
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-3">
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <InlineField label="Tuổi" value={patient.ageText} />
-            <InlineField label="Giới" value={patient.genderLabel} />
-            <InlineField label="Nghề nghiệp" value={patient.occupation} />
-            <InlineField label="Lý do khám" value={assessment.chiefConcern} />
-          </div>
+        <div
+          style={{
+            paddingTop: 14,
+            borderTop: "1px solid #e2e8f0",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "10px 24px",
+          }}
+        >
+          <InlineField label="Tuổi" value={patient.ageText} />
+          <InlineField label="Giới" value={patient.genderLabel} />
+          <InlineField label="Nghề nghiệp" value={patient.occupation} />
+          <InlineField label="Lý do khám" value={assessment.chiefConcern} />
         </div>
 
-        <div className="border-t border-slate-200 pt-3">
-          <div className="flex flex-wrap gap-3">
-            <VitalItem label="Huyết áp" value={bpText} highlight={highBp} />
-            <VitalItem
-              label="Mạch"
-              value={formatValue(vitals.heartRate, "bpm")}
-              highlight={abnormalPulse}
-            />
-            <VitalItem
-              label="Nhiệt độ"
-              value={formatValue(vitals.temperatureC, "°C", 1)}
-              highlight={fever}
-            />
-            <VitalItem
-              label="Nhịp thở"
-              value={formatValue(vitals.respiratoryRate, "/phút")}
-              highlight={tachypnea}
-            />
-            <VitalItem
-              label="SpO₂"
-              value={formatValue(vitals.spo2, "%")}
-              highlight={lowSpo2}
-            />
-            <VitalItem
-              label="Vòng eo"
-              value={formatValue(vitals.waistCm, "cm", 1)}
-            />
-            <VitalItem
-              label="Chiều cao"
-              value={formatValue(vitals.heightCm, "cm", 1)}
-            />
-            <VitalItem
-              label="Cân nặng"
-              value={formatValue(vitals.weightKg, "kg", 1)}
-            />
-            <VitalItem label="BMI" value={formatValue(vitals.bmi, "", 1)} />
-          </div>
+        <div
+          style={{
+            paddingTop: 14,
+            borderTop: "1px solid #e2e8f0",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 16,
+          }}
+        >
+          <VitalItem label="Huyết áp" value={bpText} highlight={highBp} />
+          <VitalItem
+            label="Mạch"
+            value={formatValue(vitals.heartRate, "bpm")}
+            highlight={abnormalPulse}
+          />
+          <VitalItem
+            label="Nhiệt độ"
+            value={formatValue(vitals.temperatureC, "°C", 1)}
+            highlight={fever}
+          />
+          <VitalItem
+            label="Nhịp thở"
+            value={formatValue(vitals.respiratoryRate, "/phút")}
+            highlight={tachypnea}
+          />
+          <VitalItem
+            label="SpO₂"
+            value={formatValue(vitals.spo2, "%")}
+            highlight={lowSpo2}
+          />
+          <VitalItem
+            label="Vòng eo"
+            value={formatValue(vitals.waistCm, "cm", 1)}
+          />
+          <VitalItem
+            label="Chiều cao"
+            value={formatValue(vitals.heightCm, "cm", 1)}
+          />
+          <VitalItem
+            label="Cân nặng"
+            value={formatValue(vitals.weightKg, "kg", 1)}
+          />
+          <VitalItem label="BMI" value={formatValue(vitals.bmi, "", 1)} />
         </div>
 
-        <div className="border-t border-slate-200 pt-3">
-          <div className="flex flex-col gap-2">
-            <div className="text-sm text-slate-600">Cảnh báo nhanh</div>
-
-            {alerts.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {alerts.map((alert) => (
-                  <AlertBadge key={alert.code} alert={alert} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-sm text-slate-500">Chưa ghi nhận cảnh báo.</div>
-            )}
+        <div
+          style={{
+            paddingTop: 14,
+            borderTop: "1px solid #e2e8f0",
+          }}
+        >
+          <div style={{ fontSize: 14, color: "#475569", marginBottom: 10 }}>
+            Cảnh báo nhanh
           </div>
+
+          {alerts.length > 0 ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              {alerts.map((alert) => (
+                <AlertBadge key={alert.code} alert={alert} />
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 14, color: "#64748b" }}>
+              Chưa ghi nhận cảnh báo.
+            </div>
+          )}
         </div>
       </div>
     </section>

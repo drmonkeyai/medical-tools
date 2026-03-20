@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCases, type Patient } from "../context/CasesContext";
+import { useCases, type CaseItem, type Patient } from "../context/CasesContext";
 
 function formatDateTime(iso?: string) {
   if (!iso) return "";
+
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
+
   return d.toLocaleString("vi-VN", {
     hour12: false,
     year: "numeric",
@@ -16,9 +18,9 @@ function formatDateTime(iso?: string) {
   });
 }
 
-function clampInt(v: number, min: number, max: number) {
-  if (!Number.isFinite(v)) return min;
-  return Math.max(min, Math.min(max, Math.floor(v)));
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
 }
 
 export default function MyCases() {
@@ -35,15 +37,14 @@ export default function MyCases() {
 
   const [keyword, setKeyword] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
 
   const [editingCaseId, setEditingCaseId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editYob, setEditYob] = useState<number>(1990);
   const [editSex, setEditSex] = useState<Patient["sex"]>("Nam");
-  const [editWeightKg, setEditWeightKg] = useState<string>("");
-  const [editHeightCm, setEditHeightCm] = useState<string>("");
+  const [editWeightKg, setEditWeightKg] = useState("");
+  const [editHeightCm, setEditHeightCm] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -53,11 +54,12 @@ export default function MyCases() {
     const q = keyword.trim().toLowerCase();
     if (!q) return cases;
 
-    return cases.filter((c: any) => {
-      const name = c.patient.name?.toLowerCase() ?? "";
+    return cases.filter((c) => {
+      const name = c.patient.name.toLowerCase();
       const yob = String(c.patient.yob ?? "");
-      const sex = c.patient.sex?.toLowerCase() ?? "";
-      const resultsText = c.results.map((r: any) => r.tool.toLowerCase()).join(" ");
+      const sex = c.patient.sex.toLowerCase();
+      const resultsText = c.results.map((r) => r.tool.toLowerCase()).join(" ");
+
       return (
         name.includes(q) ||
         yob.includes(q) ||
@@ -67,9 +69,15 @@ export default function MyCases() {
     });
   }, [cases, keyword]);
 
-  async function handleOpenCase(id: string) {
-    setActiveCaseId(id);
-    navigate(`/cases/${id}`);
+  async function handleOpenCase(caseItem: CaseItem) {
+    setActiveCaseId(caseItem.id);
+
+    if (caseItem.latestAssessmentId) {
+      navigate(`/app/cases/${caseItem.id}/assessments/${caseItem.latestAssessmentId}`);
+      return;
+    }
+
+    navigate(`/app/cases/${caseItem.id}`);
   }
 
   async function handleDeleteCase(id: string) {
@@ -92,15 +100,23 @@ export default function MyCases() {
   }
 
   function openEditModal(id: string) {
-    const c = cases.find((item: any) => item.id === id);
-    if (!c) return;
+    const targetCase = cases.find((item) => item.id === id);
+    if (!targetCase) return;
 
     setEditingCaseId(id);
-    setEditName(c.patient.name ?? "");
-    setEditYob(c.patient.yob ?? 1990);
-    setEditSex(c.patient.sex ?? "Nam");
-    setEditWeightKg(c.patient.weightKg ? String(c.patient.weightKg) : "");
-    setEditHeightCm(c.patient.heightCm ? String(c.patient.heightCm) : "");
+    setEditName(targetCase.patient.name ?? "");
+    setEditYob(targetCase.patient.yob ?? 1990);
+    setEditSex(targetCase.patient.sex ?? "Nam");
+    setEditWeightKg(
+      targetCase.patient.weightKg !== undefined
+        ? String(targetCase.patient.weightKg)
+        : ""
+    );
+    setEditHeightCm(
+      targetCase.patient.heightCm !== undefined
+        ? String(targetCase.patient.heightCm)
+        : ""
+    );
     setEditError("");
   }
 
@@ -123,15 +139,19 @@ export default function MyCases() {
     setEditError("");
 
     try {
-      const w = editWeightKg.trim() ? Number(editWeightKg) : undefined;
-      const h = editHeightCm.trim() ? Number(editHeightCm) : undefined;
+      const weightValue = editWeightKg.trim() ? Number(editWeightKg) : undefined;
+      const heightValue = editHeightCm.trim() ? Number(editHeightCm) : undefined;
 
       const nextPatient: Patient = {
         name: trimmedName,
         yob: clampInt(editYob, 1900, nowYear),
         sex: editSex,
-        weightKg: Number.isFinite(w as number) ? (w as number) : undefined,
-        heightCm: Number.isFinite(h as number) ? (h as number) : undefined,
+        weightKg: Number.isFinite(weightValue as number)
+          ? (weightValue as number)
+          : undefined,
+        heightCm: Number.isFinite(heightValue as number)
+          ? (heightValue as number)
+          : undefined,
       };
 
       await updateCasePatient(editingCaseId, nextPatient);
@@ -180,6 +200,7 @@ export default function MyCases() {
             >
               Ca của tôi
             </div>
+
             <div
               style={{
                 marginTop: 4,
@@ -221,7 +242,8 @@ export default function MyCases() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(220px, 2fr) 90px 80px 130px 120px 170px 190px",
+            gridTemplateColumns:
+              "minmax(220px, 2fr) 90px 80px 130px 120px 170px 190px",
             gap: 0,
             alignItems: "center",
             padding: "10px 12px",
@@ -262,14 +284,16 @@ export default function MyCases() {
               fontSize: 14,
             }}
           >
-            {cases.length === 0 ? "Chưa có ca nào được tạo." : "Không tìm thấy ca phù hợp."}
+            {cases.length === 0
+              ? "Chưa có ca nào được tạo."
+              : "Không tìm thấy ca phù hợp."}
           </div>
         ) : (
           <div style={{ maxHeight: "calc(100vh - 230px)", overflowY: "auto" }}>
-            {filteredCases.map((c: any, index: number) => {
+            {filteredCases.map((c, index) => {
               const isActive = c.id === activeCaseId;
               const isSelected = c.id === selectedCaseId;
-              const latest = c.results?.[0];
+              const latest = c.results[0];
 
               const rowBg = isSelected
                 ? "rgba(37,99,235,0.10)"
@@ -283,7 +307,7 @@ export default function MyCases() {
                 <div
                   key={c.id}
                   onClick={() => setSelectedCaseId(c.id)}
-                  onDoubleClick={() => handleOpenCase(c.id)}
+                  onDoubleClick={() => handleOpenCase(c)}
                   style={{
                     display: "grid",
                     gridTemplateColumns:
@@ -347,8 +371,23 @@ export default function MyCases() {
                         textOverflow: "ellipsis",
                       }}
                     >
-                      ID: {c.id.slice(0, 8)}...
+                      Case ID: {c.id.slice(0, 8)}...
                     </div>
+
+                    {c.latestAssessmentId ? (
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: 11,
+                          color: "#94a3b8",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        Assessment: {c.latestAssessmentId.slice(0, 8)}...
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={{ fontWeight: 700, color: "#0f172a" }}>
@@ -367,8 +406,8 @@ export default function MyCases() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {c.patient.weightKg ? `${c.patient.weightKg} kg` : "—"} /{" "}
-                    {c.patient.heightCm ? `${c.patient.heightCm} cm` : "—"}
+                    {c.patient.weightKg !== undefined ? `${c.patient.weightKg} kg` : "—"} /{" "}
+                    {c.patient.heightCm !== undefined ? `${c.patient.heightCm} cm` : "—"}
                   </div>
 
                   <div>
@@ -498,10 +537,24 @@ export default function MyCases() {
               boxShadow: "0 30px 80px rgba(0,0,0,0.22)",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
+            >
               <div>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>Chỉnh sửa thông tin ca</div>
-                <div style={{ marginTop: 4, color: "#64748b", fontWeight: 600 }}>
+                <div style={{ fontSize: 22, fontWeight: 900 }}>
+                  Chỉnh sửa thông tin ca
+                </div>
+                <div
+                  style={{
+                    marginTop: 4,
+                    color: "#64748b",
+                    fontWeight: 600,
+                  }}
+                >
                   Cập nhật thông tin bệnh nhân của ca đang chọn.
                 </div>
               </div>
@@ -544,9 +597,17 @@ export default function MyCases() {
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
                 <div>
-                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Năm sinh</div>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                    Năm sinh
+                  </div>
                   <input
                     type="number"
                     value={editYob}
@@ -586,13 +647,22 @@ export default function MyCases() {
                   >
                     <option value="Nam">Nam</option>
                     <option value="Nữ">Nữ</option>
+                    <option value="Khác">Khác</option>
                   </select>
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
                 <div>
-                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Cân nặng (kg)</div>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                    Cân nặng (kg)
+                  </div>
                   <input
                     value={editWeightKg}
                     onChange={(e) => setEditWeightKg(e.target.value)}
@@ -611,7 +681,9 @@ export default function MyCases() {
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 800, marginBottom: 6 }}>Chiều cao (cm)</div>
+                  <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                    Chiều cao (cm)
+                  </div>
                   <input
                     value={editHeightCm}
                     onChange={(e) => setEditHeightCm(e.target.value)}
@@ -631,12 +703,24 @@ export default function MyCases() {
               </div>
 
               {editError ? (
-                <div style={{ color: "#dc2626", fontWeight: 700, fontSize: 14 }}>
+                <div
+                  style={{
+                    color: "#dc2626",
+                    fontWeight: 700,
+                    fontSize: 14,
+                  }}
+                >
                   {editError}
                 </div>
               ) : null}
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                }}
+              >
                 <button
                   type="button"
                   onClick={closeEditModal}

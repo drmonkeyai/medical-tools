@@ -45,7 +45,7 @@ export type ToolResult = {
 };
 
 export type CaseItem = {
-  id: string;
+  id: string; // MUST be public.cases.id
   caseCode: string;
   createdAt: string;
   patientId: string;
@@ -152,10 +152,10 @@ export type CasesContextValue = {
 
 const CasesContext = createContext<CasesContextValue | null>(null);
 
-function safeParse<T>(s: string | null, fallback: T): T {
-  if (!s) return fallback;
+function safeParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
   try {
-    return JSON.parse(s) as T;
+    return JSON.parse(raw) as T;
   } catch {
     return fallback;
   }
@@ -179,7 +179,9 @@ function mapDbSexToLabel(sex?: string | null): SexLabel {
 }
 
 function buildActiveCaseStorageKey(userId?: string | null) {
-  return userId ? `medical_tools_active_case_${userId}` : "medical_tools_active_case_guest";
+  return userId
+    ? `medical_tools_active_case_${userId}`
+    : "medical_tools_active_case_guest";
 }
 
 function getYobFromDateOfBirth(dateOfBirth?: string | null) {
@@ -215,6 +217,7 @@ function extractResultValue(outputs: unknown): number | null {
       return obj.value;
     }
   }
+
   return null;
 }
 
@@ -402,13 +405,16 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       if (caseError) throw caseError;
 
-      const caseIds = (caseRows ?? []).map((row: any) => row.id as string);
+      const safeCaseRows = (caseRows ?? []) as DbCaseRow[];
+      const caseIds = safeCaseRows.map((row) => row.id);
 
       let assessmentRows: DbAssessmentRow[] = [];
       if (caseIds.length > 0) {
         const { data, error } = await supabase
           .from("case_assessments")
-          .select("id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at")
+          .select(
+            "id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at"
+          )
           .in("case_id", caseIds)
           .order("assessment_date", { ascending: false });
 
@@ -423,7 +429,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const latestAssessmentIds = Array.from(latestAssessmentByCase.values()).map((row) => row.id);
+      const latestAssessmentIds = Array.from(latestAssessmentByCase.values()).map(
+        (row) => row.id
+      );
 
       let vitalsRows: DbVitalsRow[] = [];
       if (latestAssessmentIds.length > 0) {
@@ -445,7 +453,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       if (caseIds.length > 0) {
         const { data, error } = await supabase
           .from("calculator_runs")
-          .select("id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation")
+          .select(
+            "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation"
+          )
           .in("case_id", caseIds)
           .order("run_at", { ascending: false });
 
@@ -474,12 +484,14 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       const resultsByCaseId = new Map<string, ToolResult[]>();
       for (const row of calculatorRuns) {
         if (!row.case_id) continue;
-        const arr = resultsByCaseId.get(row.case_id) ?? [];
-        arr.push(mapCalculatorRunToToolResult(row, calculatorNameById.get(row.calculator_id)));
-        resultsByCaseId.set(row.case_id, arr);
+        const list = resultsByCaseId.get(row.case_id) ?? [];
+        list.push(
+          mapCalculatorRunToToolResult(row, calculatorNameById.get(row.calculator_id))
+        );
+        resultsByCaseId.set(row.case_id, list);
       }
 
-      const mappedCases = ((caseRows ?? []) as DbCaseRow[]).map((row) => {
+      const mappedCases = safeCaseRows.map((row) => {
         const latestAssessment = latestAssessmentByCase.get(row.id);
         const latestVitals = latestAssessment
           ? vitalsByAssessment.get(latestAssessment.id) ?? null
@@ -590,7 +602,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           created_by: user.id,
         },
       ])
-      .select("id, patient_id, case_code, title, primary_problem, primary_diagnosis, case_status, priority_level, red_flag, opened_at, created_at, created_by")
+      .select(
+        "id, patient_id, case_code, title, primary_problem, primary_diagnosis, case_status, priority_level, red_flag, opened_at, created_at, created_by"
+      )
       .single();
 
     if (caseError) {
@@ -612,7 +626,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           created_by: user.id,
         },
       ])
-      .select("id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at")
+      .select(
+        "id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at"
+      )
       .single();
 
     if (assessmentError) {
@@ -685,7 +701,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
             created_by: user.id,
           },
         ])
-        .select("id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation")
+        .select(
+          "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation"
+        )
         .single();
 
       if (runError) {
@@ -770,7 +788,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           created_by: user.id,
         },
       ])
-      .select("id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation")
+      .select(
+        "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation"
+      )
       .single();
 
     if (error) {
