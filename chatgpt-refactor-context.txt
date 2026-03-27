@@ -1,0 +1,4897 @@
+﻿===== REFACTOR CONTEXT =====
+PWD: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools
+TIME: 2026-03-22 12:53:20
+
+===== GIT STATUS =====
+ M src/app/router/appRoutes.tsx
+ M src/app/router/publicRoutes.tsx
+ M src/features/cases/hooks/useCaseDetail.ts
+ M src/features/cases/pages/CaseDetailPage.tsx
+ M src/utils/runCalculator.ts
+?? project-tree.txt
+?? src-files.txt
+?? src/features/calculators/
+?? src/features/cases/components/CaseDetailTabs.tsx
+?? src/features/cases/hooks/useCasesList.ts
+?? src/features/cases/hooks/useCreateAssessment.ts
+?? src/features/cases/hooks/useManageDiagnoses.ts
+?? src/features/cases/hooks/useManageTreatments.ts
+?? src/features/cases/hooks/useSaveCalculatorRun.ts
+?? src/features/cases/hooks/useUpsertAssessmentNote.ts
+?? src/features/cases/hooks/useUpsertAssessmentVitals.ts
+?? src/features/cases/hooks/useUpsertObservations.ts
+?? src/features/cases/hooks/useUpsertPlanItems.ts
+?? src/features/cases/hooks/useUpsertRedFlags.ts
+?? src/features/cases/pages/CasesListPage.tsx
+?? src/modules/cases/biopsychosocial/
+?? src/modules/cases/calculator-runs/
+?? src/modules/cases/clinical-note/ClinicalNoteEditSection.tsx
+?? src/modules/cases/diagnoses/DiagnosesEditSection.tsx
+?? src/modules/cases/history/
+?? src/modules/cases/ice/
+?? src/modules/cases/observations/
+?? src/modules/cases/overview/
+?? src/modules/cases/plan/
+?? src/modules/cases/red-flags/
+?? src/modules/cases/risk-factors/
+?? src/modules/cases/treatment/
+?? src/modules/cases/vitals/
+
+
+===== FILE: package.json =====
+{
+  "name": "medical-tools",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4"
+  },
+  "description": "This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.",
+  "main": "eslint.config.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/drmonkeyai/medical-tools.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/drmonkeyai/medical-tools/issues"
+  },
+  "homepage": "https://github.com/drmonkeyai/medical-tools#readme"
+}
+
+
+===== FILE: src/app/router/appRoutes.tsx =====
+import { Route, Navigate } from "react-router-dom";
+import ProtectedRoute from "./ProtectedRoute";
+import AppShell from "../shells/AppShell";
+import CasesListPage from "../../features/cases/pages/CasesListPage";
+import CaseDetailPage from "../../features/cases/pages/CaseDetailPage";
+import CaseAssessmentRedirectPage from "../../features/cases/pages/CaseAssessmentRedirectPage";
+
+export const appRoutes = (
+  <Route
+    path="/app"
+    element={
+      <ProtectedRoute>
+        <AppShell />
+      </ProtectedRoute>
+    }
+  >
+    <Route index element={<Navigate to="/app/cases" replace />} />
+    <Route path="cases" element={<CasesListPage />} />
+    <Route path="cases/:caseId" element={<CaseAssessmentRedirectPage />} />
+    <Route
+      path="cases/:caseId/assessments/:assessmentId"
+      element={<CaseDetailPage />}
+    />
+  </Route>
+);
+
+
+===== FILE: src/app/router/publicRoutes.tsx =====
+import { Route, Navigate } from "react-router-dom";
+import PublicShell from "../shells/PublicShell";
+
+import Home from "../../pages/Home";
+import Tools from "../../pages/Tools";
+import ToolPlaceholder from "../../pages/ToolPlaceholder";
+import DoseAdjust from "../../pages/DoseAdjust";
+import MedicationDaysSupply from "../../pages/MedicationDaysSupply";
+import DrugInteractions from "../../pages/DrugInteractions";
+import Immunization from "../../pages/Immunization";
+import ICD10 from "../../pages/ICD10";
+import Contact from "../../pages/Contact";
+import CaseSummary from "../../pages/CaseSummary";
+import BytProcedures from "../../pages/BytProcedures";
+import Login from "../../pages/Login";
+import MyCases from "../../pages/MyCases";
+
+import SymptomsIndex from "../../pages/symptoms/index";
+import Sot from "../../pages/symptoms/sot";
+import MetMoi from "../../pages/symptoms/met-moi-ue-oai";
+import CanNang from "../../pages/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan";
+import DauNguc from "../../pages/symptoms/dau-nguc";
+import KhoTho from "../../pages/symptoms/kho-tho";
+import HoiHop from "../../pages/symptoms/hoi-hop-danh-trong-nguc";
+import Ho from "../../pages/symptoms/ho";
+import PhuChan from "../../pages/symptoms/phu-chan";
+import DauDau from "../../pages/symptoms/dau-dau";
+import ChongMat from "../../pages/symptoms/chong-mat-choang-vang";
+import MatNgu from "../../pages/symptoms/mat-ngu";
+import TamTrang from "../../pages/symptoms/buon-chan-lo-au";
+import DauBung from "../../pages/symptoms/dau-bung";
+import RoiLoanTieuHoa from "../../pages/symptoms/roi-loan-tieu-hoa";
+import BuonNon from "../../pages/symptoms/buon-non-non";
+import VangDa from "../../pages/symptoms/vang-da";
+import TieuBuot from "../../pages/symptoms/tieu-buot-tieu-rat";
+import TieuMau from "../../pages/symptoms/tieu-mau";
+import DauLung from "../../pages/symptoms/dau-lung";
+import DauKhop from "../../pages/symptoms/dau-khop";
+import DaLieu from "../../pages/symptoms/ngua-ton-thuong-da";
+
+import GeriatricAssessmentCalculator from "../../calculators/GeriatricAssessmentCalculator";
+import KatzADL from "../../calculators/KatzADL";
+import LawtonIADL from "../../calculators/LawtonIADL";
+import GaitSpeed from "../../calculators/GaitSpeed";
+import GripStrength from "../../calculators/GripStrength";
+import MMSE from "../../calculators/MMSE";
+import MoCA from "../../calculators/MoCA";
+
+export const publicRoutes = (
+  <Route element={<PublicShell />}>
+    <Route path="/" element={<Home />} />
+    <Route path="/login" element={<Login />} />
+
+    <Route path="/tools" element={<Tools />} />
+    <Route path="/tools/:slug" element={<ToolPlaceholder />} />
+
+    <Route
+      path="/calculators/geriatric-assessment"
+      element={<GeriatricAssessmentCalculator />}
+    />
+    <Route path="/calculators/katz-adl" element={<KatzADL />} />
+    <Route path="/calculators/lawton-iadl" element={<LawtonIADL />} />
+    <Route path="/calculators/gait-speed" element={<GaitSpeed />} />
+    <Route path="/calculators/grip-strength" element={<GripStrength />} />
+    <Route path="/calculators/mmse" element={<MMSE />} />
+    <Route path="/calculators/moca" element={<MoCA />} />
+
+    <Route path="/dose-adjust" element={<DoseAdjust />} />
+    <Route path="/medication/days-supply" element={<MedicationDaysSupply />} />
+    <Route path="/drug-interactions" element={<DrugInteractions />} />
+    <Route path="/immunization" element={<Immunization />} />
+    <Route path="/icd10" element={<ICD10 />} />
+    <Route path="/byt-procedures" element={<BytProcedures />} />
+    <Route path="/contact" element={<Contact />} />
+
+    <Route path="/symptoms" element={<SymptomsIndex />} />
+    <Route path="/symptoms/sot" element={<Sot />} />
+    <Route path="/symptoms/met-moi-ue-oai" element={<MetMoi />} />
+    <Route
+      path="/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan"
+      element={<CanNang />}
+    />
+    <Route path="/symptoms/dau-nguc" element={<DauNguc />} />
+    <Route path="/symptoms/kho-tho" element={<KhoTho />} />
+    <Route path="/symptoms/hoi-hop-danh-trong-nguc" element={<HoiHop />} />
+    <Route path="/symptoms/ho" element={<Ho />} />
+    <Route path="/symptoms/phu-chan" element={<PhuChan />} />
+    <Route path="/symptoms/dau-dau" element={<DauDau />} />
+    <Route path="/symptoms/chong-mat-choang-vang" element={<ChongMat />} />
+    <Route path="/symptoms/mat-ngu" element={<MatNgu />} />
+    <Route path="/symptoms/buon-chan-lo-au" element={<TamTrang />} />
+    <Route path="/symptoms/dau-bung" element={<DauBung />} />
+    <Route path="/symptoms/roi-loan-tieu-hoa" element={<RoiLoanTieuHoa />} />
+    <Route path="/symptoms/buon-non-non" element={<BuonNon />} />
+    <Route path="/symptoms/vang-da" element={<VangDa />} />
+    <Route path="/symptoms/tieu-buot-tieu-rat" element={<TieuBuot />} />
+    <Route path="/symptoms/tieu-mau" element={<TieuMau />} />
+    <Route path="/symptoms/dau-lung" element={<DauLung />} />
+    <Route path="/symptoms/dau-khop" element={<DauKhop />} />
+    <Route path="/symptoms/ngua-ton-thuong-da" element={<DaLieu />} />
+
+    <Route path="/case-summary" element={<CaseSummary />} />
+    import { Navigate } from "react-router-dom";
+
+<Route path="/my-cases" element={<Navigate to="/app/cases" replace />} />
+  </Route>
+);
+
+===== FILE: src/features/cases/hooks/useCaseDetail.ts =====
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../../../lib/supabase";
+
+import { mapAssessmentToClinicalNote } from "../../../modules/cases/clinical-note/mapper";
+import type {
+  AssessmentNoteRow,
+  ClinicalNoteSectionData,
+} from "../../../modules/cases/clinical-note/types";
+
+import { mapAssessmentToDiagnoses } from "../../../modules/cases/diagnoses/mapper";
+import type {
+  AssessmentDiagnosisRow,
+  DiagnosesSectionData,
+} from "../../../modules/cases/diagnoses/types";
+
+import { mapAssessmentToTreatment } from "../../../modules/cases/treatment/mapper";
+import type {
+  AssessmentTreatmentRow,
+  TreatmentSectionData,
+} from "../../../modules/cases/treatment/types";
+
+import { mapAssessmentToPlan } from "../../../modules/cases/plan/mapper";
+import type {
+  AssessmentPlanItemRow,
+  PlanSectionData,
+} from "../../../modules/cases/plan/types";
+
+import { mapAssessmentToRedFlags } from "../../../modules/cases/red-flags/mapper";
+import type {
+  AssessmentRedFlagRow,
+  RedFlagsSectionData,
+} from "../../../modules/cases/red-flags/types";
+
+import { mapAssessmentToObservations } from "../../../modules/cases/observations/mapper";
+import type {
+  AssessmentObservationRow,
+  ObservationsSectionData,
+} from "../../../modules/cases/observations/types";
+
+import { mapCalculatorRunsSection } from "../../../modules/cases/calculator-runs/mapper";
+import type {
+  CalculatorDefinitionRow,
+  CalculatorRunInputRow,
+  CalculatorRunRow,
+  CalculatorRunsSectionData,
+} from "../../../modules/cases/calculator-runs/types";
+
+type Patient = {
+  id: string;
+  patient_code: string | null;
+  full_name: string;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  occupation?: string | null;
+};
+
+type CaseItem = {
+  id: string;
+  patient_id: string;
+  case_code?: string | null;
+  title?: string | null;
+  primary_problem?: string | null;
+  primary_diagnosis?: string | null;
+  red_flag?: boolean | null;
+};
+
+type Assessment = {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no: number | null;
+  assessment_date?: string | null;
+  chief_complaint?: string | null;
+  is_red_flag_present?: boolean | null;
+  status?: string | null;
+};
+
+type Vitals = {
+  assessment_id: string;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  heart_rate?: number | null;
+  temperature_c?: number | null;
+  respiratory_rate?: number | null;
+  spo2_percent?: number | null;
+  waist_cm?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  bmi?: number | null;
+};
+
+type UseCaseDetailState = {
+  loading: boolean;
+  error: string | null;
+  caseItem: CaseItem | null;
+  patient: Patient | null;
+  assessments: Assessment[];
+  selectedAssessment: Assessment | null;
+  vitals: Vitals | null;
+  clinicalNote: ClinicalNoteSectionData;
+  diagnoses: DiagnosesSectionData;
+  treatment: TreatmentSectionData;
+  plan: PlanSectionData;
+  redFlags: RedFlagsSectionData;
+  observations: ObservationsSectionData;
+  calculatorRuns: CalculatorRunsSectionData;
+};
+
+const emptyClinicalNote = mapAssessmentToClinicalNote(null);
+const emptyDiagnoses = mapAssessmentToDiagnoses([]);
+const emptyTreatment = mapAssessmentToTreatment([]);
+const emptyPlan = mapAssessmentToPlan([]);
+const emptyRedFlags = mapAssessmentToRedFlags([]);
+const emptyObservations = mapAssessmentToObservations([]);
+const emptyCalculatorRuns = mapCalculatorRunsSection({
+  runs: [],
+  definitions: [],
+  runInputs: [],
+});
+
+const initialState: UseCaseDetailState = {
+  loading: true,
+  error: null,
+  caseItem: null,
+  patient: null,
+  assessments: [],
+  selectedAssessment: null,
+  vitals: null,
+  clinicalNote: emptyClinicalNote,
+  diagnoses: emptyDiagnoses,
+  treatment: emptyTreatment,
+  plan: emptyPlan,
+  redFlags: emptyRedFlags,
+  observations: emptyObservations,
+  calculatorRuns: emptyCalculatorRuns,
+};
+
+function getErrorMessage(error: unknown) {
+  console.error("useCaseDetail error:", error);
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "Không tải được dữ liệu ca bệnh.";
+}
+
+export function useCaseDetail(caseId?: string, assessmentId?: string) {
+  const [state, setState] = useState<UseCaseDetailState>(initialState);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const refresh = useCallback(() => {
+    setReloadKey((prev) => prev + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      if (!caseId) {
+        setState({
+          ...initialState,
+          loading: false,
+          error: "Thiếu caseId.",
+        });
+        return;
+      }
+
+      try {
+        setState((prev) => ({
+          ...prev,
+          loading: true,
+          error: null,
+        }));
+
+        const { data: caseData, error: caseError } = await supabase
+          .from("cases")
+          .select(
+            "id, patient_id, case_code, title, primary_problem, primary_diagnosis, red_flag"
+          )
+          .eq("id", caseId)
+          .maybeSingle();
+
+        if (caseError) throw caseError;
+        if (!caseData) {
+          throw new Error(`Không tìm thấy ca bệnh với id: ${caseId}`);
+        }
+
+        const { data: patientData, error: patientError } = await supabase
+          .from("patients")
+          .select("id, patient_code, full_name, date_of_birth, gender, occupation")
+          .eq("id", caseData.patient_id)
+          .maybeSingle();
+
+        if (patientError) throw patientError;
+        if (!patientData) {
+          throw new Error(`Không tìm thấy bệnh nhân của ca: ${caseData.id}`);
+        }
+
+        const { data: assessmentsData, error: assessmentsError } = await supabase
+          .from("case_assessments")
+          .select(
+            "id, case_id, patient_id, assessment_no, assessment_date, chief_complaint, is_red_flag_present, status"
+          )
+          .eq("case_id", caseId)
+          .order("assessment_date", { ascending: false });
+
+        if (assessmentsError) throw assessmentsError;
+
+        const nextAssessments = (assessmentsData ?? []) as Assessment[];
+
+        const nextSelectedAssessment =
+          nextAssessments.find((item) => item.id === assessmentId) ??
+          nextAssessments[0] ??
+          null;
+
+        let nextVitals: Vitals | null = null;
+        let nextClinicalNote: ClinicalNoteSectionData = emptyClinicalNote;
+        let nextDiagnoses: DiagnosesSectionData = emptyDiagnoses;
+        let nextTreatment: TreatmentSectionData = emptyTreatment;
+        let nextPlan: PlanSectionData = emptyPlan;
+        let nextRedFlags: RedFlagsSectionData = emptyRedFlags;
+        let nextObservations: ObservationsSectionData = emptyObservations;
+        let nextCalculatorRuns: CalculatorRunsSectionData = emptyCalculatorRuns;
+
+        if (nextSelectedAssessment?.id) {
+          const selectedAssessmentId = nextSelectedAssessment.id;
+
+          const { data: vitalsData, error: vitalsError } = await supabase
+            .from("assessment_vitals")
+            .select(
+              "assessment_id, systolic_bp, diastolic_bp, heart_rate, temperature_c, respiratory_rate, spo2_percent, waist_cm, height_cm, weight_kg, bmi"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .maybeSingle();
+
+          if (vitalsError) throw vitalsError;
+          nextVitals = (vitalsData as Vitals | null) ?? null;
+
+          const { data: noteData, error: noteError } = await supabase
+            .from("assessment_notes")
+            .select("*")
+            .eq("assessment_id", selectedAssessmentId)
+            .maybeSingle();
+
+          if (noteError) throw noteError;
+
+          nextClinicalNote = mapAssessmentToClinicalNote(
+            (noteData as AssessmentNoteRow | null) ?? null
+          );
+
+          const { data: diagnosesData, error: diagnosesError } = await supabase
+            .from("assessment_diagnoses")
+            .select(
+              "id, assessment_id, diagnosis_type, diagnosis_name, icd10_code, is_active, note, created_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("created_at", { ascending: true });
+
+          if (diagnosesError) throw diagnosesError;
+
+          nextDiagnoses = mapAssessmentToDiagnoses(
+            (diagnosesData ?? []) as AssessmentDiagnosisRow[]
+          );
+
+          const { data: treatmentsData, error: treatmentsError } = await supabase
+            .from("assessment_treatments")
+            .select(
+              "id, assessment_id, treatment_type, treatment_name, description, dose_or_frequency, duration, instructions, status, created_at, updated_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("created_at", { ascending: true });
+
+          if (treatmentsError) throw treatmentsError;
+
+          nextTreatment = mapAssessmentToTreatment(
+            (treatmentsData ?? []) as AssessmentTreatmentRow[]
+          );
+
+          const { data: planData, error: planError } = await supabase
+            .from("assessment_plan_items")
+            .select(
+              "id, assessment_id, plan_type, description, due_date, is_completed, completed_at, created_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("created_at", { ascending: true });
+
+          if (planError) throw planError;
+
+          nextPlan = mapAssessmentToPlan(
+            (planData ?? []) as AssessmentPlanItemRow[]
+          );
+
+          const { data: redFlagsData, error: redFlagsError } = await supabase
+            .from("assessment_red_flags")
+            .select(
+              "id, assessment_id, flag_name, flag_code, is_present, severity, note"
+            )
+            .eq("assessment_id", selectedAssessmentId);
+
+          if (redFlagsError) throw redFlagsError;
+
+          nextRedFlags = mapAssessmentToRedFlags(
+            (redFlagsData ?? []) as AssessmentRedFlagRow[]
+          );
+
+          const { data: observationsData, error: observationsError } = await supabase
+            .from("assessment_observations")
+            .select(
+              "id, assessment_id, observation_code, observation_label, value_type, value_text, value_numeric, value_boolean, value_date, value_json, unit, normal_flag, note, observed_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("observed_at", { ascending: false });
+
+          if (observationsError) throw observationsError;
+
+          nextObservations = mapAssessmentToObservations(
+            (observationsData ?? []) as AssessmentObservationRow[]
+          );
+
+          const { data: calculatorRunsData, error: calculatorRunsError } = await supabase
+            .from("calculator_runs")
+            .select(
+              "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_label, result_value, result_text, risk_level, interpretation, result_json"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("run_at", { ascending: false });
+
+          if (calculatorRunsError) throw calculatorRunsError;
+
+          const runRows = (calculatorRunsData ?? []) as CalculatorRunRow[];
+          const calculatorIds = Array.from(new Set(runRows.map((row) => row.calculator_id)));
+          const runIds = runRows.map((row) => row.id);
+
+          let definitionRows: CalculatorDefinitionRow[] = [];
+          if (calculatorIds.length > 0) {
+            const { data: defsData, error: defsError } = await supabase
+              .from("calculator_definitions")
+              .select("id, code, name")
+              .in("id", calculatorIds);
+
+            if (defsError) throw defsError;
+            definitionRows = (defsData ?? []) as CalculatorDefinitionRow[];
+          }
+
+          let runInputRows: CalculatorRunInputRow[] = [];
+          if (runIds.length > 0) {
+            const { data: inputsData, error: inputsError } = await supabase
+              .from("calculator_run_inputs")
+              .select(
+                "id, calculator_run_id, input_key, input_label, input_type, input_value_text, input_value_numeric, input_value_boolean, input_value_date, input_value_json, unit, source_observation_id, created_at"
+              )
+              .in("calculator_run_id", runIds)
+              .order("created_at", { ascending: true });
+
+            if (inputsError) throw inputsError;
+            runInputRows = (inputsData ?? []) as CalculatorRunInputRow[];
+          }
+
+          nextCalculatorRuns = mapCalculatorRunsSection({
+            runs: runRows,
+            definitions: definitionRows,
+            runInputs: runInputRows,
+          });
+        }
+
+        if (cancelled) return;
+
+        setState({
+          loading: false,
+          error: null,
+          caseItem: caseData as CaseItem,
+          patient: patientData as Patient,
+          assessments: nextAssessments,
+          selectedAssessment: nextSelectedAssessment,
+          vitals: nextVitals,
+          clinicalNote: nextClinicalNote,
+          diagnoses: nextDiagnoses,
+          treatment: nextTreatment,
+          plan: nextPlan,
+          redFlags: nextRedFlags,
+          observations: nextObservations,
+          calculatorRuns: nextCalculatorRuns,
+        });
+      } catch (error) {
+        console.error("useCaseDetail load failed:", error);
+
+        if (cancelled) return;
+
+        setState({
+          ...initialState,
+          loading: false,
+          error: getErrorMessage(error),
+        });
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, assessmentId, reloadKey]);
+
+  return useMemo(
+    () => ({
+      loading: state.loading,
+      error: state.error,
+      caseItem: state.caseItem,
+      patient: state.patient,
+      assessments: state.assessments,
+      selectedAssessment: state.selectedAssessment,
+      vitals: state.vitals,
+      clinicalNote: state.clinicalNote,
+      diagnoses: state.diagnoses,
+      treatment: state.treatment,
+      plan: state.plan,
+      redFlags: state.redFlags,
+      observations: state.observations,
+      calculatorRuns: state.calculatorRuns,
+      refresh,
+    }),
+    [state, refresh]
+  );
+}
+
+===== FILE: src/features/cases/pages/CaseDetailPage.tsx =====
+import { useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useCaseDetail } from "../hooks/useCaseDetail";
+import { useCreateAssessment } from "../hooks/useCreateAssessment";
+import AssessmentSidebar from "../components/AssessmentSidebar";
+import CaseHeader from "../components/CaseHeader";
+import CaseDetailTabs, {
+  type CaseDetailTabKey,
+} from "../components/CaseDetailTabs";
+
+import OverviewTab from "../../../modules/cases/overview/OverviewTab";
+import HistoryTab from "../../../modules/cases/history/HistoryTab";
+import ICETab from "../../../modules/cases/ice/ICETab";
+import RiskFactorsTab from "../../../modules/cases/risk-factors/RiskFactorsTab";
+import BioPsychoSocialTab from "../../../modules/cases/biopsychosocial/BioPsychoSocialTab";
+
+import { mapAssessmentToPatientSnapshot } from "../../../modules/cases/mappers/mapAssessmentToPatientSnapshot";
+import ClinicalNoteEditSection, {
+  type ClinicalNoteEditSectionRef,
+} from "../../../modules/cases/clinical-note/ClinicalNoteEditSection";
+import DiagnosesEditSection from "../../../modules/cases/diagnoses/DiagnosesEditSection";
+import TreatmentEditSection from "../../../modules/cases/treatment/TreatmentEditSection";
+import PlanSection from "../../../modules/cases/plan/PlanSection";
+import ObservationsSection from "../../../modules/cases/observations/ObservationsSection";
+import CalculatorRunsSection from "../../../modules/cases/calculator-runs/CalculatorRunsSection";
+
+export default function CaseDetailPage() {
+  const navigate = useNavigate();
+  const { caseId, assessmentId } = useParams();
+  const { createAssessment } = useCreateAssessment();
+
+  const [creatingAssessment, setCreatingAssessment] = useState(false);
+  const [createAssessmentError, setCreateAssessmentError] = useState("");
+  const [activeTab, setActiveTab] = useState<CaseDetailTabKey>("overview");
+  const [isEditingCurrentAssessment, setIsEditingCurrentAssessment] = useState(false);
+  const [saveAssessmentError, setSaveAssessmentError] = useState("");
+  const [savingAssessment, setSavingAssessment] = useState(false);
+
+  const clinicalNoteRef = useRef<ClinicalNoteEditSectionRef | null>(null);
+
+  const detail = useCaseDetail(caseId, assessmentId);
+
+  const {
+    loading,
+    error,
+    caseItem,
+    patient,
+    assessments,
+    selectedAssessment,
+    vitals,
+    clinicalNote,
+    diagnoses,
+    treatment,
+    plan,
+    redFlags,
+    observations,
+    calculatorRuns,
+  } = detail;
+
+  const snapshotData = useMemo(() => {
+    if (!patient || !caseItem || !selectedAssessment) return null;
+
+    return mapAssessmentToPatientSnapshot({
+      patient,
+      caseItem,
+      assessment: selectedAssessment,
+      vitals,
+      redFlagCount: selectedAssessment.is_red_flag_present ? 1 : 0,
+    });
+  }, [patient, caseItem, selectedAssessment, vitals]);
+
+  const tabCounts = useMemo(() => {
+    return {
+      labs: Array.isArray((observations as { items?: unknown[] })?.items)
+        ? (observations as { items?: unknown[] }).items?.length ?? 0
+        : 0,
+      management_plan:
+        (Array.isArray((diagnoses as { items?: unknown[] })?.items)
+          ? (diagnoses as { items?: unknown[] }).items?.length ?? 0
+          : 0) +
+        (Array.isArray((plan as { items?: unknown[] })?.items)
+          ? (plan as { items?: unknown[] }).items?.length ?? 0
+          : 0),
+      treatment_detail: Array.isArray((treatment as { items?: unknown[] })?.items)
+        ? (treatment as { items?: unknown[] }).items?.length ?? 0
+        : 0,
+    };
+  }, [diagnoses, plan, treatment, observations]);
+
+  async function handleCreateAssessment() {
+    if (!caseItem?.id || !patient?.id) {
+      setCreateAssessmentError("Thiếu dữ liệu case hoặc patient.");
+      return;
+    }
+
+    try {
+      setCreatingAssessment(true);
+      setCreateAssessmentError("");
+
+      const maxNo =
+        assessments.reduce((max, item) => {
+          const current = item.assessment_no ?? 0;
+          return current > max ? current : max;
+        }, 0) || 0;
+
+      const created = await createAssessment({
+        caseId: caseItem.id,
+        patientId: patient.id,
+        nextAssessmentNo: maxNo + 1,
+        sourceAssessmentId: selectedAssessment?.id,
+        assessmentType: "follow_up",
+        careSetting: "outpatient",
+        status: "draft",
+      });
+
+      navigate(`/app/cases/${caseItem.id}/assessments/${created.id}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không tạo được assessment mới.";
+      setCreateAssessmentError(message);
+    } finally {
+      setCreatingAssessment(false);
+    }
+  }
+
+  async function handleSaveCurrentAssessment() {
+    setSaveAssessmentError("");
+
+    try {
+      setSavingAssessment(true);
+
+      if (activeTab === "history" || activeTab === "ice" || activeTab === "biopsychosocial") {
+        const ok = await clinicalNoteRef.current?.save();
+        if (!ok) {
+          setSaveAssessmentError("Không lưu được lần khám hiện tại.");
+          return;
+        }
+      }
+
+      await detail.refresh();
+      setIsEditingCurrentAssessment(false);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không lưu được lần khám hiện tại.";
+      setSaveAssessmentError(message);
+    } finally {
+      setSavingAssessment(false);
+    }
+  }
+
+  function renderEditButtons() {
+    const editableTabs: CaseDetailTabKey[] = ["history", "ice", "biopsychosocial"];
+    const isEditableTab = editableTabs.includes(activeTab);
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleCreateAssessment}
+          disabled={creatingAssessment}
+          style={{
+            padding: "10px 16px",
+            borderRadius: 8,
+            border: "1px solid #cbd5e1",
+            background: creatingAssessment ? "#e2e8f0" : "#fff",
+            cursor: creatingAssessment ? "not-allowed" : "pointer",
+          }}
+        >
+          {creatingAssessment ? "Đang tạo..." : "+ Tạo lần khám mới"}
+        </button>
+
+        {isEditableTab ? (
+          <>
+            {!isEditingCurrentAssessment ? (
+              <button
+                type="button"
+                onClick={() => setIsEditingCurrentAssessment(true)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                Chỉnh sửa lần khám hiện tại
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  void handleSaveCurrentAssessment();
+                }}
+                disabled={savingAssessment}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "1px solid #16a34a",
+                  background: savingAssessment ? "#dcfce7" : "#f0fdf4",
+                  color: "#166534",
+                  cursor: savingAssessment ? "not-allowed" : "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                {savingAssessment ? "Đang lưu..." : "Lưu lần khám hiện tại"}
+              </button>
+            )}
+          </>
+        ) : null}
+
+        {createAssessmentError ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>
+            {createAssessmentError}
+          </div>
+        ) : null}
+
+        {saveAssessmentError ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>
+            {saveAssessmentError}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderActiveTab() {
+    if (activeTab === "overview") {
+      return (
+        <OverviewTab
+          snapshotData={snapshotData}
+          vitals={vitals}
+          redFlags={redFlags}
+          assessmentId={selectedAssessment?.id}
+          onChanged={detail.refresh}
+        />
+      );
+    }
+
+    if (activeTab === "history") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <HistoryTab data={clinicalNote as Record<string, unknown>} />
+
+          {isEditingCurrentAssessment ? (
+            <ClinicalNoteEditSection
+              ref={clinicalNoteRef}
+              assessmentId={selectedAssessment?.id}
+              data={clinicalNote as Record<string, unknown>}
+              mode="history"
+              onChanged={detail.refresh}
+            />
+          ) : null}
+        </div>
+      );
+    }
+
+    if (activeTab === "ice") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <ICETab data={clinicalNote as Record<string, unknown>} />
+
+          {isEditingCurrentAssessment ? (
+            <ClinicalNoteEditSection
+              ref={clinicalNoteRef}
+              assessmentId={selectedAssessment?.id}
+              data={clinicalNote as Record<string, unknown>}
+              mode="ice"
+              onChanged={detail.refresh}
+            />
+          ) : null}
+        </div>
+      );
+    }
+
+    if (activeTab === "risk_factors") {
+      return (
+        <RiskFactorsTab
+          vitals={vitals as Parameters<typeof RiskFactorsTab>[0]["vitals"]}
+          redFlags={redFlags}
+          noteData={clinicalNote as Record<string, unknown>}
+          assessmentId={selectedAssessment?.id}
+          onChanged={detail.refresh}
+        />
+      );
+    }
+
+    if (activeTab === "biopsychosocial") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <BioPsychoSocialTab data={clinicalNote as Record<string, unknown>} />
+
+          {isEditingCurrentAssessment ? (
+            <ClinicalNoteEditSection
+              ref={clinicalNoteRef}
+              assessmentId={selectedAssessment?.id}
+              data={clinicalNote as Record<string, unknown>}
+              mode="biopsychosocial"
+              onChanged={detail.refresh}
+            />
+          ) : null}
+        </div>
+      );
+    }
+
+    if (activeTab === "labs") {
+      return (
+        <ObservationsSection
+          data={observations}
+          assessmentId={selectedAssessment?.id}
+          patientId={patient?.id}
+          caseId={caseItem?.id}
+          onChanged={detail.refresh}
+        />
+      );
+    }
+
+    if (activeTab === "management_plan") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <DiagnosesEditSection
+            assessmentId={selectedAssessment?.id}
+            data={diagnoses as { items?: unknown[] }}
+            onChanged={detail.refresh}
+          />
+          <PlanSection
+            data={plan}
+            assessmentId={selectedAssessment?.id}
+            onChanged={detail.refresh}
+          />
+          <CalculatorRunsSection data={calculatorRuns} />
+        </div>
+      );
+    }
+
+    if (activeTab === "treatment_detail") {
+      return (
+        <TreatmentEditSection
+          assessmentId={selectedAssessment?.id}
+          data={treatment as { items?: unknown[] }}
+          onChanged={detail.refresh}
+        />
+      );
+    }
+
+    if (activeTab === "immunization") {
+      return (
+        <div
+          style={{
+            padding: 16,
+            border: "1px solid #e2e8f0",
+            borderRadius: 12,
+            background: "#fff",
+            color: "#64748b",
+          }}
+        >
+          Tab Tiêm chủng sẽ nối với <strong>patient_immunizations</strong> ở bước tiếp theo.
+        </div>
+      );
+    }
+
+    return null;
+  }
+
+  if (!caseId) {
+    return <div style={{ padding: 24, color: "#dc2626" }}>Thiếu caseId.</div>;
+  }
+
+  if (loading) {
+    return <div style={{ padding: 24, color: "#64748b" }}>Đang tải dữ liệu...</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: 24, color: "#dc2626" }}>{error}</div>;
+  }
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "240px minmax(0, 1fr)",
+        minHeight: "100vh",
+        background: "#f8fafc",
+      }}
+    >
+      <AssessmentSidebar
+        caseId={caseId}
+        selectedAssessmentId={selectedAssessment?.id}
+        assessments={assessments}
+      />
+
+      <main style={{ minWidth: 0 }}>
+        <CaseHeader
+          caseCode={caseItem?.case_code}
+          title={caseItem?.title}
+          primaryProblem={caseItem?.primary_problem}
+          primaryDiagnosis={caseItem?.primary_diagnosis}
+          assessmentDate={selectedAssessment?.assessment_date}
+          chiefComplaint={selectedAssessment?.chief_complaint}
+          hasRedFlag={selectedAssessment?.is_red_flag_present}
+        />
+
+        <div
+          style={{
+            padding: "20px 20px 0 20px",
+          }}
+        >
+          {renderEditButtons()}
+        </div>
+
+        <CaseDetailTabs
+          activeTab={activeTab}
+          onChange={(tab) => {
+            setActiveTab(tab);
+            setIsEditingCurrentAssessment(false);
+            setSaveAssessmentError("");
+          }}
+          counts={tabCounts}
+        />
+
+        <div
+          style={{
+            padding: 20,
+            display: "flex",
+            flexDirection: "column",
+            gap: 24,
+          }}
+        >
+          {renderActiveTab()}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+===== FILE: src/features/cases/components/CaseDetailTabs.tsx =====
+import { useMemo, useState } from "react";
+
+export type CaseDetailTabKey =
+  | "overview"
+  | "history"
+  | "ice"
+  | "risk_factors"
+  | "biopsychosocial"
+  | "labs"
+  | "management_plan"
+  | "treatment_detail"
+  | "immunization";
+
+type TabItem = {
+  key: CaseDetailTabKey;
+  label: string;
+  count?: number;
+};
+
+type Props = {
+  activeTab?: CaseDetailTabKey;
+  onChange?: (tab: CaseDetailTabKey) => void;
+  counts?: Partial<Record<CaseDetailTabKey, number>>;
+};
+
+const TAB_ORDER: Array<{ key: CaseDetailTabKey; label: string }> = [
+  { key: "overview", label: "Tổng quan" },
+  { key: "history", label: "Tiền sử" },
+  { key: "ice", label: "ICE" },
+  { key: "risk_factors", label: "Yếu tố nguy cơ" },
+  { key: "biopsychosocial", label: "BioPsychoSocial" },
+  { key: "labs", label: "Cận lâm sàng" },
+  { key: "management_plan", label: "Kế hoạch quản lý" },
+  { key: "treatment_detail", label: "Điều trị cụ thể" },
+  { key: "immunization", label: "Tiêm chủng" },
+];
+
+export default function CaseDetailTabs({
+  activeTab,
+  onChange,
+  counts,
+}: Props) {
+  const [internalTab, setInternalTab] = useState<CaseDetailTabKey>("overview");
+  const currentTab = activeTab ?? internalTab;
+
+  const tabs = useMemo<TabItem[]>(() => {
+    return TAB_ORDER.map((tab) => ({
+      key: tab.key,
+      label: tab.label,
+      count: counts?.[tab.key],
+    }));
+  }, [counts]);
+
+  function handleClick(tab: CaseDetailTabKey) {
+    if (!activeTab) {
+      setInternalTab(tab);
+    }
+    onChange?.(tab);
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        flexWrap: "wrap",
+        padding: "0 20px 12px 20px",
+        borderBottom: "1px solid #e2e8f0",
+        background: "#f8fafc",
+      }}
+    >
+      {tabs.map((tab) => {
+        const selected = currentTab === tab.key;
+
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => handleClick(tab.key)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: selected ? "1px solid #2563eb" : "1px solid #cbd5e1",
+              background: selected ? "#dbeafe" : "#fff",
+              color: selected ? "#1d4ed8" : "#334155",
+              fontWeight: selected ? 600 : 500,
+              cursor: "pointer",
+            }}
+          >
+            {tab.label}
+            {typeof tab.count === "number" ? ` (${tab.count})` : ""}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+===== FILE: src/features/cases/components/AssessmentSidebar.tsx =====
+import { Link } from "react-router-dom";
+
+type AssessmentItem = {
+  id: string;
+  assessment_no?: number | null;
+  assessment_date?: string | null;
+  chief_complaint?: string | null;
+  is_red_flag_present?: boolean | null;
+};
+
+type Props = {
+  caseId: string;
+  selectedAssessmentId?: string;
+  assessments: AssessmentItem[];
+};
+
+function formatDate(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("vi-VN");
+}
+
+export default function AssessmentSidebar({
+  caseId,
+  selectedAssessmentId,
+  assessments,
+}: Props) {
+  return (
+    <aside
+      style={{
+        width: 240,
+        background: "#ffffff",
+        borderRight: "1px solid #e2e8f0",
+        minHeight: "100%",
+      }}
+    >
+      <div
+        style={{
+          padding: "14px 16px",
+          borderBottom: "1px solid #e2e8f0",
+          fontSize: 14,
+          fontWeight: 600,
+          color: "#334155",
+        }}
+      >
+        Lần đánh giá
+      </div>
+
+      {assessments.length === 0 ? (
+        <div
+          style={{
+            padding: 16,
+            fontSize: 14,
+            color: "#64748b",
+          }}
+        >
+          Chưa có lần đánh giá
+        </div>
+      ) : (
+        <div>
+          {assessments.map((item) => {
+            const active = item.id === selectedAssessmentId;
+
+            return (
+              <Link
+                key={item.id}
+                to={`/app/cases/${caseId}/assessments/${item.id}`}
+                style={{
+                  display: "block",
+                  padding: "14px 16px",
+                  borderBottom: "1px solid #e2e8f0",
+                  textDecoration: "none",
+                  background: active ? "#f1f5f9" : "#ffffff",
+                  color: "#0f172a",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: active ? 700 : 500,
+                    marginBottom: 4,
+                  }}
+                >
+                  {formatDate(item.assessment_date)}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#64748b",
+                  }}
+                >
+                  Lần {item.assessment_no ?? "—"}
+                </div>
+
+                {item.is_red_flag_present ? (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#dc2626",
+                    }}
+                  >
+                    Red flag
+                  </div>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+===== FILE: src/features/cases/components/CaseHeader.tsx =====
+type Props = {
+  caseCode?: string | null;
+  title?: string | null;
+  primaryProblem?: string | null;
+  primaryDiagnosis?: string | null;
+  assessmentDate?: string | null;
+  chiefComplaint?: string | null;
+  hasRedFlag?: boolean | null;
+};
+
+function formatDate(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("vi-VN");
+}
+
+export default function CaseHeader({
+  caseCode,
+  title,
+  primaryProblem,
+  primaryDiagnosis,
+  assessmentDate,
+  chiefComplaint,
+  hasRedFlag,
+}: Props) {
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        borderBottom: "1px solid #e2e8f0",
+        padding: "20px 24px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ minWidth: 280, flex: 1 }}>
+          <div
+            style={{
+              fontSize: 14,
+              color: "#64748b",
+              marginBottom: 6,
+            }}
+          >
+            Mã ca: {caseCode || "—"}
+          </div>
+
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              lineHeight: 1.3,
+              fontWeight: 700,
+              color: "#0f172a",
+            }}
+          >
+            {title || chiefComplaint || "Clinical workspace"}
+          </h1>
+
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px 20px",
+              fontSize: 14,
+              color: "#475569",
+            }}
+          >
+            <span>Ngày đánh giá: {formatDate(assessmentDate)}</span>
+            <span>Vấn đề chính: {primaryProblem || "—"}</span>
+            <span>Chẩn đoán chính: {primaryDiagnosis || "—"}</span>
+          </div>
+        </div>
+
+        {hasRedFlag ? (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 12px",
+              borderRadius: 999,
+              border: "1px solid #fecaca",
+              background: "#fef2f2",
+              color: "#b91c1c",
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            Red flag
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+===== FILE: src/features/cases/hooks/useCreateAssessment.ts =====
+import { supabase } from "../../../lib/supabase";
+
+type CreateAssessmentPayload = {
+  caseId: string;
+  patientId: string;
+  nextAssessmentNo: number;
+  sourceAssessmentId?: string;
+  assessmentType?: "initial" | "follow_up" | "review" | "urgent" | "discharge";
+  careSetting?: string;
+  status?: string;
+};
+
+type AssessmentNoteRow = Record<string, unknown> & {
+  id?: string;
+  assessment_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+};
+
+type AssessmentDiagnosisRow = Record<string, unknown> & {
+  id?: string;
+  assessment_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  is_active?: boolean | null;
+};
+
+type AssessmentTreatmentRow = Record<string, unknown> & {
+  id?: string;
+  assessment_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string | null;
+  status?: string | null;
+};
+
+const NOTE_CARRY_FORWARD_FIELDS = [
+  "past_medical_history",
+  "past_surgical_history",
+  "medication_history",
+  "allergy_history",
+  "family_history",
+  "social_history",
+  "obstetric_history",
+  "substance_use_history",
+  "sleep_history",
+  "diet_history",
+  "exercise_history",
+  "biological_factors",
+  "psychological_factors",
+  "social_factors",
+  "functional_limitations",
+  "participation_restrictions",
+  "environmental_factors",
+  "personal_factors",
+  "protective_factors",
+  "barriers_to_recovery",
+] as const;
+
+function pickExistingKeys<T extends Record<string, unknown>>(
+  source: T,
+  keys: readonly string[]
+) {
+  const result: Record<string, unknown> = {};
+
+  for (const key of keys) {
+    if (key in source) {
+      result[key] = source[key];
+    }
+  }
+
+  return result;
+}
+
+function stripSystemFields<T extends Record<string, unknown>>(row: T) {
+  const {
+    id,
+    assessment_id,
+    created_at,
+    updated_at,
+    created_by,
+    ...rest
+  } = row;
+  void id;
+  void assessment_id;
+  void created_at;
+  void updated_at;
+  void created_by;
+  return rest;
+}
+
+function hasAnyMeaningfulValue(obj: Record<string, unknown>) {
+  return Object.values(obj).some(
+    (value) => value !== null && value !== undefined && value !== ""
+  );
+}
+
+function shouldCarryForwardTreatment(row: AssessmentTreatmentRow) {
+  const rawStatus = typeof row.status === "string" ? row.status.trim().toLowerCase() : "";
+
+  if (!rawStatus) return true;
+
+  if (["stopped", "completed", "done", "cancelled", "canceled", "discontinued"].includes(rawStatus)) {
+    return false;
+  }
+
+  return true;
+}
+
+async function cloneCarryForwardNote(
+  sourceAssessmentId: string,
+  targetAssessmentId: string
+) {
+  const { data, error } = await supabase
+    .from("assessment_notes")
+    .select("*")
+    .eq("assessment_id", sourceAssessmentId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) return;
+
+  const sourceRow = data as AssessmentNoteRow;
+  const carried = pickExistingKeys(sourceRow, NOTE_CARRY_FORWARD_FIELDS);
+
+  if (!hasAnyMeaningfulValue(carried)) return;
+
+  const insertRow = {
+    assessment_id: targetAssessmentId,
+    ...carried,
+  };
+
+  const { error: insertError } = await supabase
+    .from("assessment_notes")
+    .insert([insertRow]);
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+}
+
+async function cloneActiveDiagnoses(
+  sourceAssessmentId: string,
+  targetAssessmentId: string
+) {
+  const { data, error } = await supabase
+    .from("assessment_diagnoses")
+    .select("*")
+    .eq("assessment_id", sourceAssessmentId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as AssessmentDiagnosisRow[];
+  if (!rows.length) return;
+
+  const insertRows = rows.map((row) => ({
+    assessment_id: targetAssessmentId,
+    ...stripSystemFields(row),
+  }));
+
+  const { error: insertError } = await supabase
+    .from("assessment_diagnoses")
+    .insert(insertRows);
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+}
+
+async function cloneActiveTreatments(
+  sourceAssessmentId: string,
+  targetAssessmentId: string
+) {
+  const { data, error } = await supabase
+    .from("assessment_treatments")
+    .select("*")
+    .eq("assessment_id", sourceAssessmentId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const sourceRows = (data ?? []) as AssessmentTreatmentRow[];
+  const rows = sourceRows.filter(shouldCarryForwardTreatment);
+
+  if (!rows.length) return;
+
+  const insertRows = rows.map((row) => ({
+    assessment_id: targetAssessmentId,
+    ...stripSystemFields(row),
+  }));
+
+  const { error: insertError } = await supabase
+    .from("assessment_treatments")
+    .insert(insertRows);
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+}
+
+export function useCreateAssessment() {
+  async function createAssessment(payload: CreateAssessmentPayload) {
+    if (!payload.caseId) {
+      throw new Error("Thiếu caseId.");
+    }
+
+    if (!payload.patientId) {
+      throw new Error("Thiếu patientId.");
+    }
+
+    if (!payload.nextAssessmentNo || payload.nextAssessmentNo < 1) {
+      throw new Error("assessment_no không hợp lệ.");
+    }
+
+    const { data, error } = await supabase
+      .from("case_assessments")
+      .insert([
+        {
+          case_id: payload.caseId,
+          patient_id: payload.patientId,
+          assessment_no: payload.nextAssessmentNo,
+          assessment_date: new Date().toISOString(),
+          assessment_type: payload.assessmentType ?? "follow_up",
+          care_setting: payload.careSetting ?? "outpatient",
+          status: payload.status ?? "draft",
+        },
+      ])
+      .select("id, case_id, patient_id, assessment_no, assessment_date, assessment_type, status")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data?.id) {
+      throw new Error("Không tạo được assessment mới.");
+    }
+
+    if (payload.sourceAssessmentId) {
+      await cloneCarryForwardNote(payload.sourceAssessmentId, data.id);
+      await cloneActiveDiagnoses(payload.sourceAssessmentId, data.id);
+      await cloneActiveTreatments(payload.sourceAssessmentId, data.id);
+    }
+
+    return data;
+  }
+
+  return {
+    createAssessment,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useUpsertAssessmentNote.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type UpsertAssessmentNotePayload = {
+  assessmentId: string;
+  historyOfPresentIllness?: string;
+  pastMedicalHistory?: string;
+  pastSurgicalHistory?: string;
+  medicationHistory?: string;
+  allergyHistory?: string;
+  familyHistory?: string;
+  socialHistory?: string;
+  ideas?: string;
+  concerns?: string;
+  expectations?: string;
+  biologicalFactors?: string;
+  psychologicalFactors?: string;
+  socialFactors?: string;
+  generalAppearance?: string;
+  cardiovascularExam?: string;
+  respiratoryExam?: string;
+  abdominalExam?: string;
+  otherExam?: string;
+};
+
+function cleanText(value?: string) {
+  return value?.trim() ? value.trim() : null;
+}
+
+export function useUpsertAssessmentNote() {
+  async function upsertAssessmentNote(payload: UpsertAssessmentNotePayload) {
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    const row = {
+      assessment_id: payload.assessmentId,
+      history_of_present_illness: cleanText(payload.historyOfPresentIllness),
+      past_medical_history: cleanText(payload.pastMedicalHistory),
+      past_surgical_history: cleanText(payload.pastSurgicalHistory),
+      medication_history: cleanText(payload.medicationHistory),
+      allergy_history: cleanText(payload.allergyHistory),
+      family_history: cleanText(payload.familyHistory),
+      social_history: cleanText(payload.socialHistory),
+      ideas: cleanText(payload.ideas),
+      concerns: cleanText(payload.concerns),
+      expectations: cleanText(payload.expectations),
+      biological_factors: cleanText(payload.biologicalFactors),
+      psychological_factors: cleanText(payload.psychologicalFactors),
+      social_factors: cleanText(payload.socialFactors),
+      general_appearance: cleanText(payload.generalAppearance),
+      cardiovascular_exam: cleanText(payload.cardiovascularExam),
+      respiratory_exam: cleanText(payload.respiratoryExam),
+      abdominal_exam: cleanText(payload.abdominalExam),
+      other_exam: cleanText(payload.otherExam),
+    };
+
+    const { data, error } = await supabase
+      .from("assessment_notes")
+      .upsert([row], { onConflict: "assessment_id" })
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  return {
+    upsertAssessmentNote,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useUpsertAssessmentVitals.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type UpsertAssessmentVitalsPayload = {
+  assessmentId: string;
+  systolicBp?: number | null;
+  diastolicBp?: number | null;
+  heartRate?: number | null;
+  temperatureC?: number | null;
+  respiratoryRate?: number | null;
+  spo2Percent?: number | null;
+  waistCm?: number | null;
+  heightCm?: number | null;
+  weightKg?: number | null;
+  bmi?: number | null;
+};
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function useUpsertAssessmentVitals() {
+  async function upsertAssessmentVitals(payload: UpsertAssessmentVitalsPayload) {
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    const row = {
+      assessment_id: payload.assessmentId,
+      systolic_bp: toNullableNumber(payload.systolicBp),
+      diastolic_bp: toNullableNumber(payload.diastolicBp),
+      heart_rate: toNullableNumber(payload.heartRate),
+      temperature_c: toNullableNumber(payload.temperatureC),
+      respiratory_rate: toNullableNumber(payload.respiratoryRate),
+      spo2_percent: toNullableNumber(payload.spo2Percent),
+      waist_cm: toNullableNumber(payload.waistCm),
+      height_cm: toNullableNumber(payload.heightCm),
+      weight_kg: toNullableNumber(payload.weightKg),
+      bmi: toNullableNumber(payload.bmi),
+    };
+
+    const { data, error } = await supabase
+      .from("assessment_vitals")
+      .upsert([row], { onConflict: "assessment_id" })
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  return {
+    upsertAssessmentVitals,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useUpsertObservations.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type CreateObservationPayload = {
+  assessmentId: string;
+  patientId: string;
+  caseId: string;
+  observationCode: string;
+  observationLabel: string;
+  valueType: "text" | "numeric" | "boolean" | "date";
+  valueText?: string;
+  valueNumeric?: number;
+  valueBoolean?: boolean;
+  valueDate?: string;
+  unit?: string;
+  note?: string;
+  observedAt?: string;
+};
+
+export function useUpsertObservations() {
+  async function createObservation(payload: CreateObservationPayload) {
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    if (!payload.patientId) {
+      throw new Error("Thiếu patientId.");
+    }
+
+    if (!payload.caseId) {
+      throw new Error("Thiếu caseId.");
+    }
+
+    if (!payload.observationCode.trim()) {
+      throw new Error("Thiếu observation code.");
+    }
+
+    if (!payload.observationLabel.trim()) {
+      throw new Error("Thiếu observation label.");
+    }
+
+    const row = {
+      assessment_id: payload.assessmentId,
+      patient_id: payload.patientId,
+      case_id: payload.caseId,
+      observation_code: payload.observationCode.trim(),
+      observation_label: payload.observationLabel.trim(),
+      value_type: payload.valueType,
+      value_text: payload.valueType === "text" ? payload.valueText?.trim() || null : null,
+      value_numeric:
+        payload.valueType === "numeric" && typeof payload.valueNumeric === "number"
+          ? payload.valueNumeric
+          : null,
+      value_boolean:
+        payload.valueType === "boolean" ? Boolean(payload.valueBoolean) : null,
+      value_date:
+        payload.valueType === "date" ? payload.valueDate?.trim() || null : null,
+      unit: payload.unit?.trim() ? payload.unit.trim() : null,
+      note: payload.note?.trim() ? payload.note.trim() : null,
+      observed_at: payload.observedAt?.trim()
+        ? payload.observedAt
+        : new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("assessment_observations")
+      .insert([row])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function deleteObservation(observationId: string) {
+    const { error } = await supabase
+      .from("assessment_observations")
+      .delete()
+      .eq("id", observationId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return {
+    createObservation,
+    deleteObservation,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useUpsertPlanItems.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type CreatePlanItemPayload = {
+  assessmentId: string;
+  planType: string;
+  description: string;
+  dueDate?: string;
+};
+
+export function useUpsertPlanItems() {
+  async function createPlanItem(payload: CreatePlanItemPayload) {
+    const description = payload.description.trim();
+
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    if (!payload.planType.trim()) {
+      throw new Error("Thiếu plan type.");
+    }
+
+    if (!description) {
+      throw new Error("Mô tả kế hoạch không được để trống.");
+    }
+
+    const { data, error } = await supabase
+      .from("assessment_plan_items")
+      .insert([
+        {
+          assessment_id: payload.assessmentId,
+          plan_type: payload.planType,
+          description,
+          due_date: payload.dueDate?.trim() ? payload.dueDate : null,
+          is_completed: false,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function deletePlanItem(planItemId: string) {
+    const { error } = await supabase
+      .from("assessment_plan_items")
+      .delete()
+      .eq("id", planItemId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return {
+    createPlanItem,
+    deletePlanItem,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useUpsertRedFlags.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type CreateRedFlagPayload = {
+  assessmentId: string;
+  flagName: string;
+  flagCode?: string;
+  severity?: string;
+  note?: string;
+  isPresent?: boolean;
+};
+
+export function useUpsertRedFlags() {
+  async function createRedFlag(payload: CreateRedFlagPayload) {
+    const flagName = payload.flagName.trim();
+
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    if (!flagName) {
+      throw new Error("Tên red flag không được để trống.");
+    }
+
+    const { data, error } = await supabase
+      .from("assessment_red_flags")
+      .insert([
+        {
+          assessment_id: payload.assessmentId,
+          flag_name: flagName,
+          flag_code: payload.flagCode?.trim() ? payload.flagCode.trim() : null,
+          severity: payload.severity?.trim() ? payload.severity.trim() : null,
+          note: payload.note?.trim() ? payload.note.trim() : null,
+          is_present: payload.isPresent ?? true,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function deleteRedFlag(redFlagId: string) {
+    const { error } = await supabase
+      .from("assessment_red_flags")
+      .delete()
+      .eq("id", redFlagId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return {
+    createRedFlag,
+    deleteRedFlag,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useManageDiagnoses.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type CreateDiagnosisPayload = {
+  assessmentId: string;
+  diagnosisType: string;
+  diagnosisName: string;
+  icd10Code?: string;
+  note?: string;
+  isActive?: boolean;
+};
+
+export type UpdateDiagnosisPayload = {
+  diagnosisId: string;
+  diagnosisType: string;
+  diagnosisName: string;
+  icd10Code?: string;
+  note?: string;
+  isActive?: boolean;
+};
+
+function cleanText(value?: string) {
+  return value?.trim() ? value.trim() : null;
+}
+
+export function useManageDiagnoses() {
+  async function createDiagnosis(payload: CreateDiagnosisPayload) {
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    if (!payload.diagnosisType.trim()) {
+      throw new Error("Thiếu loại chẩn đoán.");
+    }
+
+    if (!payload.diagnosisName.trim()) {
+      throw new Error("Thiếu tên chẩn đoán.");
+    }
+
+    const { data, error } = await supabase
+      .from("assessment_diagnoses")
+      .insert([
+        {
+          assessment_id: payload.assessmentId,
+          diagnosis_type: payload.diagnosisType.trim(),
+          diagnosis_name: payload.diagnosisName.trim(),
+          icd10_code: cleanText(payload.icd10Code),
+          note: cleanText(payload.note),
+          is_active: payload.isActive ?? true,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function updateDiagnosis(payload: UpdateDiagnosisPayload) {
+    if (!payload.diagnosisId) {
+      throw new Error("Thiếu diagnosisId.");
+    }
+
+    if (!payload.diagnosisType.trim()) {
+      throw new Error("Thiếu loại chẩn đoán.");
+    }
+
+    if (!payload.diagnosisName.trim()) {
+      throw new Error("Thiếu tên chẩn đoán.");
+    }
+
+    const { data, error } = await supabase
+      .from("assessment_diagnoses")
+      .update({
+        diagnosis_type: payload.diagnosisType.trim(),
+        diagnosis_name: payload.diagnosisName.trim(),
+        icd10_code: cleanText(payload.icd10Code),
+        note: cleanText(payload.note),
+        is_active: payload.isActive ?? true,
+      })
+      .eq("id", payload.diagnosisId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function deleteDiagnosis(diagnosisId: string) {
+    const { error } = await supabase
+      .from("assessment_diagnoses")
+      .delete()
+      .eq("id", diagnosisId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return {
+    createDiagnosis,
+    updateDiagnosis,
+    deleteDiagnosis,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useManageTreatments.ts =====
+import { supabase } from "../../../lib/supabase";
+
+export type CreateTreatmentPayload = {
+  assessmentId: string;
+  treatmentType: string;
+  treatmentName: string;
+  description?: string;
+  doseOrFrequency?: string;
+  duration?: string;
+  instructions?: string;
+  status?: string;
+};
+
+export type UpdateTreatmentPayload = {
+  treatmentId: string;
+  treatmentType: string;
+  treatmentName: string;
+  description?: string;
+  doseOrFrequency?: string;
+  duration?: string;
+  instructions?: string;
+  status?: string;
+};
+
+function cleanText(value?: string) {
+  return value?.trim() ? value.trim() : null;
+}
+
+export function useManageTreatments() {
+  async function createTreatment(payload: CreateTreatmentPayload) {
+    if (!payload.assessmentId) {
+      throw new Error("Thiếu assessmentId.");
+    }
+
+    if (!payload.treatmentType.trim()) {
+      throw new Error("Thiếu loại điều trị.");
+    }
+
+    if (!payload.treatmentName.trim()) {
+      throw new Error("Thiếu tên điều trị.");
+    }
+
+    const { data, error } = await supabase
+      .from("assessment_treatments")
+      .insert([
+        {
+          assessment_id: payload.assessmentId,
+          treatment_type: payload.treatmentType.trim(),
+          treatment_name: payload.treatmentName.trim(),
+          description: cleanText(payload.description),
+          dose_or_frequency: cleanText(payload.doseOrFrequency),
+          duration: cleanText(payload.duration),
+          instructions: cleanText(payload.instructions),
+          status: cleanText(payload.status) ?? "active",
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function updateTreatment(payload: UpdateTreatmentPayload) {
+    if (!payload.treatmentId) {
+      throw new Error("Thiếu treatmentId.");
+    }
+
+    if (!payload.treatmentType.trim()) {
+      throw new Error("Thiếu loại điều trị.");
+    }
+
+    if (!payload.treatmentName.trim()) {
+      throw new Error("Thiếu tên điều trị.");
+    }
+
+    const { data, error } = await supabase
+      .from("assessment_treatments")
+      .update({
+        treatment_type: payload.treatmentType.trim(),
+        treatment_name: payload.treatmentName.trim(),
+        description: cleanText(payload.description),
+        dose_or_frequency: cleanText(payload.doseOrFrequency),
+        duration: cleanText(payload.duration),
+        instructions: cleanText(payload.instructions),
+        status: cleanText(payload.status) ?? "active",
+      })
+      .eq("id", payload.treatmentId)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  async function deleteTreatment(treatmentId: string) {
+    const { error } = await supabase
+      .from("assessment_treatments")
+      .delete()
+      .eq("id", treatmentId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return {
+    createTreatment,
+    updateTreatment,
+    deleteTreatment,
+  };
+}
+
+===== FILE: src/features/cases/hooks/useSaveCalculatorRun.ts =====
+import { supabase } from "../../../lib/supabase";
+
+type SaveCalculatorRunPayload = {
+  calculatorCode: string;
+  patientId: string;
+  caseId: string;
+  assessmentId: string;
+  outputs: unknown;
+  summary?: string;
+  userId: string;
+};
+
+function extractResultValue(outputs: unknown): number | null {
+  if (outputs && typeof outputs === "object") {
+    const obj = outputs as Record<string, unknown>;
+
+    if (typeof obj.resultValue === "number" && Number.isFinite(obj.resultValue)) {
+      return obj.resultValue;
+    }
+    if (typeof obj.result_value === "number" && Number.isFinite(obj.result_value)) {
+      return obj.result_value;
+    }
+    if (typeof obj.score === "number" && Number.isFinite(obj.score)) {
+      return obj.score;
+    }
+    if (typeof obj.value === "number" && Number.isFinite(obj.value)) {
+      return obj.value;
+    }
+  }
+
+  return null;
+}
+
+function extractResultText(outputs: unknown, summary?: string): string | null {
+  if (summary?.trim()) return summary.trim();
+
+  if (outputs && typeof outputs === "object") {
+    const obj = outputs as Record<string, unknown>;
+
+    if (typeof obj.resultText === "string" && obj.resultText.trim()) {
+      return obj.resultText.trim();
+    }
+    if (typeof obj.result_text === "string" && obj.result_text.trim()) {
+      return obj.result_text.trim();
+    }
+    if (typeof obj.interpretation === "string" && obj.interpretation.trim()) {
+      return obj.interpretation.trim();
+    }
+    if (typeof obj.category === "string" && obj.category.trim()) {
+      return obj.category.trim();
+    }
+  }
+
+  return null;
+}
+
+function extractRiskLevel(outputs: unknown): string | null {
+  if (outputs && typeof outputs === "object") {
+    const obj = outputs as Record<string, unknown>;
+
+    if (typeof obj.riskLevel === "string" && obj.riskLevel.trim()) {
+      return obj.riskLevel.trim();
+    }
+    if (typeof obj.risk_level === "string" && obj.risk_level.trim()) {
+      return obj.risk_level.trim();
+    }
+    if (typeof obj.risk === "string" && obj.risk.trim()) {
+      return obj.risk.trim();
+    }
+  }
+
+  return null;
+}
+
+export function useSaveCalculatorRun() {
+  async function saveCalculatorRun(payload: SaveCalculatorRunPayload) {
+    const { data: calculatorDef, error: calculatorDefError } = await supabase
+      .from("calculator_definitions")
+      .select("id, code, name")
+      .eq("code", payload.calculatorCode)
+      .single();
+
+    if (calculatorDefError) {
+      throw new Error(calculatorDefError.message);
+    }
+
+    const { data, error } = await supabase
+      .from("calculator_runs")
+      .insert([
+        {
+          calculator_id: calculatorDef.id,
+          patient_id: payload.patientId,
+          case_id: payload.caseId,
+          assessment_id: payload.assessmentId,
+          run_at: new Date().toISOString(),
+          result_value: extractResultValue(payload.outputs),
+          result_text: extractResultText(payload.outputs, payload.summary),
+          risk_level: extractRiskLevel(payload.outputs),
+          interpretation: payload.summary ?? null,
+          result_json: payload.outputs,
+          created_by: payload.userId,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  }
+
+  return {
+    saveCalculatorRun,
+  };
+}
+
+===== FILE: src/modules/cases/clinical-note/ClinicalNoteEditSection.tsx =====
+import { useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
+import { useUpsertAssessmentNote } from "../../../features/cases/hooks/useUpsertAssessmentNote";
+
+type ClinicalNoteEditMode = "history" | "ice" | "biopsychosocial";
+
+export type ClinicalNoteEditSectionRef = {
+  save: () => Promise<boolean>;
+};
+
+type Props = {
+  assessmentId?: string;
+  data: Record<string, unknown> | null;
+  mode: ClinicalNoteEditMode;
+  onChanged?: () => Promise<void> | void;
+};
+
+type HistoryTemplate = {
+  label: string;
+  values: Partial<{
+    historyOfPresentIllness: string;
+    pastMedicalHistory: string;
+    pastSurgicalHistory: string;
+    medicationHistory: string;
+    allergyHistory: string;
+    familyHistory: string;
+    socialHistory: string;
+  }>;
+};
+
+type ICETemplate = {
+  label: string;
+  values: Partial<{
+    ideas: string;
+    concerns: string;
+    expectations: string;
+  }>;
+};
+
+type BioPsychoSocialTemplate = {
+  label: string;
+  values: Partial<{
+    biologicalFactors: string;
+    psychologicalFactors: string;
+    socialFactors: string;
+    generalAppearance: string;
+    cardiovascularExam: string;
+    respiratoryExam: string;
+    abdominalExam: string;
+    otherExam: string;
+  }>;
+};
+
+const HISTORY_TEMPLATES: HistoryTemplate[] = [
+  {
+    label: "Tiền sử trống cơ bản",
+    values: {
+      pastMedicalHistory: "Chưa ghi nhận bệnh lý mạn tính đáng chú ý.",
+      pastSurgicalHistory: "Chưa ghi nhận tiền sử phẫu thuật đáng chú ý.",
+      medicationHistory: "Hiện chưa dùng thuốc nền thường xuyên.",
+      allergyHistory: "Chưa ghi nhận dị ứng thuốc/thức ăn.",
+      familyHistory: "Chưa ghi nhận tiền sử gia đình đáng chú ý.",
+      socialHistory: "Sinh hoạt thường ngày ổn định.",
+    },
+  },
+  {
+    label: "Tăng huyết áp / đái tháo đường",
+    values: {
+      pastMedicalHistory: "Tiền sử tăng huyết áp và đái tháo đường type 2.",
+      medicationHistory: "Đang dùng thuốc điều trị tăng huyết áp và đái tháo đường theo toa trước đó.",
+      allergyHistory: "Chưa ghi nhận dị ứng thuốc.",
+      familyHistory: "Gia đình có người mắc bệnh tim mạch/chuyển hóa.",
+      socialHistory: "Cần đánh giá thêm chế độ ăn, vận động, giấc ngủ và tuân thủ điều trị.",
+    },
+  },
+  {
+    label: "Bệnh hô hấp mạn",
+    values: {
+      pastMedicalHistory: "Tiền sử bệnh hô hấp mạn, theo dõi định kỳ.",
+      medicationHistory: "Đang dùng thuốc điều trị hô hấp theo toa.",
+      allergyHistory: "Cần khai thác thêm tiền sử dị ứng và yếu tố khởi phát.",
+      socialHistory: "Cần khai thác hút thuốc, phơi nhiễm khói bụi, môi trường sống/làm việc.",
+    },
+  },
+];
+
+const ICE_TEMPLATES: ICETemplate[] = [
+  {
+    label: "ICE trung tính",
+    values: {
+      ideas: "Người bệnh chưa có nhận định rõ về nguyên nhân bệnh.",
+      concerns: "Lo lắng về diễn tiến triệu chứng và ảnh hưởng sinh hoạt.",
+      expectations: "Mong được giải thích rõ tình trạng và hướng xử trí.",
+    },
+  },
+  {
+    label: "ICE lo bệnh nặng",
+    values: {
+      ideas: "Người bệnh lo ngại triệu chứng liên quan bệnh lý nghiêm trọng.",
+      concerns: "Lo biến chứng hoặc bệnh nặng tiềm ẩn.",
+      expectations: "Mong được đánh giá kỹ và loại trừ bệnh lý nguy hiểm.",
+    },
+  },
+  {
+    label: "ICE thiên về thuốc",
+    values: {
+      ideas: "Người bệnh nghĩ cần dùng thuốc để cải thiện nhanh triệu chứng.",
+      concerns: "Lo triệu chứng kéo dài hoặc tái phát.",
+      expectations: "Mong được kê thuốc và hướng dẫn dùng thuốc cụ thể.",
+    },
+  },
+];
+
+const BPS_TEMPLATES: BioPsychoSocialTemplate[] = [
+  {
+    label: "Khám tim phổi bụng bình thường",
+    values: {
+      biologicalFactors: "Chưa ghi nhận yếu tố sinh học nổi bật ngoài vấn đề hiện tại.",
+      psychologicalFactors: "Tinh thần tiếp xúc tốt, hợp tác khám.",
+      socialFactors: "Sinh hoạt cơ bản ổn định.",
+      generalAppearance: "Tỉnh, tiếp xúc tốt.",
+      cardiovascularExam: "Tim đều, chưa ghi nhận tiếng thổi.",
+      respiratoryExam: "Phổi thông khí tốt, chưa ghi nhận ran.",
+      abdominalExam: "Bụng mềm, không chướng, không phản ứng thành bụng.",
+      otherExam: "Chưa ghi nhận bất thường khác đáng chú ý.",
+    },
+  },
+  {
+    label: "Khám hô hấp bình thường",
+    values: {
+      generalAppearance: "Tỉnh, tiếp xúc tốt, không khó thở khi nghỉ.",
+      respiratoryExam: "Phổi thông khí tốt, chưa ghi nhận ran, không co kéo cơ hô hấp phụ.",
+      otherExam: "SpO2 và dấu hiệu sinh tồn cần đối chiếu thêm nếu có.",
+    },
+  },
+  {
+    label: "Khám bụng cơ bản bình thường",
+    values: {
+      generalAppearance: "Tỉnh, tiếp xúc tốt.",
+      abdominalExam: "Bụng mềm, ấn không đau khu trú, không đề kháng, nhu động ruột còn.",
+      otherExam: "Chưa ghi nhận dấu hiệu cảnh báo bụng cấp trên thăm khám hiện tại.",
+    },
+  },
+];
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string") return value;
+  }
+  return "";
+}
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      style={{
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        background: "#fff",
+        padding: 16,
+      }}
+    >
+      <h2
+        style={{
+          margin: "0 0 14px 0",
+          fontSize: 18,
+          fontWeight: 700,
+          color: "#0f172a",
+        }}
+      >
+        {title}
+      </h2>
+
+      <div style={{ display: "grid", gap: 16 }}>{children}</div>
+    </section>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  onChange,
+  rows = 4,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  rows?: number;
+}) {
+  return (
+    <div>
+      <label
+        style={{
+          display: "block",
+          fontSize: 14,
+          fontWeight: 600,
+          marginBottom: 6,
+          color: "#334155",
+        }}
+      >
+        {label}
+      </label>
+
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        style={{
+          width: "100%",
+          padding: 10,
+          border: "1px solid #cbd5e1",
+          borderRadius: 8,
+          resize: "vertical",
+          background: "#fff",
+          color: "#0f172a",
+        }}
+      />
+    </div>
+  );
+}
+
+function TemplateBar({
+  title,
+  items,
+  onApply,
+}: {
+  title: string;
+  items: Array<{ label: string }>;
+  onApply: (index: number) => void;
+}) {
+  return (
+    <div
+      style={{
+        padding: 12,
+        border: "1px dashed #cbd5e1",
+        borderRadius: 12,
+        background: "#f8fafc",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: "#475569",
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {items.map((item, index) => (
+          <button
+            key={`${item.label}-${index}`}
+            type="button"
+            onClick={() => onApply(index)}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              cursor: "pointer",
+              color: "#334155",
+              fontWeight: 500,
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const ClinicalNoteEditSection = forwardRef<ClinicalNoteEditSectionRef, Props>(
+  function ClinicalNoteEditSection(
+    { assessmentId, data, mode, onChanged }: Props,
+    ref
+  ) {
+    const { upsertAssessmentNote } = useUpsertAssessmentNote();
+
+    const [historyOfPresentIllness, setHistoryOfPresentIllness] = useState("");
+    const [pastMedicalHistory, setPastMedicalHistory] = useState("");
+    const [pastSurgicalHistory, setPastSurgicalHistory] = useState("");
+    const [medicationHistory, setMedicationHistory] = useState("");
+    const [allergyHistory, setAllergyHistory] = useState("");
+    const [familyHistory, setFamilyHistory] = useState("");
+    const [socialHistory, setSocialHistory] = useState("");
+
+    const [ideas, setIdeas] = useState("");
+    const [concerns, setConcerns] = useState("");
+    const [expectations, setExpectations] = useState("");
+
+    const [biologicalFactors, setBiologicalFactors] = useState("");
+    const [psychologicalFactors, setPsychologicalFactors] = useState("");
+    const [socialFactors, setSocialFactors] = useState("");
+    const [generalAppearance, setGeneralAppearance] = useState("");
+    const [cardiovascularExam, setCardiovascularExam] = useState("");
+    const [respiratoryExam, setRespiratoryExam] = useState("");
+    const [abdominalExam, setAbdominalExam] = useState("");
+    const [otherExam, setOtherExam] = useState("");
+
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+      setHistoryOfPresentIllness(
+        getText(data, "historyOfPresentIllness", "history_of_present_illness")
+      );
+      setPastMedicalHistory(
+        getText(data, "pastMedicalHistory", "past_medical_history")
+      );
+      setPastSurgicalHistory(
+        getText(data, "pastSurgicalHistory", "past_surgical_history")
+      );
+      setMedicationHistory(
+        getText(data, "medicationHistory", "medication_history")
+      );
+      setAllergyHistory(getText(data, "allergyHistory", "allergy_history"));
+      setFamilyHistory(getText(data, "familyHistory", "family_history"));
+      setSocialHistory(getText(data, "socialHistory", "social_history"));
+
+      setIdeas(getText(data, "ideas"));
+      setConcerns(getText(data, "concerns"));
+      setExpectations(getText(data, "expectations"));
+
+      setBiologicalFactors(
+        getText(data, "biologicalFactors", "biological_factors")
+      );
+      setPsychologicalFactors(
+        getText(data, "psychologicalFactors", "psychological_factors")
+      );
+      setSocialFactors(getText(data, "socialFactors", "social_factors"));
+      setGeneralAppearance(
+        getText(data, "generalAppearance", "general_appearance")
+      );
+      setCardiovascularExam(
+        getText(data, "cardiovascularExam", "cardiovascular_exam")
+      );
+      setRespiratoryExam(getText(data, "respiratoryExam", "respiratory_exam"));
+      setAbdominalExam(getText(data, "abdominalExam", "abdominal_exam"));
+      setOtherExam(getText(data, "otherExam", "other_exam"));
+    }, [data]);
+
+    const title = useMemo(() => {
+      if (mode === "history") return "Tiền sử";
+      if (mode === "ice") return "ICE";
+      return "BioPsychoSocial / Khám";
+    }, [mode]);
+
+    async function handleSave() {
+      if (!assessmentId) {
+        setError("Thiếu assessmentId.");
+        return false;
+      }
+
+      try {
+        setSaving(true);
+        setError("");
+
+        await upsertAssessmentNote({
+          assessmentId,
+          historyOfPresentIllness,
+          pastMedicalHistory,
+          pastSurgicalHistory,
+          medicationHistory,
+          allergyHistory,
+          familyHistory,
+          socialHistory,
+          ideas,
+          concerns,
+          expectations,
+          biologicalFactors,
+          psychologicalFactors,
+          socialFactors,
+          generalAppearance,
+          cardiovascularExam,
+          respiratoryExam,
+          abdominalExam,
+          otherExam,
+        });
+
+        await onChanged?.();
+        return true;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Không lưu được clinical note.";
+        setError(message);
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    useImperativeHandle(ref, () => ({
+      save: handleSave,
+    }));
+
+    function applyHistoryTemplate(index: number) {
+      const template = HISTORY_TEMPLATES[index];
+      if (!template) return;
+
+      if (template.values.historyOfPresentIllness !== undefined) {
+        setHistoryOfPresentIllness(template.values.historyOfPresentIllness);
+      }
+      if (template.values.pastMedicalHistory !== undefined) {
+        setPastMedicalHistory(template.values.pastMedicalHistory);
+      }
+      if (template.values.pastSurgicalHistory !== undefined) {
+        setPastSurgicalHistory(template.values.pastSurgicalHistory);
+      }
+      if (template.values.medicationHistory !== undefined) {
+        setMedicationHistory(template.values.medicationHistory);
+      }
+      if (template.values.allergyHistory !== undefined) {
+        setAllergyHistory(template.values.allergyHistory);
+      }
+      if (template.values.familyHistory !== undefined) {
+        setFamilyHistory(template.values.familyHistory);
+      }
+      if (template.values.socialHistory !== undefined) {
+        setSocialHistory(template.values.socialHistory);
+      }
+    }
+
+    function applyICETemplate(index: number) {
+      const template = ICE_TEMPLATES[index];
+      if (!template) return;
+
+      if (template.values.ideas !== undefined) {
+        setIdeas(template.values.ideas);
+      }
+      if (template.values.concerns !== undefined) {
+        setConcerns(template.values.concerns);
+      }
+      if (template.values.expectations !== undefined) {
+        setExpectations(template.values.expectations);
+      }
+    }
+
+    function applyBPSTemplate(index: number) {
+      const template = BPS_TEMPLATES[index];
+      if (!template) return;
+
+      if (template.values.biologicalFactors !== undefined) {
+        setBiologicalFactors(template.values.biologicalFactors);
+      }
+      if (template.values.psychologicalFactors !== undefined) {
+        setPsychologicalFactors(template.values.psychologicalFactors);
+      }
+      if (template.values.socialFactors !== undefined) {
+        setSocialFactors(template.values.socialFactors);
+      }
+      if (template.values.generalAppearance !== undefined) {
+        setGeneralAppearance(template.values.generalAppearance);
+      }
+      if (template.values.cardiovascularExam !== undefined) {
+        setCardiovascularExam(template.values.cardiovascularExam);
+      }
+      if (template.values.respiratoryExam !== undefined) {
+        setRespiratoryExam(template.values.respiratoryExam);
+      }
+      if (template.values.abdominalExam !== undefined) {
+        setAbdominalExam(template.values.abdominalExam);
+      }
+      if (template.values.otherExam !== undefined) {
+        setOtherExam(template.values.otherExam);
+      }
+    }
+
+    function renderHistoryFields() {
+      return (
+        <>
+          <TemplateBar
+            title="Mẫu nhập nhanh"
+            items={HISTORY_TEMPLATES}
+            onApply={applyHistoryTemplate}
+          />
+
+          <TextareaField
+            label="History of Present Illness"
+            value={historyOfPresentIllness}
+            onChange={setHistoryOfPresentIllness}
+            rows={5}
+          />
+          <TextareaField
+            label="Past Medical History"
+            value={pastMedicalHistory}
+            onChange={setPastMedicalHistory}
+          />
+          <TextareaField
+            label="Past Surgical History"
+            value={pastSurgicalHistory}
+            onChange={setPastSurgicalHistory}
+          />
+          <TextareaField
+            label="Medication History"
+            value={medicationHistory}
+            onChange={setMedicationHistory}
+          />
+          <TextareaField
+            label="Allergy History"
+            value={allergyHistory}
+            onChange={setAllergyHistory}
+          />
+          <TextareaField
+            label="Family History"
+            value={familyHistory}
+            onChange={setFamilyHistory}
+          />
+          <TextareaField
+            label="Social History"
+            value={socialHistory}
+            onChange={setSocialHistory}
+          />
+        </>
+      );
+    }
+
+    function renderICEFields() {
+      return (
+        <>
+          <TemplateBar
+            title="Mẫu nhập nhanh"
+            items={ICE_TEMPLATES}
+            onApply={applyICETemplate}
+          />
+
+          <TextareaField label="Ideas" value={ideas} onChange={setIdeas} />
+          <TextareaField label="Concerns" value={concerns} onChange={setConcerns} />
+          <TextareaField
+            label="Expectations"
+            value={expectations}
+            onChange={setExpectations}
+          />
+        </>
+      );
+    }
+
+    function renderBioPsychoSocialFields() {
+      return (
+        <>
+          <TemplateBar
+            title="Mẫu nhập nhanh"
+            items={BPS_TEMPLATES}
+            onApply={applyBPSTemplate}
+          />
+
+          <TextareaField
+            label="Biological Factors"
+            value={biologicalFactors}
+            onChange={setBiologicalFactors}
+          />
+          <TextareaField
+            label="Psychological Factors"
+            value={psychologicalFactors}
+            onChange={setPsychologicalFactors}
+          />
+          <TextareaField
+            label="Social Factors"
+            value={socialFactors}
+            onChange={setSocialFactors}
+          />
+          <TextareaField
+            label="General Appearance"
+            value={generalAppearance}
+            onChange={setGeneralAppearance}
+          />
+          <TextareaField
+            label="Cardiovascular Exam"
+            value={cardiovascularExam}
+            onChange={setCardiovascularExam}
+          />
+          <TextareaField
+            label="Respiratory Exam"
+            value={respiratoryExam}
+            onChange={setRespiratoryExam}
+          />
+          <TextareaField
+            label="Abdominal Exam"
+            value={abdominalExam}
+            onChange={setAbdominalExam}
+          />
+          <TextareaField
+            label="Other Exam"
+            value={otherExam}
+            onChange={setOtherExam}
+          />
+        </>
+      );
+    }
+
+    return (
+      <SectionCard title={title}>
+        {mode === "history" ? renderHistoryFields() : null}
+        {mode === "ice" ? renderICEFields() : null}
+        {mode === "biopsychosocial" ? renderBioPsychoSocialFields() : null}
+
+        {error ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        ) : null}
+
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              void handleSave();
+            }}
+            disabled={saving}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: saving ? "#e2e8f0" : "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+              fontWeight: 600,
+            }}
+          >
+            {saving ? "Đang lưu..." : "Lưu Clinical Note"}
+          </button>
+        </div>
+      </SectionCard>
+    );
+  }
+);
+
+export default ClinicalNoteEditSection;
+
+===== FILE: src/modules/cases/overview/OverviewTab.tsx =====
+import PatientSnapshotSection from "../components/PatientSnapshotSection";
+import VitalsEditSection from "../vitals/VitalsEditSection";
+import RedFlagsSection from "../red-flags/RedFlagsSection";
+import type { PatientSnapshotViewModel } from "../types/patientSnapshot";
+
+type VitalsData = {
+  assessment_id?: string;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  heart_rate?: number | null;
+  temperature_c?: number | null;
+  respiratory_rate?: number | null;
+  spo2_percent?: number | null;
+  waist_cm?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  bmi?: number | null;
+} | null;
+
+type Props = {
+  snapshotData: PatientSnapshotViewModel | null;
+  vitals: VitalsData;
+  redFlags: unknown;
+  assessmentId?: string;
+  onChanged?: () => Promise<void> | void;
+};
+
+export default function OverviewTab({
+  snapshotData,
+  vitals,
+  redFlags,
+  assessmentId,
+  onChanged,
+}: Props) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {snapshotData ? (
+        <PatientSnapshotSection
+          data={snapshotData}
+          onPrint={() => window.print()}
+        />
+      ) : (
+        <div style={{ fontSize: 14, color: "#64748b" }}>
+          Không có dữ liệu snapshot.
+        </div>
+      )}
+
+      <VitalsEditSection
+        assessmentId={assessmentId}
+        data={vitals}
+        onChanged={onChanged}
+      />
+
+      <RedFlagsSection
+        data={redFlags as Parameters<typeof RedFlagsSection>[0]["data"]}
+        assessmentId={assessmentId}
+        onChanged={onChanged}
+      />
+    </div>
+  );
+}
+
+===== FILE: src/modules/cases/history/HistoryTab.tsx =====
+type Props = {
+  data: Record<string, unknown> | null;
+};
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function InfoBlock({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: 16,
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>{title}</div>
+      <div style={{ whiteSpace: "pre-wrap", color: value ? "#0f172a" : "#64748b" }}>
+        {value || "Chưa có dữ liệu."}
+      </div>
+    </div>
+  );
+}
+
+export default function HistoryTab({ data }: Props) {
+  const pastMedicalHistory = getText(data, "pastMedicalHistory", "past_medical_history");
+  const pastSurgicalHistory = getText(data, "pastSurgicalHistory", "past_surgical_history");
+  const medicationHistory = getText(data, "medicationHistory", "medication_history");
+  const allergyHistory = getText(data, "allergyHistory", "allergy_history");
+  const familyHistory = getText(data, "familyHistory", "family_history");
+  const socialHistory = getText(data, "socialHistory", "social_history");
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 16,
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      }}
+    >
+      <InfoBlock title="Past Medical History" value={pastMedicalHistory} />
+      <InfoBlock title="Past Surgical History" value={pastSurgicalHistory} />
+      <InfoBlock title="Medication History" value={medicationHistory} />
+      <InfoBlock title="Allergy History" value={allergyHistory} />
+      <InfoBlock title="Family History" value={familyHistory} />
+      <InfoBlock title="Social History" value={socialHistory} />
+    </div>
+  );
+}
+
+===== FILE: src/modules/cases/ice/ICETab.tsx =====
+type Props = {
+  data: Record<string, unknown> | null;
+};
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function IceCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: 16,
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      <div style={{ whiteSpace: "pre-wrap", color: value ? "#0f172a" : "#64748b" }}>
+        {value || "Chưa có dữ liệu."}
+      </div>
+    </div>
+  );
+}
+
+export default function ICETab({ data }: Props) {
+  const ideas = getText(data, "ideas");
+  const concerns = getText(data, "concerns");
+  const expectations = getText(data, "expectations");
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 16,
+        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+      }}
+    >
+      <IceCard title="Ideas" value={ideas} />
+      <IceCard title="Concerns" value={concerns} />
+      <IceCard title="Expectations" value={expectations} />
+    </div>
+  );
+}
+
+===== FILE: src/modules/cases/risk-factors/RiskFactorsTab.tsx =====
+import RedFlagsSection from "../red-flags/RedFlagsSection";
+
+type Props = {
+  vitals: {
+    bmi?: number | null;
+    waist_cm?: number | null;
+    weight_kg?: number | null;
+    height_cm?: number | null;
+  } | null;
+  redFlags: unknown;
+  noteData: Record<string, unknown> | null;
+  assessmentId?: string;
+  onChanged?: () => Promise<void> | void;
+};
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function RiskCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: 16,
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>{title}</div>
+      <div style={{ color: value ? "#0f172a" : "#64748b", whiteSpace: "pre-wrap" }}>
+        {value || "Chưa có dữ liệu."}
+      </div>
+    </div>
+  );
+}
+
+export default function RiskFactorsTab({
+  vitals,
+  redFlags,
+  noteData,
+  assessmentId,
+  onChanged,
+}: Props) {
+  const socialHistory = getText(noteData, "socialHistory", "social_history");
+  const biologicalFactors = getText(noteData, "biologicalFactors", "biological_factors");
+
+  const anthropometrySummary = [
+    vitals?.height_cm ? `Chiều cao: ${vitals.height_cm} cm` : "",
+    vitals?.weight_kg ? `Cân nặng: ${vitals.weight_kg} kg` : "",
+    vitals?.waist_cm ? `Vòng eo: ${vitals.waist_cm} cm` : "",
+    vitals?.bmi ? `BMI: ${vitals.bmi}` : "",
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 16,
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        }}
+      >
+        <RiskCard title="Anthropometry / Risk Summary" value={anthropometrySummary} />
+        <RiskCard title="Social Risk / Lifestyle" value={socialHistory} />
+        <RiskCard title="Biological Risk Context" value={biologicalFactors} />
+      </div>
+
+      <RedFlagsSection
+        data={redFlags as Parameters<typeof RedFlagsSection>[0]["data"]}
+        assessmentId={assessmentId}
+        onChanged={onChanged}
+      />
+    </div>
+  );
+}
+
+===== FILE: src/modules/cases/biopsychosocial/BioPsychoSocialTab.tsx =====
+type Props = {
+  data: Record<string, unknown> | null;
+};
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "";
+}
+
+function SectionCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: 16,
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      <div style={{ whiteSpace: "pre-wrap", color: value ? "#0f172a" : "#64748b" }}>
+        {value || "Chưa có dữ liệu."}
+      </div>
+    </div>
+  );
+}
+
+export default function BioPsychoSocialTab({ data }: Props) {
+  const biologicalFactors = getText(data, "biologicalFactors", "biological_factors");
+  const psychologicalFactors = getText(
+    data,
+    "psychologicalFactors",
+    "psychological_factors"
+  );
+  const socialFactors = getText(data, "socialFactors", "social_factors");
+
+  const generalAppearance = getText(data, "generalAppearance", "general_appearance");
+  const cardiovascularExam = getText(data, "cardiovascularExam", "cardiovascular_exam");
+  const respiratoryExam = getText(data, "respiratoryExam", "respiratory_exam");
+  const abdominalExam = getText(data, "abdominalExam", "abdominal_exam");
+  const otherExam = getText(data, "otherExam", "other_exam");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 16,
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+        }}
+      >
+        <SectionCard title="Biological Factors" value={biologicalFactors} />
+        <SectionCard title="Psychological Factors" value={psychologicalFactors} />
+        <SectionCard title="Social Factors" value={socialFactors} />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gap: 16,
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        }}
+      >
+        <SectionCard title="General Appearance" value={generalAppearance} />
+        <SectionCard title="Cardiovascular Exam" value={cardiovascularExam} />
+        <SectionCard title="Respiratory Exam" value={respiratoryExam} />
+        <SectionCard title="Abdominal Exam" value={abdominalExam} />
+        <SectionCard title="Other Exam" value={otherExam} />
+      </div>
+    </div>
+  );
+}
+
+===== FILE: src/modules/cases/observations/ObservationsSection.tsx =====
+import { useState } from "react";
+import { useUpsertObservations } from "../../../features/cases/hooks/useUpsertObservations";
+import type { ObservationsSectionData } from "./types";
+
+type Props = {
+  data: ObservationsSectionData;
+  assessmentId?: string;
+  patientId?: string;
+  caseId?: string;
+  onChanged?: () => Promise<void> | void;
+};
+
+type ValueType = "text" | "numeric" | "boolean" | "date";
+
+export default function ObservationsSection({
+  data,
+  assessmentId,
+  patientId,
+  caseId,
+  onChanged,
+}: Props) {
+  const { createObservation, deleteObservation } = useUpsertObservations();
+
+  const [observationCode, setObservationCode] = useState("");
+  const [observationLabel, setObservationLabel] = useState("");
+  const [valueType, setValueType] = useState<ValueType>("numeric");
+  const [valueText, setValueText] = useState("");
+  const [valueNumeric, setValueNumeric] = useState("");
+  const [valueBoolean, setValueBoolean] = useState(true);
+  const [valueDate, setValueDate] = useState("");
+  const [unit, setUnit] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!assessmentId || !patientId || !caseId) {
+      setError("Thiếu assessmentId / patientId / caseId.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await createObservation({
+        assessmentId,
+        patientId,
+        caseId,
+        observationCode,
+        observationLabel,
+        valueType,
+        valueText,
+        valueNumeric:
+          valueType === "numeric" && valueNumeric.trim()
+            ? Number(valueNumeric)
+            : undefined,
+        valueBoolean,
+        valueDate,
+        unit,
+        note,
+      });
+
+      setObservationCode("");
+      setObservationLabel("");
+      setValueType("numeric");
+      setValueText("");
+      setValueNumeric("");
+      setValueBoolean(true);
+      setValueDate("");
+      setUnit("");
+      setNote("");
+
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không lưu được observation.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(observationId: string) {
+    try {
+      setDeletingId(observationId);
+      setError("");
+
+      await deleteObservation(observationId);
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không xóa được observation.";
+      setError(message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-base font-semibold mb-2">Observations / Labs</h2>
+
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          display: "grid",
+          gap: 12,
+          padding: 16,
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#fff",
+          marginBottom: 16,
+        }}
+      >
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Observation code
+          </label>
+          <input
+            value={observationCode}
+            onChange={(e) => setObservationCode(e.target.value)}
+            placeholder="Ví dụ: ast, alt, platelet, phq9_item_1"
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Observation label
+          </label>
+          <input
+            value={observationLabel}
+            onChange={(e) => setObservationLabel(e.target.value)}
+            placeholder="Ví dụ: AST, ALT, Platelet"
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Value type
+          </label>
+          <select
+            value={valueType}
+            onChange={(e) => setValueType(e.target.value as ValueType)}
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              background: "#fff",
+            }}
+          >
+            <option value="numeric">numeric</option>
+            <option value="text">text</option>
+            <option value="boolean">boolean</option>
+            <option value="date">date</option>
+          </select>
+        </div>
+
+        {valueType === "numeric" ? (
+          <div>
+            <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+              Numeric value
+            </label>
+            <input
+              value={valueNumeric}
+              onChange={(e) => setValueNumeric(e.target.value)}
+              placeholder="Ví dụ: 45"
+              type="number"
+              step="any"
+              style={{
+                width: "100%",
+                padding: 10,
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+              }}
+            />
+          </div>
+        ) : null}
+
+        {valueType === "text" ? (
+          <div>
+            <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+              Text value
+            </label>
+            <input
+              value={valueText}
+              onChange={(e) => setValueText(e.target.value)}
+              placeholder="Nhập giá trị text"
+              style={{
+                width: "100%",
+                padding: 10,
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+              }}
+            />
+          </div>
+        ) : null}
+
+        {valueType === "boolean" ? (
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={valueBoolean}
+              onChange={(e) => setValueBoolean(e.target.checked)}
+            />
+            Boolean value
+          </label>
+        ) : null}
+
+        {valueType === "date" ? (
+          <div>
+            <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+              Date value
+            </label>
+            <input
+              type="date"
+              value={valueDate}
+              onChange={(e) => setValueDate(e.target.value)}
+              style={{
+                width: "100%",
+                padding: 10,
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+              }}
+            />
+          </div>
+        ) : null}
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Unit (optional)
+          </label>
+          <input
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="Ví dụ: U/L, g/L, x10^9/L"
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Ghi chú (optional)
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Ghi chú thêm nếu cần..."
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              resize: "vertical",
+            }}
+          />
+        </div>
+
+        {error ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: saving ? "#e2e8f0" : "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+          >
+            {saving ? "Đang lưu..." : "Lưu observation"}
+          </button>
+        </div>
+      </form>
+
+      {!data.items.length ? (
+        <div className="text-sm text-gray-500">Chưa có dữ liệu observations.</div>
+      ) : (
+        <div className="space-y-3">
+          {data.items.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                borderBottom: "1px solid #e2e8f0",
+                paddingBottom: 12,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>{item.label}</div>
+
+              <div style={{ fontSize: 14, marginTop: 4 }}>
+                {item.displayValue}
+                {item.unit ? ` ${item.unit}` : ""}
+              </div>
+
+              <div style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>
+                {item.code}
+                {item.normalFlag ? ` • ${item.normalFlag}` : ""}
+                {item.observedAt ? ` • ${item.observedAt}` : ""}
+              </div>
+
+              {item.note ? (
+                <div style={{ fontSize: 14, marginTop: 6 }}>{item.note}</div>
+              ) : null}
+
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id)}
+                  disabled={deletingId === item.id}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid #fecaca",
+                    background: "#fff",
+                    color: "#b91c1c",
+                    cursor: deletingId === item.id ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {deletingId === item.id ? "Đang xóa..." : "Xóa"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+===== FILE: src/modules/cases/plan/PlanSection.tsx =====
+import { useState } from "react";
+import { useUpsertPlanItems } from "../../../features/cases/hooks/useUpsertPlanItems";
+import type { PlanSectionData } from "./types";
+
+type Props = {
+  data: PlanSectionData;
+  assessmentId?: string;
+  onChanged?: () => Promise<void> | void;
+};
+
+const PLAN_TYPE_OPTIONS = [
+  "follow_up",
+  "lab",
+  "imaging",
+  "referral",
+  "self_care",
+  "warning_advice",
+  "admin",
+];
+
+export default function PlanSection({ data, assessmentId, onChanged }: Props) {
+  const { createPlanItem, deletePlanItem } = useUpsertPlanItems();
+
+  const [planType, setPlanType] = useState("follow_up");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!assessmentId) {
+      setError("Thiếu assessmentId.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await createPlanItem({
+        assessmentId,
+        planType,
+        description,
+        dueDate,
+      });
+
+      setDescription("");
+      setDueDate("");
+
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không lưu được kế hoạch.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(planItemId: string) {
+    try {
+      setDeletingId(planItemId);
+      setError("");
+
+      await deletePlanItem(planItemId);
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không xóa được kế hoạch.";
+      setError(message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-base font-semibold mb-2">Kế hoạch</h2>
+
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          display: "grid",
+          gap: 12,
+          padding: 16,
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#fff",
+          marginBottom: 16,
+        }}
+      >
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Loại kế hoạch
+          </label>
+          <select
+            value={planType}
+            onChange={(e) => setPlanType(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              background: "#fff",
+            }}
+          >
+            {PLAN_TYPE_OPTIONS.map((item: string) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Mô tả
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            placeholder="Ví dụ: tái khám sau 7 ngày, làm AST/ALT, siêu âm bụng..."
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              resize: "vertical",
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Hẹn ngày (optional)
+          </label>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+
+        {error ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: saving ? "#e2e8f0" : "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+          >
+            {saving ? "Đang lưu..." : "Lưu kế hoạch"}
+          </button>
+        </div>
+      </form>
+
+      {!data.items.length ? (
+        <div className="text-sm text-gray-500">Chưa có kế hoạch.</div>
+      ) : (
+        <div className="space-y-3">
+          {data.items.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                borderBottom: "1px solid #e2e8f0",
+                paddingBottom: 12,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>{item.description}</div>
+              <div style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>
+                {item.type}
+                {item.dueDate ? ` • Hẹn: ${item.dueDate}` : ""}
+                {item.isCompleted ? " • Đã hoàn tất" : ""}
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id)}
+                  disabled={deletingId === item.id}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid #fecaca",
+                    background: "#fff",
+                    color: "#b91c1c",
+                    cursor: deletingId === item.id ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {deletingId === item.id ? "Đang xóa..." : "Xóa"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+===== FILE: src/modules/cases/red-flags/RedFlagsSection.tsx =====
+import { useState } from "react";
+import { useUpsertRedFlags } from "../../../features/cases/hooks/useUpsertRedFlags";
+import type { RedFlagsSectionData } from "./types";
+
+type Props = {
+  data: RedFlagsSectionData;
+  assessmentId?: string;
+  onChanged?: () => Promise<void> | void;
+};
+
+const SEVERITY_OPTIONS = ["low", "moderate", "high", "critical"];
+
+export default function RedFlagsSection({
+  data,
+  assessmentId,
+  onChanged,
+}: Props) {
+  const { createRedFlag, deleteRedFlag } = useUpsertRedFlags();
+
+  const [flagName, setFlagName] = useState("");
+  const [flagCode, setFlagCode] = useState("");
+  const [severity, setSeverity] = useState("moderate");
+  const [note, setNote] = useState("");
+  const [isPresent, setIsPresent] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!assessmentId) {
+      setError("Thiếu assessmentId.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await createRedFlag({
+        assessmentId,
+        flagName,
+        flagCode,
+        severity,
+        note,
+        isPresent,
+      });
+
+      setFlagName("");
+      setFlagCode("");
+      setSeverity("moderate");
+      setNote("");
+      setIsPresent(true);
+
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không lưu được red flag.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(redFlagId: string) {
+    try {
+      setDeletingId(redFlagId);
+      setError("");
+
+      await deleteRedFlag(redFlagId);
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không xóa được red flag.";
+      setError(message);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-base font-semibold mb-2">Red Flags</h2>
+
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          display: "grid",
+          gap: 12,
+          padding: 16,
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#fff",
+          marginBottom: 16,
+        }}
+      >
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Tên red flag
+          </label>
+          <input
+            value={flagName}
+            onChange={(e) => setFlagName(e.target.value)}
+            placeholder="Ví dụ: Sụt cân nhanh, đau ngực khi gắng sức, vàng da..."
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Mã (optional)
+          </label>
+          <input
+            value={flagCode}
+            onChange={(e) => setFlagCode(e.target.value)}
+            placeholder="Ví dụ: chest_pain_red_flag"
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Mức độ
+          </label>
+          <select
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value)}
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              background: "#fff",
+            }}
+          >
+            {SEVERITY_OPTIONS.map((item: string) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 14,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isPresent}
+            onChange={(e) => setIsPresent(e.target.checked)}
+          />
+          Hiện diện
+        </label>
+
+        <div>
+          <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+            Ghi chú (optional)
+          </label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Ghi chú thêm nếu cần..."
+            style={{
+              width: "100%",
+              padding: 10,
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              resize: "vertical",
+            }}
+          />
+        </div>
+
+        {error ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: saving ? "#e2e8f0" : "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+          >
+            {saving ? "Đang lưu..." : "Lưu red flag"}
+          </button>
+        </div>
+      </form>
+
+      {!data.items.length ? (
+        <div className="text-sm text-gray-500">
+          Chưa ghi nhận red flag chi tiết.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {data.items.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                borderBottom: "1px solid #e2e8f0",
+                paddingBottom: 12,
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>{item.name}</div>
+
+              <div style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>
+                {item.code ? `${item.code} • ` : ""}
+                {item.severity ? `${item.severity} • ` : ""}
+                {item.isPresent ? "Hiện diện" : "Không hiện diện"}
+              </div>
+
+              {item.note ? (
+                <div style={{ fontSize: 14, marginTop: 6 }}>{item.note}</div>
+              ) : null}
+
+              <div style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(item.id)}
+                  disabled={deletingId === item.id}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 8,
+                    border: "1px solid #fecaca",
+                    background: "#fff",
+                    color: "#b91c1c",
+                    cursor: deletingId === item.id ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {deletingId === item.id ? "Đang xóa..." : "Xóa"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+===== FILE: src/modules/cases/treatment/TreatmentEditSection.tsx =====
+import { useMemo, useState } from "react";
+import { useManageTreatments } from "../../../features/cases/hooks/useManageTreatments";
+
+type TreatmentItem = {
+  id: string;
+  treatmentType: string;
+  treatmentName: string;
+  description?: string | null;
+  doseOrFrequency?: string | null;
+  duration?: string | null;
+  instructions?: string | null;
+  status?: string | null;
+};
+
+type Props = {
+  assessmentId?: string;
+  data: { items?: unknown[] } | null;
+  onChanged?: () => Promise<void> | void;
+};
+
+function normalizeItems(data: { items?: unknown[] } | null): TreatmentItem[] {
+  const rawItems = Array.isArray(data?.items) ? data.items : [];
+
+  return rawItems.map((raw) => {
+    const item = (raw ?? {}) as Record<string, unknown>;
+
+    return {
+      id: String(item.id ?? ""),
+      treatmentType: String(item.type ?? item.treatmentType ?? item.treatment_type ?? ""),
+      treatmentName: String(item.name ?? item.treatmentName ?? item.treatment_name ?? ""),
+      description: (item.description ?? "") as string,
+      doseOrFrequency: (item.doseOrFrequency ?? item.dose_or_frequency ?? "") as string,
+      duration: (item.duration ?? "") as string,
+      instructions: (item.instructions ?? "") as string,
+      status: (item.status ?? "active") as string,
+    };
+  });
+}
+
+export default function TreatmentEditSection({
+  assessmentId,
+  data,
+  onChanged,
+}: Props) {
+  const { createTreatment, updateTreatment, deleteTreatment } = useManageTreatments();
+
+  const items = useMemo(() => normalizeItems(data), [data]);
+
+  const [newType, setNewType] = useState("medication");
+  const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newDoseOrFrequency, setNewDoseOrFrequency] = useState("");
+  const [newDuration, setNewDuration] = useState("");
+  const [newInstructions, setNewInstructions] = useState("");
+  const [newStatus, setNewStatus] = useState("active");
+  const [savingNew, setSavingNew] = useState(false);
+  const [workingId, setWorkingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!assessmentId) {
+      setError("Thiếu assessmentId.");
+      return;
+    }
+
+    try {
+      setSavingNew(true);
+      setError("");
+
+      await createTreatment({
+        assessmentId,
+        treatmentType: newType,
+        treatmentName: newName,
+        description: newDescription,
+        doseOrFrequency: newDoseOrFrequency,
+        duration: newDuration,
+        instructions: newInstructions,
+        status: newStatus,
+      });
+
+      setNewType("medication");
+      setNewName("");
+      setNewDescription("");
+      setNewDoseOrFrequency("");
+      setNewDuration("");
+      setNewInstructions("");
+      setNewStatus("active");
+
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không tạo được điều trị.";
+      setError(message);
+    } finally {
+      setSavingNew(false);
+    }
+  }
+
+  async function handleUpdate(item: TreatmentItem) {
+    try {
+      setWorkingId(item.id);
+      setError("");
+
+      await updateTreatment({
+        treatmentId: item.id,
+        treatmentType: item.treatmentType,
+        treatmentName: item.treatmentName,
+        description: item.description ?? "",
+        doseOrFrequency: item.doseOrFrequency ?? "",
+        duration: item.duration ?? "",
+        instructions: item.instructions ?? "",
+        status: item.status ?? "active",
+      });
+
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không cập nhật được điều trị.";
+      setError(message);
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      setWorkingId(id);
+      setError("");
+
+      await deleteTreatment(id);
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không xóa được điều trị.";
+      setError(message);
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-base font-semibold mb-2">Treatment</h2>
+
+      <form
+        onSubmit={handleCreate}
+        style={{
+          display: "grid",
+          gap: 12,
+          padding: 16,
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#fff",
+          marginBottom: 16,
+        }}
+      >
+        <input
+          value={newType}
+          onChange={(e) => setNewType(e.target.value)}
+          placeholder="Loại điều trị"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Tên điều trị"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <textarea
+          value={newDescription}
+          onChange={(e) => setNewDescription(e.target.value)}
+          rows={3}
+          placeholder="Mô tả"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            resize: "vertical",
+          }}
+        />
+
+        <input
+          value={newDoseOrFrequency}
+          onChange={(e) => setNewDoseOrFrequency(e.target.value)}
+          placeholder="Liều / tần suất"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <input
+          value={newDuration}
+          onChange={(e) => setNewDuration(e.target.value)}
+          placeholder="Thời gian"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <textarea
+          value={newInstructions}
+          onChange={(e) => setNewInstructions(e.target.value)}
+          rows={3}
+          placeholder="Hướng dẫn"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            resize: "vertical",
+          }}
+        />
+
+        <input
+          value={newStatus}
+          onChange={(e) => setNewStatus(e.target.value)}
+          placeholder="Status"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        {error ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={savingNew}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: savingNew ? "#e2e8f0" : "#fff",
+              cursor: savingNew ? "not-allowed" : "pointer",
+            }}
+          >
+            {savingNew ? "Đang thêm..." : "Thêm treatment"}
+          </button>
+        </div>
+      </form>
+
+      {!items.length ? (
+        <div className="text-sm text-gray-500">
+          Chưa có dữ liệu điều trị cho lần đánh giá này.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {items.map((item, index) => (
+            <TreatmentEditorCard
+              key={item.id || index}
+              item={item}
+              working={workingId === item.id}
+              onSave={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TreatmentEditorCard({
+  item,
+  working,
+  onSave,
+  onDelete,
+}: {
+  item: TreatmentItem;
+  working: boolean;
+  onSave: (item: TreatmentItem) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<TreatmentItem>(item);
+
+  return (
+    <div
+      style={{
+        padding: 16,
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "grid", gap: 12 }}>
+        <input
+          value={draft.treatmentType}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, treatmentType: e.target.value }))
+          }
+          placeholder="Loại điều trị"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <input
+          value={draft.treatmentName}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, treatmentName: e.target.value }))
+          }
+          placeholder="Tên điều trị"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <textarea
+          value={draft.description ?? ""}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, description: e.target.value }))
+          }
+          rows={3}
+          placeholder="Mô tả"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            resize: "vertical",
+          }}
+        />
+
+        <input
+          value={draft.doseOrFrequency ?? ""}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, doseOrFrequency: e.target.value }))
+          }
+          placeholder="Liều / tần suất"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <input
+          value={draft.duration ?? ""}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, duration: e.target.value }))
+          }
+          placeholder="Thời gian"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <textarea
+          value={draft.instructions ?? ""}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, instructions: e.target.value }))
+          }
+          rows={3}
+          placeholder="Hướng dẫn"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            resize: "vertical",
+          }}
+        />
+
+        <input
+          value={draft.status ?? ""}
+          onChange={(e) =>
+            setDraft((prev) => ({ ...prev, status: e.target.value }))
+          }
+          placeholder="Status"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+          }}
+        />
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => onSave(draft)}
+            disabled={working}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: "#fff",
+              cursor: working ? "not-allowed" : "pointer",
+            }}
+          >
+            {working ? "Đang lưu..." : "Lưu"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onDelete(item.id)}
+            disabled={working}
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #fecaca",
+              background: "#fff",
+              color: "#b91c1c",
+              cursor: working ? "not-allowed" : "pointer",
+            }}
+          >
+            {working ? "Đang xử lý..." : "Xóa"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+===== FILE: src/modules/cases/vitals/VitalsEditSection.tsx =====
+import { useEffect, useMemo, useState } from "react";
+import { useUpsertAssessmentVitals } from "../../../features/cases/hooks/useUpsertAssessmentVitals";
+
+type VitalsData = {
+  assessment_id?: string;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  heart_rate?: number | null;
+  temperature_c?: number | null;
+  respiratory_rate?: number | null;
+  spo2_percent?: number | null;
+  waist_cm?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  bmi?: number | null;
+} | null;
+
+type Props = {
+  assessmentId?: string;
+  data: VitalsData;
+  onChanged?: () => Promise<void> | void;
+};
+
+function numToInput(value?: number | null) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function inputToNullableNumber(value: string) {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export default function VitalsEditSection({
+  assessmentId,
+  data,
+  onChanged,
+}: Props) {
+  const { upsertAssessmentVitals } = useUpsertAssessmentVitals();
+
+  const [systolicBp, setSystolicBp] = useState("");
+  const [diastolicBp, setDiastolicBp] = useState("");
+  const [heartRate, setHeartRate] = useState("");
+  const [temperatureC, setTemperatureC] = useState("");
+  const [respiratoryRate, setRespiratoryRate] = useState("");
+  const [spo2Percent, setSpo2Percent] = useState("");
+  const [waistCm, setWaistCm] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [bmi, setBmi] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setSystolicBp(numToInput(data?.systolic_bp));
+    setDiastolicBp(numToInput(data?.diastolic_bp));
+    setHeartRate(numToInput(data?.heart_rate));
+    setTemperatureC(numToInput(data?.temperature_c));
+    setRespiratoryRate(numToInput(data?.respiratory_rate));
+    setSpo2Percent(numToInput(data?.spo2_percent));
+    setWaistCm(numToInput(data?.waist_cm));
+    setHeightCm(numToInput(data?.height_cm));
+    setWeightKg(numToInput(data?.weight_kg));
+    setBmi(numToInput(data?.bmi));
+  }, [data]);
+
+  const computedBmi = useMemo(() => {
+    const h = inputToNullableNumber(heightCm);
+    const w = inputToNullableNumber(weightKg);
+
+    if (!h || !w || h <= 0 || w <= 0) return null;
+
+    const hm = h / 100;
+    const value = w / (hm * hm);
+    return Number(value.toFixed(2));
+  }, [heightCm, weightKg]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!assessmentId) {
+      setError("Thiếu assessmentId.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await upsertAssessmentVitals({
+        assessmentId,
+        systolicBp: inputToNullableNumber(systolicBp),
+        diastolicBp: inputToNullableNumber(diastolicBp),
+        heartRate: inputToNullableNumber(heartRate),
+        temperatureC: inputToNullableNumber(temperatureC),
+        respiratoryRate: inputToNullableNumber(respiratoryRate),
+        spo2Percent: inputToNullableNumber(spo2Percent),
+        waistCm: inputToNullableNumber(waistCm),
+        heightCm: inputToNullableNumber(heightCm),
+        weightKg: inputToNullableNumber(weightKg),
+        bmi: computedBmi ?? inputToNullableNumber(bmi),
+      });
+
+      if (computedBmi !== null) {
+        setBmi(String(computedBmi));
+      }
+
+      await onChanged?.();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Không lưu được sinh hiệu.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renderInput(
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    placeholder?: string
+  ) {
+    return (
+      <div>
+        <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+          {label}
+        </label>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          type="number"
+          step="any"
+          style={{
+            width: "100%",
+            padding: 10,
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            background: "#fff",
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <section>
+      <h2 className="text-base font-semibold mb-2">Vitals / Anthropometry</h2>
+
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          display: "grid",
+          gap: 16,
+          padding: 16,
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#fff",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 12,
+          }}
+        >
+          {renderInput("Huyết áp tâm thu", systolicBp, setSystolicBp, "mmHg")}
+          {renderInput("Huyết áp tâm trương", diastolicBp, setDiastolicBp, "mmHg")}
+          {renderInput("Mạch", heartRate, setHeartRate, "bpm")}
+          {renderInput("Nhiệt độ", temperatureC, setTemperatureC, "°C")}
+          {renderInput("Nhịp thở", respiratoryRate, setRespiratoryRate, "/min")}
+          {renderInput("SpO2", spo2Percent, setSpo2Percent, "%")}
+          {renderInput("Vòng eo", waistCm, setWaistCm, "cm")}
+          {renderInput("Chiều cao", heightCm, setHeightCm, "cm")}
+          {renderInput("Cân nặng", weightKg, setWeightKg, "kg")}
+          {renderInput("BMI", bmi, setBmi, "kg/m²")}
+        </div>
+
+        {computedBmi !== null ? (
+          <div style={{ fontSize: 14, color: "#475569" }}>
+            BMI tính tự động từ chiều cao/cân nặng: <strong>{computedBmi}</strong>
+          </div>
+        ) : null}
+
+        {error ? (
+          <div style={{ color: "#dc2626", fontSize: 14 }}>{error}</div>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: saving ? "#e2e8f0" : "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+          >
+            {saving ? "Đang lưu..." : "Lưu sinh hiệu"}
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+

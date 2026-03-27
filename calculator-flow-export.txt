@@ -1,0 +1,1471 @@
+
+========================================================================================================================
+FILE: src/modules/cases/calculator-runs/CalculatorRunsSection.tsx
+========================================================================================================================
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import { supabase } from "../../../lib/supabase";
+import { useRunAndSaveCalculator } from "../../../features/calculators/hooks/useRunAndSaveCalculator";
+import { mapCalculatorRunsSection } from "./mapper";
+import type {
+  CalculatorDefinitionRow,
+  CalculatorRunInputRow,
+  CalculatorRunRow,
+  CalculatorRunsSectionData,
+} from "./types";
+
+type Props = {
+  data?: CalculatorRunsSectionData | null;
+  assessmentId?: string;
+};
+
+type RunnerCalculatorOption = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+const SUPPORTED_CODES = [
+  "fib4",
+  "apri",
+  "child-pugh",
+  "child_pugh",
+  "bmi",
+  "phq9",
+  "gad7",
+  "family_apgar",
+  "family_apgar_score",
+  "screem",
+] as const;
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("vi-VN");
+}
+
+function formatResultBlock(run: CalculatorRunsSectionData["runs"][number]) {
+  if (run.resultLabel) {
+    return (
+      <>
+        <strong>Kết quả:</strong> {run.resultLabel}
+        {run.resultValue !== null && run.resultValue !== undefined
+          ? ` • ${run.resultValue}`
+          : ""}
+        {run.resultText ? ` • ${run.resultText}` : ""}
+      </>
+    );
+  }
+
+  if (run.resultValue !== null && run.resultValue !== undefined) {
+    return (
+      <>
+        <strong>Kết quả:</strong> {run.resultValue}
+        {run.resultText ? ` • ${run.resultText}` : ""}
+      </>
+    );
+  }
+
+  if (run.resultText) {
+    return (
+      <>
+        <strong>Kết quả:</strong> {run.resultText}
+      </>
+    );
+  }
+
+  return null;
+}
+
+export default function CalculatorRunsSection({
+  data,
+  assessmentId,
+}: Props) {
+  const params = useParams();
+  const currentAssessmentId = assessmentId ?? params.assessmentId ?? "";
+
+  const [localData, setLocalData] = useState<CalculatorRunsSectionData>(
+    data ?? { runs: [] }
+  );
+  const [supportedCalculators, setSupportedCalculators] = useState<
+    RunnerCalculatorOption[]
+  >([]);
+  const [selectedCalculatorCode, setSelectedCalculatorCode] = useState("");
+  const [loadingRuns, setLoadingRuns] = useState(false);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [lastRunMessage, setLastRunMessage] = useState("");
+
+  const {
+    runningCalculator,
+    runCalculatorError,
+    execute,
+    resetRunCalculatorError,
+  } = useRunAndSaveCalculator();
+
+  useEffect(() => {
+    setLocalData(data ?? { runs: [] });
+  }, [data]);
+
+  const loadRuns = useCallback(async () => {
+    if (!currentAssessmentId) return;
+
+    try {
+      setLoadingRuns(true);
+      setLoadError("");
+
+      const { data: runData, error: runsError } = await supabase
+        .from("calculator_runs")
+        .select(
+          "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_label, result_value, result_text, risk_level, interpretation, result_json"
+        )
+        .eq("assessment_id", currentAssessmentId)
+        .order("run_at", { ascending: false });
+
+      if (runsError) {
+        throw new Error(runsError.message);
+      }
+
+      const runRows = (runData ?? []) as CalculatorRunRow[];
+      const calculatorIds = Array.from(
+        new Set(runRows.map((row) => row.calculator_id).filter(Boolean))
+      );
+      const runIds = runRows.map((row) => row.id);
+
+      let definitionRows: CalculatorDefinitionRow[] = [];
+      if (calculatorIds.length > 0) {
+        const { data: defsData, error: defsError } = await supabase
+          .from("calculator_definitions")
+          .select("id, code, name")
+          .in("id", calculatorIds);
+
+        if (defsError) {
+          throw new Error(defsError.message);
+        }
+
+        definitionRows = (defsData ?? []) as CalculatorDefinitionRow[];
+      }
+
+      let inputRows: CalculatorRunInputRow[] = [];
+      if (runIds.length > 0) {
+        const { data: inputsData, error: inputsError } = await supabase
+          .from("calculator_run_inputs")
+          .select(
+            "id, calculator_run_id, input_key, input_label, input_type, input_value_text, input_value_numeric, input_value_boolean, input_value_date, input_value_json, unit, source_observation_id, created_at"
+          )
+          .in("calculator_run_id", runIds)
+          .order("created_at", { ascending: true });
+
+        if (inputsError) {
+          throw new Error(inputsError.message);
+        }
+
+        inputRows = (inputsData ?? []) as CalculatorRunInputRow[];
+      }
+
+      const mapped = mapCalculatorRunsSection({
+        runs: runRows,
+        definitions: definitionRows,
+        runInputs: inputRows,
+      });
+
+      setLocalData(mapped);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Không tải được lịch sử calculator.";
+      setLoadError(message);
+    } finally {
+      setLoadingRuns(false);
+    }
+  }, [currentAssessmentId]);
+
+  useEffect(() => {
+    void loadRuns();
+  }, [loadRuns]);
+
+  useEffect(() => {
+    async function loadCalculatorOptions() {
+      try {
+        setLoadingOptions(true);
+
+        const { data: defsData, error } = await supabase
+          .from("calculator_definitions")
+          .select("id, code, name")
+          .in("code", [...SUPPORTED_CODES])
+          .order("name", { ascending: true });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        const rows = ((defsData ?? []) as CalculatorDefinitionRow[]).map(
+          (row) => ({
+            id: row.id,
+            code: row.code,
+            name: row.name,
+          })
+        );
+
+        setSupportedCalculators(rows);
+
+        setSelectedCalculatorCode((prev) => {
+          if (prev && rows.some((item) => item.code === prev)) {
+            return prev;
+          }
+          return rows[0]?.code ?? "";
+        });
+      } catch (error) {
+        console.error("LOAD CALCULATOR OPTIONS ERROR:", error);
+      } finally {
+        setLoadingOptions(false);
+      }
+    }
+
+    void loadCalculatorOptions();
+  }, []);
+
+  const selectedCalculatorName = useMemo(() => {
+    return (
+      supportedCalculators.find((item) => item.code === selectedCalculatorCode)
+        ?.name ?? selectedCalculatorCode
+    );
+  }, [supportedCalculators, selectedCalculatorCode]);
+
+  async function handleRunCalculator() {
+    if (!currentAssessmentId) {
+      setLastRunMessage("Thiếu assessmentId.");
+      return;
+    }
+
+    if (!selectedCalculatorCode) {
+      setLastRunMessage("Chưa chọn calculator.");
+      return;
+    }
+
+    try {
+      resetRunCalculatorError();
+      setLastRunMessage("");
+
+      const result = await execute(selectedCalculatorCode, currentAssessmentId);
+
+      await loadRuns();
+
+      if (result.result.interpretation) {
+        setLastRunMessage(
+          `${selectedCalculatorName}: ${result.result.interpretation}`
+        );
+      } else {
+        setLastRunMessage(
+          `${selectedCalculatorName}: đã chạy và lưu thành công.`
+        );
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Không chạy/lưu được calculator.";
+      setLastRunMessage(message);
+    }
+  }
+
+  const sectionData = localData ?? { runs: [] };
+
+  return (
+    <section style={{ display: "grid", gap: 16 }}>
+      <div
+        style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          background: "#ffffff",
+          padding: 16,
+        }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>
+          Chạy calculator cho lần đánh giá hiện tại
+        </div>
+
+        {!currentAssessmentId ? (
+          <div style={{ fontSize: 14, color: "#64748b" }}>
+            Chưa xác định được assessment hiện tại.
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "minmax(0, 1fr) auto",
+                alignItems: "end",
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: 6,
+                    color: "#334155",
+                  }}
+                >
+                  Calculator
+                </div>
+
+                <select
+                  value={selectedCalculatorCode}
+                  onChange={(e) => setSelectedCalculatorCode(e.target.value)}
+                  disabled={loadingOptions || runningCalculator}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                  }}
+                >
+                  {!supportedCalculators.length ? (
+                    <option value="">
+                      {loadingOptions
+                        ? "Đang tải danh sách calculator..."
+                        : "Không có calculator phù hợp"}
+                    </option>
+                  ) : null}
+
+                  {supportedCalculators.map((item) => (
+                    <option key={item.id} value={item.code}>
+                      {item.name} ({item.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void handleRunCalculator();
+                }}
+                disabled={
+                  runningCalculator ||
+                  !currentAssessmentId ||
+                  !selectedCalculatorCode
+                }
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1px solid #2563eb",
+                  background: runningCalculator ? "#bfdbfe" : "#2563eb",
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  cursor:
+                    runningCalculator || !selectedCalculatorCode
+                      ? "not-allowed"
+                      : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {runningCalculator ? "Đang chạy..." : "Chạy và lưu"}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, fontSize: 13, color: "#64748b" }}>
+              Dữ liệu sẽ được resolve từ hồ sơ bệnh nhân, sinh hiệu assessment
+              và observation của assessment hiện tại.
+            </div>
+
+            {runCalculatorError ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #fecaca",
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  fontSize: 14,
+                }}
+              >
+                {runCalculatorError}
+              </div>
+            ) : null}
+
+            {lastRunMessage ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: "1px solid #dbeafe",
+                  background: "#eff6ff",
+                  color: "#1d4ed8",
+                  fontSize: 14,
+                }}
+              >
+                {lastRunMessage}
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <div>
+        <h2
+          style={{
+            fontSize: 16,
+            fontWeight: 700,
+            marginBottom: 10,
+            color: "#0f172a",
+          }}
+        >
+          Calculator Runs
+        </h2>
+
+        {loadError ? (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid #fecaca",
+              background: "#fef2f2",
+              color: "#b91c1c",
+              fontSize: 14,
+            }}
+          >
+            {loadError}
+          </div>
+        ) : null}
+
+        {loadingRuns ? (
+          <div style={{ fontSize: 14, color: "#64748b" }}>
+            Đang tải lịch sử calculator...
+          </div>
+        ) : !sectionData.runs.length ? (
+          <div style={{ fontSize: 14, color: "#64748b" }}>
+            Chưa có calculator run nào cho lần đánh giá này.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 12 }}>
+            {sectionData.runs.map((run) => (
+              <div
+                key={run.id}
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  background: "#fff",
+                  padding: 16,
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 16 }}>
+                  {run.calculatorName}
+                  {run.calculatorCode ? ` (${run.calculatorCode})` : ""}
+                </div>
+
+                <div style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>
+                  {formatDateTime(run.runAt)}
+                </div>
+
+                <div style={{ marginTop: 10, fontSize: 14 }}>
+                  {formatResultBlock(run)}
+
+                  {run.riskLevel ? (
+                    <div style={{ marginTop: 4 }}>
+                      <strong>Mức nguy cơ:</strong> {run.riskLevel}
+                    </div>
+                  ) : null}
+
+                  {run.interpretation ? (
+                    <div style={{ marginTop: 4 }}>
+                      <strong>Diễn giải:</strong> {run.interpretation}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                    Input snapshot
+                  </div>
+
+                  {!run.inputs.length ? (
+                    <div style={{ fontSize: 14, color: "#64748b" }}>
+                      Không có input snapshot.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {run.inputs.map((input) => (
+                        <div
+                          key={input.id}
+                          style={{
+                            padding: "8px 10px",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: 8,
+                          }}
+                        >
+                          <div style={{ fontWeight: 500 }}>{input.label}</div>
+                          <div
+                            style={{
+                              fontSize: 14,
+                              color: "#475569",
+                              marginTop: 2,
+                            }}
+                          >
+                            {input.displayValue}
+                            {input.unit ? ` ${input.unit}` : ""}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: "#94a3b8",
+                              marginTop: 2,
+                            }}
+                          >
+                            {input.key} • {input.type}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+
+========================================================================================================================
+FILE: src/lib/calculator/resolveCalculatorInputs.ts
+========================================================================================================================
+import { supabase } from "../supabase";
+
+export type CalculatorDefinitionRow = {
+  id: string;
+  code: string;
+  name: string;
+  output_type?: string | null;
+};
+
+export type CalculatorInputDefinitionRow = {
+  id: string;
+  calculator_id: string;
+  input_key: string;
+  input_label: string;
+  observation_code: string | null;
+  data_type: string;
+  unit: string | null;
+  is_required: boolean | null;
+  sort_order: number | null;
+  default_value: string | null;
+  config_json?: Record<string, unknown> | null;
+};
+
+export type CaseAssessmentRow = {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no?: number | null;
+  assessment_date?: string | null;
+  assessment_type?: string | null;
+};
+
+export type PatientRow = {
+  id: string;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation: string | null;
+};
+
+export type AssessmentVitalsRow = {
+  assessment_id: string;
+  systolic_bp: number | null;
+  diastolic_bp: number | null;
+  heart_rate: number | null;
+  temperature_c: number | null;
+  respiratory_rate: number | null;
+  spo2_percent: number | null;
+  waist_cm: number | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  bmi: number | null;
+};
+
+export type AssessmentObservationRow = {
+  id: string;
+  assessment_id: string;
+  observation_code: string;
+  observation_label: string | null;
+  value_type: string | null;
+  value_text: string | null;
+  value_numeric: number | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_json: unknown | null;
+  unit: string | null;
+  observed_at: string | null;
+};
+
+export type ResolvedCalculatorInput = {
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  observation_code: string | null;
+  value: unknown;
+  unit: string | null;
+  source:
+    | "patient"
+    | "computed_patient"
+    | "assessment_vitals"
+    | "assessment_observations"
+    | "default"
+    | "empty";
+  source_observation_id: string | null;
+  is_required: boolean;
+};
+
+export type ResolveCalculatorInputsResult = {
+  assessment: CaseAssessmentRow;
+  patient: PatientRow | null;
+  vitals: AssessmentVitalsRow | null;
+  calculator: CalculatorDefinitionRow;
+  inputDefinitions: CalculatorInputDefinitionRow[];
+  resolvedInputs: ResolvedCalculatorInput[];
+  inputMap: Record<string, unknown>;
+};
+
+const VITAL_INPUT_KEY_TO_COLUMN: Record<string, keyof AssessmentVitalsRow> = {
+  systolic_bp: "systolic_bp",
+  sbp: "systolic_bp",
+  diastolic_bp: "diastolic_bp",
+  dbp: "diastolic_bp",
+  heart_rate: "heart_rate",
+  pulse: "heart_rate",
+  temperature_c: "temperature_c",
+  temperature: "temperature_c",
+  respiratory_rate: "respiratory_rate",
+  rr: "respiratory_rate",
+  spo2_percent: "spo2_percent",
+  spo2: "spo2_percent",
+  waist_cm: "waist_cm",
+  height_cm: "height_cm",
+  height: "height_cm",
+  weight_kg: "weight_kg",
+  weight: "weight_kg",
+  bmi: "bmi",
+};
+
+const VITAL_OBSERVATION_CODE_TO_COLUMN: Record<string, keyof AssessmentVitalsRow> = {
+  systolic_bp: "systolic_bp",
+  diastolic_bp: "diastolic_bp",
+  heart_rate: "heart_rate",
+  temperature_c: "temperature_c",
+  respiratory_rate: "respiratory_rate",
+  spo2_percent: "spo2_percent",
+  waist_cm: "waist_cm",
+  height_cm: "height_cm",
+  weight_kg: "weight_kg",
+  bmi: "bmi",
+};
+
+const PATIENT_INPUT_KEY_TO_FIELD: Record<string, keyof PatientRow> = {
+  gender: "gender",
+  sex: "gender",
+  date_of_birth: "date_of_birth",
+  dob: "date_of_birth",
+  occupation: "occupation",
+  patient_name: "full_name",
+  full_name: "full_name",
+};
+
+function normalizeKey(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function getErrorMessage(error: unknown) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "Không resolve được calculator inputs.";
+}
+
+function parseDefaultValue(raw: string | null | undefined, dataType: string) {
+  const value = raw?.trim();
+  if (!value) return null;
+
+  const type = normalizeKey(dataType);
+
+  if (type === "number" || type === "numeric" || type === "integer") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    return null;
+  }
+
+  if (type === "json") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
+
+function coerceValueToInputType(value: unknown, dataType: string): unknown {
+  if (value === null || value === undefined || value === "") return null;
+
+  const type = normalizeKey(dataType);
+
+  if (type === "number" || type === "numeric" || type === "integer") {
+    const n =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+        ? Number(value)
+        : NaN;
+
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+      const normalized = normalizeKey(value);
+      if (["true", "1", "yes", "y", "co", "có"].includes(normalized)) return true;
+      if (["false", "0", "no", "n", "khong", "không"].includes(normalized)) return false;
+    }
+    return null;
+  }
+
+  if (type === "json") return value;
+
+  return String(value);
+}
+
+function getObservationValue(row: AssessmentObservationRow | null): unknown {
+  if (!row) return null;
+
+  const type = normalizeKey(row.value_type);
+
+  if (type === "numeric" || type === "number" || type === "integer") {
+    return row.value_numeric;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    return row.value_boolean;
+  }
+
+  if (type === "date") {
+    return row.value_date;
+  }
+
+  if (type === "json") {
+    return row.value_json;
+  }
+
+  if (row.value_numeric !== null && row.value_numeric !== undefined) return row.value_numeric;
+  if (row.value_boolean !== null && row.value_boolean !== undefined) return row.value_boolean;
+  if (row.value_date) return row.value_date;
+  if (row.value_json !== null && row.value_json !== undefined) return row.value_json;
+
+  return row.value_text;
+}
+
+function calculateAgeFromDob(dateOfBirth: string | null | undefined) {
+  if (!dateOfBirth) return null;
+
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function getPatientValue(
+  patient: PatientRow | null,
+  inputKey: string
+): { value: unknown; source: "patient" | "computed_patient" } | null {
+  if (!patient) return null;
+
+  const normalized = normalizeKey(inputKey);
+
+  if (normalized === "age" || normalized === "age_years") {
+    return {
+      value: calculateAgeFromDob(patient.date_of_birth),
+      source: "computed_patient",
+    };
+  }
+
+  const field = PATIENT_INPUT_KEY_TO_FIELD[normalized];
+  if (!field) return null;
+
+  return {
+    value: patient[field] ?? null,
+    source: "patient",
+  };
+}
+
+function getVitalColumnFromDefinition(
+  def: CalculatorInputDefinitionRow
+): keyof AssessmentVitalsRow | null {
+  const byInputKey = VITAL_INPUT_KEY_TO_COLUMN[normalizeKey(def.input_key)];
+  if (byInputKey) return byInputKey;
+
+  const observationCode = normalizeKey(def.observation_code);
+  if (observationCode) {
+    const byObservationCode = VITAL_OBSERVATION_CODE_TO_COLUMN[observationCode];
+    if (byObservationCode) return byObservationCode;
+  }
+
+  return null;
+}
+
+function getVitalValue(
+  vitals: AssessmentVitalsRow | null,
+  column: keyof AssessmentVitalsRow | null
+): unknown {
+  if (!vitals || !column) return null;
+  if (column === "assessment_id") return null;
+  return vitals[column] ?? null;
+}
+
+function buildObservationMap(rows: AssessmentObservationRow[]) {
+  const map = new Map<string, AssessmentObservationRow>();
+  for (const row of rows) {
+    const code = normalizeKey(row.observation_code);
+    if (!code) continue;
+    if (!map.has(code)) {
+      map.set(code, row);
+    }
+  }
+  return map;
+}
+
+export async function resolveCalculatorInputs(
+  assessmentId: string,
+  calculatorCode: string
+): Promise<ResolveCalculatorInputsResult> {
+  if (!assessmentId?.trim()) {
+    throw new Error("Thiếu assessmentId.");
+  }
+
+  if (!calculatorCode?.trim()) {
+    throw new Error("Thiếu calculatorCode.");
+  }
+
+  try {
+    const { data: assessment, error: assessmentError } = await supabase
+      .from("case_assessments")
+      .select("id, case_id, patient_id, assessment_no, assessment_date, assessment_type")
+      .eq("id", assessmentId)
+      .single();
+
+    if (assessmentError) throw assessmentError;
+    if (!assessment) throw new Error("Không tìm thấy assessment.");
+
+    const assessmentRow = assessment as CaseAssessmentRow;
+
+    const { data: calculatorDef, error: calculatorError } = await supabase
+      .from("calculator_definitions")
+      .select("id, code, name, output_type")
+      .eq("code", calculatorCode)
+      .single();
+
+    if (calculatorError) throw calculatorError;
+    if (!calculatorDef) throw new Error("Không tìm thấy calculator.");
+
+    const calculator = calculatorDef as CalculatorDefinitionRow;
+
+    const { data: inputDefs, error: inputDefError } = await supabase
+      .from("calculator_input_definitions")
+      .select(
+        "id, calculator_id, input_key, input_label, observation_code, data_type, unit, is_required, sort_order, default_value, config_json"
+      )
+      .eq("calculator_id", calculator.id)
+      .order("sort_order", { ascending: true });
+
+    if (inputDefError) throw inputDefError;
+
+    const inputDefinitionRows =
+      (inputDefs ?? []) as CalculatorInputDefinitionRow[];
+
+    const { data: patientData, error: patientError } = await supabase
+      .from("patients")
+      .select("id, full_name, date_of_birth, gender, occupation")
+      .eq("id", assessmentRow.patient_id)
+      .maybeSingle();
+
+    if (patientError) throw patientError;
+    const patientRow = (patientData as PatientRow | null) ?? null;
+
+    const { data: vitalsData, error: vitalsError } = await supabase
+      .from("assessment_vitals")
+      .select(
+        "assessment_id, systolic_bp, diastolic_bp, heart_rate, temperature_c, respiratory_rate, spo2_percent, waist_cm, height_cm, weight_kg, bmi"
+      )
+      .eq("assessment_id", assessmentId)
+      .maybeSingle();
+
+    if (vitalsError) throw vitalsError;
+    const vitalsRow = (vitalsData as AssessmentVitalsRow | null) ?? null;
+
+    const observationCodes = Array.from(
+      new Set(
+        inputDefinitionRows
+          .map((row) => normalizeKey(row.observation_code))
+          .filter(Boolean)
+      )
+    );
+
+    let observationRows: AssessmentObservationRow[] = [];
+    if (observationCodes.length > 0) {
+      const { data: observations, error: observationError } = await supabase
+        .from("assessment_observations")
+        .select(
+          "id, assessment_id, observation_code, observation_label, value_type, value_text, value_numeric, value_boolean, value_date, value_json, unit, observed_at"
+        )
+        .eq("assessment_id", assessmentId)
+        .in("observation_code", observationCodes)
+        .order("observed_at", { ascending: false });
+
+      if (observationError) throw observationError;
+      observationRows = (observations ?? []) as AssessmentObservationRow[];
+    }
+
+    const latestObservationByCode = buildObservationMap(observationRows);
+
+    const resolvedInputs: ResolvedCalculatorInput[] = inputDefinitionRows.map((def) => {
+      const patientResolved = getPatientValue(patientRow, def.input_key);
+      if (
+        patientResolved &&
+        patientResolved.value !== null &&
+        patientResolved.value !== undefined &&
+        patientResolved.value !== ""
+      ) {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: coerceValueToInputType(patientResolved.value, def.data_type),
+          unit: def.unit,
+          source: patientResolved.source,
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      const vitalColumn = getVitalColumnFromDefinition(def);
+      const vitalValue = getVitalValue(vitalsRow, vitalColumn);
+      if (vitalValue !== null && vitalValue !== undefined && vitalValue !== "") {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: coerceValueToInputType(vitalValue, def.data_type),
+          unit: def.unit,
+          source: "assessment_vitals",
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      const observationCode = normalizeKey(def.observation_code);
+      if (observationCode) {
+        const observationRow = latestObservationByCode.get(observationCode) ?? null;
+        const observationValue = getObservationValue(observationRow);
+
+        if (
+          observationValue !== null &&
+          observationValue !== undefined &&
+          observationValue !== ""
+        ) {
+          return {
+            input_key: def.input_key,
+            input_label: def.input_label,
+            input_type: def.data_type,
+            observation_code: def.observation_code,
+            value: coerceValueToInputType(observationValue, def.data_type),
+            unit: def.unit || observationRow?.unit || null,
+            source: "assessment_observations",
+            source_observation_id: observationRow?.id ?? null,
+            is_required: Boolean(def.is_required),
+          };
+        }
+      }
+
+      const defaultValue = parseDefaultValue(def.default_value, def.data_type);
+      if (defaultValue !== null && defaultValue !== undefined && defaultValue !== "") {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: defaultValue,
+          unit: def.unit,
+          source: "default",
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      return {
+        input_key: def.input_key,
+        input_label: def.input_label,
+        input_type: def.data_type,
+        observation_code: def.observation_code,
+        value: null,
+        unit: def.unit,
+        source: "empty",
+        source_observation_id: null,
+        is_required: Boolean(def.is_required),
+      };
+    });
+
+    const inputMap = resolvedInputs.reduce<Record<string, unknown>>((acc, item) => {
+      acc[item.input_key] = item.value;
+      return acc;
+    }, {});
+
+    return {
+      assessment: assessmentRow,
+      patient: patientRow,
+      vitals: vitalsRow,
+      calculator,
+      inputDefinitions: inputDefinitionRows,
+      resolvedInputs,
+      inputMap,
+    };
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+
+========================================================================================================================
+FILE: src/lib/calculator/runAndSaveCalculator.ts
+========================================================================================================================
+import { runCalculator, type RunCalculatorResult } from "../../utils/runCalculator";
+import { saveCalculatorRunWithInputs } from "./saveCalculatorRun";
+
+export type RunAndSaveCalculatorResult = RunCalculatorResult & {
+  savedRun: {
+    run: Record<string, unknown>;
+    inputCount: number;
+  };
+};
+
+export async function runAndSaveCalculator(
+  calculatorCode: string,
+  assessmentId: string
+): Promise<RunAndSaveCalculatorResult> {
+  const computed = await runCalculator(calculatorCode, assessmentId);
+
+  const savedRun = await saveCalculatorRunWithInputs({
+    calculatorCode: computed.calculator.code,
+    patientId: computed.assessment.patient_id,
+    caseId: computed.assessment.case_id,
+    assessmentId: computed.assessment.id,
+    inputs: computed.inputMap,
+    outputs: {
+      resultLabel: computed.result.resultLabel,
+      resultValue: computed.result.resultValue,
+      resultText: computed.result.resultText,
+      riskLevel: computed.result.riskLevel,
+      interpretation: computed.result.interpretation,
+      resultJson: computed.result.resultJson ?? null,
+    },
+    summary: computed.result.interpretation ?? computed.result.resultText,
+  });
+
+  return {
+    ...computed,
+    savedRun,
+  };
+}
+
+
+========================================================================================================================
+FILE: src/lib/calculator/saveCalculatorRun.ts
+========================================================================================================================
+import { supabase } from "../supabase";
+
+export type SaveCalculatorRunPayload = {
+  calculatorCode: string;
+  patientId: string;
+  caseId?: string | null;
+  assessmentId?: string | null;
+  inputs: unknown;
+  outputs: unknown;
+  summary?: string;
+  userId?: string | null;
+};
+
+type CalculatorRunInputInsertRow = {
+  calculator_run_id: string;
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  input_value_text: string | null;
+  input_value_numeric: number | null;
+  input_value_boolean: boolean | null;
+  input_value_date: string | null;
+  input_value_json: unknown | null;
+  unit: string | null;
+  source_observation_id: string | null;
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toTitleCase(input: string) {
+  return input
+    .replace(/\[(\d+)\]/g, " $1 ")
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function humanizeKey(path: string) {
+  return toTitleCase(path || "Input");
+}
+
+function isLikelyDateString(value: string) {
+  if (!value.trim()) return false;
+  const directDate = /^\d{4}-\d{2}-\d{2}$/;
+  const isoDateTime =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+
+  return directDate.test(value) || isoDateTime.test(value);
+}
+
+function extractResultValue(outputs: unknown): number | null {
+  if (outputs && typeof outputs === "object") {
+    const obj = outputs as Record<string, unknown>;
+
+    const candidates = [
+      obj.resultValue,
+      obj.result_value,
+      obj.score,
+      obj.total,
+      obj.value,
+      obj.numericValue,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === "number" && Number.isFinite(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractResultText(outputs: unknown, summary?: string): string | null {
+  if (outputs && typeof outputs === "object") {
+    const obj = outputs as Record<string, unknown>;
+
+    const candidates = [
+      obj.resultText,
+      obj.result_text,
+      obj.interpretation,
+      obj.label,
+      obj.level,
+      obj.stage,
+      obj.category,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+
+  return summary?.trim() || null;
+}
+
+function extractRiskLevel(outputs: unknown): string | null {
+  if (outputs && typeof outputs === "object") {
+    const obj = outputs as Record<string, unknown>;
+
+    const candidates = [obj.riskLevel, obj.risk_level, obj.risk, obj.level];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+
+  return null;
+}
+
+function createInputRow(
+  calculatorRunId: string,
+  key: string,
+  value: unknown
+): CalculatorRunInputInsertRow | null {
+  const normalizedKey = key.trim();
+  if (!normalizedKey) return null;
+
+  const base: CalculatorRunInputInsertRow = {
+    calculator_run_id: calculatorRunId,
+    input_key: normalizedKey,
+    input_label: humanizeKey(normalizedKey),
+    input_type: "text",
+    input_value_text: null,
+    input_value_numeric: null,
+    input_value_boolean: null,
+    input_value_date: null,
+    input_value_json: null,
+    unit: null,
+    source_observation_id: null,
+  };
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return {
+      ...base,
+      input_type: "numeric",
+      input_value_numeric: Number.isFinite(value) ? value : null,
+      input_value_text: Number.isFinite(value) ? String(value) : null,
+    };
+  }
+
+  if (typeof value === "boolean") {
+    return {
+      ...base,
+      input_type: "boolean",
+      input_value_boolean: value,
+      input_value_text: value ? "true" : "false",
+    };
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (isLikelyDateString(trimmed)) {
+      return {
+        ...base,
+        input_type: "date",
+        input_value_date: trimmed,
+        input_value_text: trimmed,
+      };
+    }
+
+    return {
+      ...base,
+      input_type: "text",
+      input_value_text: trimmed,
+    };
+  }
+
+  return {
+    ...base,
+    input_type: "json",
+    input_value_json: value,
+    input_value_text: JSON.stringify(value),
+  };
+}
+
+function flattenInputs(
+  calculatorRunId: string,
+  value: unknown,
+  path = ""
+): CalculatorRunInputInsertRow[] {
+  if (value === null || value === undefined) return [];
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    const row = createInputRow(calculatorRunId, path || "value", value);
+    return row ? [row] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      flattenInputs(
+        calculatorRunId,
+        item,
+        path ? `${path}[${index}]` : `[${index}]`
+      )
+    );
+  }
+
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value);
+
+    if (entries.length === 0) return [];
+
+    return entries.flatMap(([childKey, childValue]) =>
+      flattenInputs(
+        calculatorRunId,
+        childValue,
+        path ? `${path}.${childKey}` : childKey
+      )
+    );
+  }
+
+  const row = createInputRow(calculatorRunId, path || "value", value);
+  return row ? [row] : [];
+}
+
+export async function saveCalculatorRunWithInputs(
+  payload: SaveCalculatorRunPayload
+) {
+  const calculatorCode = payload.calculatorCode.trim();
+
+  if (!calculatorCode) {
+    throw new Error("Thiếu calculatorCode.");
+  }
+
+  if (!payload.patientId) {
+    throw new Error("Thiếu patientId.");
+  }
+
+  const { data: calculatorDef, error: calculatorDefError } = await supabase
+    .from("calculator_definitions")
+    .select("id, code, name")
+    .eq("code", calculatorCode)
+    .single();
+
+  if (calculatorDefError || !calculatorDef) {
+    throw new Error(
+      calculatorDefError?.message || "Không tìm thấy calculator definition."
+    );
+  }
+
+  const { data: runRow, error: runError } = await supabase
+    .from("calculator_runs")
+    .insert([
+      {
+        calculator_id: calculatorDef.id,
+        patient_id: payload.patientId,
+        case_id: payload.caseId ?? null,
+        assessment_id: payload.assessmentId ?? null,
+        run_at: new Date().toISOString(),
+        result_value: extractResultValue(payload.outputs),
+        result_text: extractResultText(payload.outputs, payload.summary),
+        risk_level: extractRiskLevel(payload.outputs),
+        interpretation: payload.summary?.trim() || null,
+        result_json: payload.outputs,
+        created_by: payload.userId ?? null,
+      },
+    ])
+    .select("*")
+    .single();
+
+  if (runError || !runRow) {
+    throw new Error(runError?.message || "Không lưu được calculator run.");
+  }
+
+  const inputRows = flattenInputs(runRow.id, payload.inputs);
+
+  if (inputRows.length > 0) {
+    const { error: inputInsertError } = await supabase
+      .from("calculator_run_inputs")
+      .insert(inputRows);
+
+    if (inputInsertError) {
+      await supabase.from("calculator_runs").delete().eq("id", runRow.id);
+      throw new Error(inputInsertError.message);
+    }
+  }
+
+  return {
+    run: runRow,
+    inputCount: inputRows.length,
+  };
+}
+
+
+========================================================================================================================
+FILE: src/features/cases/hooks/useRunAndSaveCalculator.ts
+========================================================================================================================
+import { useState } from "react";
+import {
+  runAndSaveCalculator,
+  type RunAndSaveCalculatorResult,
+} from "../../../lib/calculator/runAndSaveCalculator";
+
+function getErrorMessage(error: unknown) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "Không chạy/lưu được calculator.";
+}
+
+export function useRunAndSaveCalculator() {
+  const [runningCalculator, setRunningCalculator] = useState(false);
+  const [runCalculatorError, setRunCalculatorError] = useState("");
+
+  async function execute(
+    calculatorCode: string,
+    assessmentId: string
+  ): Promise<RunAndSaveCalculatorResult> {
+    try {
+      setRunningCalculator(true);
+      setRunCalculatorError("");
+
+      return await runAndSaveCalculator(calculatorCode, assessmentId);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setRunCalculatorError(message);
+      throw new Error(message);
+    } finally {
+      setRunningCalculator(false);
+    }
+  }
+
+  function resetRunCalculatorError() {
+    setRunCalculatorError("");
+  }
+
+  return {
+    runningCalculator,
+    runCalculatorError,
+    execute,
+    resetRunCalculatorError,
+  };
+}
+
+
