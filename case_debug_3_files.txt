@@ -1,0 +1,2812 @@
+﻿
+==================================================
+FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\pages\CasesListPage.tsx
+==================================================
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../../../lib/supabase";
+
+type GenderValue = "male" | "female" | "other" | "unknown";
+type SortKey = "case_code" | "case_name" | "gender" | "birth_year" | "created_at";
+type SortDirection = "asc" | "desc";
+
+type PatientRow = {
+  id: string;
+  patient_code?: string | null;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation: string | null;
+};
+
+type CaseRow = {
+  id: string;
+  patient_id: string;
+  case_code: string | null;
+  title: string | null;
+  primary_problem: string | null;
+  primary_diagnosis: string | null;
+  red_flag: boolean | null;
+  created_at?: string | null;
+};
+
+type IdRow = {
+  id: string;
+};
+
+type CaseListItem = {
+  id: string;
+  caseCode: string;
+  caseName: string;
+  patientId: string;
+  patientName: string;
+  gender: GenderValue;
+  dateOfBirth: string | null;
+  birthYear: number | null;
+  occupation: string;
+  createdAt: string | null;
+};
+
+type CreateCaseForm = {
+  fullName: string;
+  dateOfBirth: string;
+  gender: "" | "male" | "female" | "other";
+  occupation: string;
+  address: string;
+};
+
+const initialForm: CreateCaseForm = {
+  fullName: "",
+  dateOfBirth: "",
+  gender: "",
+  occupation: "",
+  address: "",
+};
+
+function normalizeGender(value: string | null | undefined): GenderValue {
+  if (value === "male") return "male";
+  if (value === "female") return "female";
+  if (value === "other") return "other";
+  return "unknown";
+}
+
+function formatGender(value: GenderValue) {
+  if (value === "male") return "Nam";
+  if (value === "female") return "Ná»¯";
+  if (value === "other") return "KhÃ¡c";
+  return "â€”";
+}
+
+function getBirthYear(dateOfBirth?: string | null) {
+  if (!dateOfBirth) return null;
+  const d = new Date(dateOfBirth);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getFullYear();
+}
+
+function formatCreatedDate(value?: string | null) {
+  if (!value) return "â€”";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "â€”";
+  return d.toLocaleDateString("vi-VN");
+}
+
+function generatePatientCode() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+  return `PT-${yyyy}${mm}${dd}-${random}`;
+}
+
+function generateCaseCode() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+  return `CA-${yyyy}${mm}${dd}-${random}`;
+}
+
+function inputStyle(): CSSProperties {
+  return {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: 14,
+    boxSizing: "border-box",
+  };
+}
+
+function linkButtonStyle(): CSSProperties {
+  return {
+    border: "none",
+    background: "transparent",
+    padding: 0,
+    margin: 0,
+    color: "#1d4ed8",
+    fontWeight: 700,
+    fontSize: 14,
+    cursor: "pointer",
+    textAlign: "left",
+  };
+}
+
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <label
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#475569",
+        }}
+      >
+        {label}
+        {required ? " *" : ""}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  onClick,
+  tone = "default",
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  tone?: "default" | "primary" | "danger";
+  disabled?: boolean;
+}) {
+  const tones: Record<string, CSSProperties> = {
+    default: {
+      border: "1px solid #cbd5e1",
+      background: "#ffffff",
+      color: "#0f172a",
+    },
+    primary: {
+      border: "1px solid #2563eb",
+      background: "#eff6ff",
+      color: "#1d4ed8",
+    },
+    danger: {
+      border: "1px solid #fecaca",
+      background: "#fef2f2",
+      color: "#b91c1c",
+    },
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: "10px 14px",
+        borderRadius: 10,
+        fontWeight: 600,
+        fontSize: 14,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
+        ...tones[tone],
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function IconButton({
+  label,
+  icon,
+  onClick,
+  tone = "default",
+  disabled,
+}: {
+  label: string;
+  icon: string;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+  tone?: "default" | "danger";
+  disabled?: boolean;
+}) {
+  const tones: Record<string, CSSProperties> = {
+    default: {
+      border: "1px solid #cbd5e1",
+      background: "#ffffff",
+      color: "#0f172a",
+    },
+    danger: {
+      border: "1px solid #fecaca",
+      background: "#fef2f2",
+      color: "#b91c1c",
+    },
+  };
+
+  return (
+    <button
+      type="button"
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 18,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
+        ...tones[tone],
+      }}
+    >
+      <span aria-hidden="true">{icon}</span>
+    </button>
+  );
+}
+
+function HeaderSortButton({
+  label,
+  sortKey,
+  currentSortKey,
+  sortDirection,
+  onClick,
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentSortKey: SortKey;
+  sortDirection: SortDirection;
+  onClick: () => void;
+}) {
+  const active = currentSortKey === sortKey;
+  const arrow = active ? (sortDirection === "asc" ? " â†‘" : " â†“") : "";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        border: "none",
+        background: "transparent",
+        padding: 0,
+        textAlign: "left",
+        fontWeight: 700,
+        color: active ? "#1d4ed8" : "#475569",
+        cursor: "pointer",
+        fontSize: 13,
+      }}
+    >
+      {label}
+      {arrow}
+    </button>
+  );
+}
+
+function compareText(a: string, b: string) {
+  return a.localeCompare(b, "vi");
+}
+
+function sortItems(items: CaseListItem[], sortKey: SortKey, sortDirection: SortDirection) {
+  const next = [...items];
+
+  next.sort((a, b) => {
+    let compare = 0;
+
+    if (sortKey === "case_code") compare = compareText(a.caseCode, b.caseCode);
+    if (sortKey === "case_name") compare = compareText(a.caseName, b.caseName);
+    if (sortKey === "gender") compare = compareText(formatGender(a.gender), formatGender(b.gender));
+    if (sortKey === "birth_year") compare = (a.birthYear ?? 0) - (b.birthYear ?? 0);
+    if (sortKey === "created_at") {
+      compare =
+        (a.createdAt ? new Date(a.createdAt).getTime() : 0) -
+        (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    }
+
+    return sortDirection === "asc" ? compare : -compare;
+  });
+
+  return next;
+}
+
+export default function CasesListPage() {
+  const navigate = useNavigate();
+
+  const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [error, setError] = useState("");
+
+  const [searchDraft, setSearchDraft] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+
+  const [quickCaseCode, setQuickCaseCode] = useState("");
+  const [quickCaseName, setQuickCaseName] = useState("");
+  const [quickGender, setQuickGender] = useState("");
+  const [quickBirthYear, setQuickBirthYear] = useState("");
+  const [quickCreatedAt, setQuickCreatedAt] = useState("");
+
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateCaseForm>(initialForm);
+  const [creatingCase, setCreatingCase] = useState(false);
+  const [createCaseError, setCreateCaseError] = useState("");
+
+  const [deletingCaseId, setDeletingCaseId] = useState<string | null>(null);
+
+  async function loadCases() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const { data: caseRows, error: caseError } = await supabase
+        .from("cases")
+        .select(
+          "id, patient_id, case_code, title, primary_problem, primary_diagnosis, red_flag, created_at"
+        )
+        .order("created_at", { ascending: false });
+
+      if (caseError) throw caseError;
+
+      const typedCaseRows = ((caseRows ?? []) as CaseRow[]).filter((row) => row.patient_id);
+      const patientIds = Array.from(new Set(typedCaseRows.map((row) => row.patient_id)));
+
+      let patientRows: PatientRow[] = [];
+
+      if (patientIds.length > 0) {
+        const { data: patientsData, error: patientsError } = await supabase
+          .from("patients")
+          .select("id, patient_code, full_name, date_of_birth, gender, occupation")
+          .in("id", patientIds);
+
+        if (patientsError) throw patientsError;
+        patientRows = (patientsData ?? []) as PatientRow[];
+      }
+
+      const patientMap = new Map(patientRows.map((row) => [row.id, row]));
+
+      const merged: CaseListItem[] = typedCaseRows.map((row) => {
+        const patient = patientMap.get(row.patient_id);
+
+        return {
+          id: row.id,
+          caseCode: row.case_code ?? "â€”",
+          caseName: row.title ?? patient?.full_name ?? "Ca bá»‡nh",
+          patientId: row.patient_id,
+          patientName: patient?.full_name ?? "ChÆ°a cÃ³ tÃªn",
+          gender: normalizeGender(patient?.gender),
+          dateOfBirth: patient?.date_of_birth ?? null,
+          birthYear: getBirthYear(patient?.date_of_birth),
+          occupation: patient?.occupation ?? "â€”",
+          createdAt: row.created_at ?? null,
+        };
+      });
+
+      setCases(merged);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "KhÃ´ng táº£i Ä‘Æ°á»£c danh sÃ¡ch ca.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadCases();
+  }, []);
+
+  async function handleCreateCase() {
+    if (!createForm.fullName.trim()) {
+      setCreateCaseError("Vui lÃ²ng nháº­p há» vÃ  tÃªn.");
+      return;
+    }
+
+    if (!createForm.dateOfBirth.trim()) {
+      setCreateCaseError("Vui lÃ²ng nháº­p ngÃ y thÃ¡ng nÄƒm sinh.");
+      return;
+    }
+
+    if (!createForm.gender.trim()) {
+      setCreateCaseError("Vui lÃ²ng chá»n giá»›i tÃ­nh.");
+      return;
+    }
+
+    try {
+      setCreatingCase(true);
+      setCreateCaseError("");
+
+      const patientPayload = {
+        patient_code: generatePatientCode(),
+        full_name: createForm.fullName.trim(),
+        date_of_birth: createForm.dateOfBirth,
+        gender: createForm.gender,
+        occupation: createForm.occupation.trim() || null,
+      };
+
+      const { data: createdPatient, error: patientError } = await supabase
+        .from("patients")
+        .insert([patientPayload])
+        .select("id, patient_code")
+        .single();
+
+      if (patientError) throw new Error(patientError.message);
+
+      const casePayload = {
+        case_code: generateCaseCode(),
+        patient_id: createdPatient.id,
+        title: createForm.fullName.trim(),
+        primary_problem: null,
+        primary_diagnosis: null,
+        red_flag: false,
+      };
+
+      const { error: caseError } = await supabase.from("cases").insert([casePayload]);
+      if (caseError) throw new Error(caseError.message);
+
+      setIsCreateModalOpen(false);
+      setCreateForm(initialForm);
+      await loadCases();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "KhÃ´ng táº¡o Ä‘Æ°á»£c ca má»›i.";
+      setCreateCaseError(message);
+    } finally {
+      setCreatingCase(false);
+    }
+  }
+
+  async function deleteAssessmentBundleByCase(caseId: string) {
+    const { data: assessmentRows, error: assessmentsError } = await supabase
+      .from("case_assessments")
+      .select("id")
+      .eq("case_id", caseId);
+
+    if (assessmentsError) throw assessmentsError;
+
+    const assessmentIds = ((assessmentRows ?? []) as IdRow[]).map((row) => row.id);
+    if (assessmentIds.length === 0) return;
+
+    const { data: runRows, error: runError } = await supabase
+      .from("calculator_runs")
+      .select("id")
+      .in("assessment_id", assessmentIds);
+
+    if (runError) throw runError;
+
+    const runIds = ((runRows ?? []) as IdRow[]).map((row) => row.id);
+
+    if (runIds.length > 0) {
+      const { error: deleteRunInputsError } = await supabase
+        .from("calculator_run_inputs")
+        .delete()
+        .in("calculator_run_id", runIds);
+
+      if (deleteRunInputsError) throw deleteRunInputsError;
+    }
+
+    const deleteByAssessmentIds = async (table: string) => {
+      const { error: deleteError } = await supabase
+        .from(table)
+        .delete()
+        .in("assessment_id", assessmentIds);
+
+      if (deleteError) throw deleteError;
+    };
+
+    await deleteByAssessmentIds("calculator_runs");
+    await deleteByAssessmentIds("assessment_observations");
+    await deleteByAssessmentIds("assessment_red_flags");
+    await deleteByAssessmentIds("assessment_plan_items");
+    await deleteByAssessmentIds("assessment_treatments");
+    await deleteByAssessmentIds("assessment_diagnoses");
+    await deleteByAssessmentIds("assessment_notes");
+    await deleteByAssessmentIds("assessment_vitals");
+
+    const { error: deleteAssessmentsError } = await supabase
+      .from("case_assessments")
+      .delete()
+      .in("id", assessmentIds);
+
+    if (deleteAssessmentsError) throw deleteAssessmentsError;
+  }
+
+  async function handleDeleteCase(item: CaseListItem) {
+    const confirmed = window.confirm(
+      `Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a ca ${item.caseCode} khÃ´ng?\n\nThao tÃ¡c nÃ y sáº½ xÃ³a toÃ n bá»™ láº§n Ä‘Ã¡nh giÃ¡ cá»§a ca.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingCaseId(item.id);
+      await deleteAssessmentBundleByCase(item.id);
+
+      const { error: deleteCaseError } = await supabase
+        .from("cases")
+        .delete()
+        .eq("id", item.id);
+
+      if (deleteCaseError) throw deleteCaseError;
+
+      setCases((prev) => prev.filter((row) => row.id !== item.id));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "KhÃ´ng xÃ³a Ä‘Æ°á»£c ca.";
+      window.alert(message);
+    } finally {
+      setDeletingCaseId(null);
+    }
+  }
+
+  function toggleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection("asc");
+  }
+
+  function applySearch() {
+    setAppliedSearch(searchDraft.trim());
+  }
+
+  const filteredCases = useMemo(() => {
+    const keyword = appliedSearch.trim().toLowerCase();
+
+    const filtered = cases.filter((item) => {
+      const globalMatch =
+        !keyword ||
+        item.caseCode.toLowerCase().includes(keyword) ||
+        item.caseName.toLowerCase().includes(keyword) ||
+        formatGender(item.gender).toLowerCase().includes(keyword) ||
+        String(item.birthYear ?? "").includes(keyword) ||
+        formatCreatedDate(item.createdAt).toLowerCase().includes(keyword);
+
+      const caseCodeMatch =
+        !quickCaseCode.trim() ||
+        item.caseCode.toLowerCase().includes(quickCaseCode.trim().toLowerCase());
+
+      const caseNameMatch =
+        !quickCaseName.trim() ||
+        item.caseName.toLowerCase().includes(quickCaseName.trim().toLowerCase());
+
+      const genderMatch =
+        !quickGender.trim() ||
+        formatGender(item.gender).toLowerCase().includes(quickGender.trim().toLowerCase());
+
+      const birthYearMatch =
+        !quickBirthYear.trim() ||
+        String(item.birthYear ?? "").includes(quickBirthYear.trim());
+
+      const createdAtMatch =
+        !quickCreatedAt.trim() ||
+        formatCreatedDate(item.createdAt)
+          .toLowerCase()
+          .includes(quickCreatedAt.trim().toLowerCase());
+
+      return (
+        globalMatch &&
+        caseCodeMatch &&
+        caseNameMatch &&
+        genderMatch &&
+        birthYearMatch &&
+        createdAtMatch
+      );
+    });
+
+    return sortItems(filtered, sortKey, sortDirection);
+  }, [
+    cases,
+    appliedSearch,
+    quickCaseCode,
+    quickCaseName,
+    quickGender,
+    quickBirthYear,
+    quickCreatedAt,
+    sortKey,
+    sortDirection,
+  ]);
+
+  return (
+    <div
+      style={{
+        padding: 24,
+        display: "grid",
+        gap: 20,
+        background: "#f8fafc",
+      }}
+    >
+      <section
+        style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          background: "#ffffff",
+          padding: 20,
+          display: "grid",
+          gap: 16,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 34,
+                lineHeight: 1.2,
+                color: "#0f172a",
+              }}
+            >
+              Danh sÃ¡ch ca
+            </h1>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <ActionButton label="Vá» trang chá»§" onClick={() => navigate("/")} />
+            <ActionButton
+              label="+ Táº¡o ca má»›i"
+              tone="primary"
+              onClick={() => {
+                setCreateCaseError("");
+                setIsCreateModalOpen(true);
+              }}
+            />
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "minmax(320px, 1fr) auto",
+            alignItems: "center",
+          }}
+        >
+          <input
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applySearch();
+            }}
+            placeholder="TÃ¬m theo mÃ£ ca, tÃªn ca, giá»›i tÃ­nh, nÄƒm sinh, ngÃ y táº¡o ca..."
+            style={inputStyle()}
+          />
+
+          <ActionButton label="TÃ¬m" tone="primary" onClick={applySearch} />
+        </div>
+      </section>
+
+      <section
+        style={{
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          background: "#ffffff",
+          overflow: "hidden",
+        }}
+      >
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+          }}
+        >
+          <thead>
+            <tr
+              style={{
+                background: "#f8fafc",
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
+              <th style={{ padding: "14px 16px", textAlign: "left" }}>
+                <HeaderSortButton
+                  label="MÃ£ ca"
+                  sortKey="case_code"
+                  currentSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("case_code")}
+                />
+              </th>
+              <th style={{ padding: "14px 16px", textAlign: "left" }}>
+                <HeaderSortButton
+                  label="TÃªn ca"
+                  sortKey="case_name"
+                  currentSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("case_name")}
+                />
+              </th>
+              <th style={{ padding: "14px 16px", textAlign: "left" }}>
+                <HeaderSortButton
+                  label="Giá»›i tÃ­nh"
+                  sortKey="gender"
+                  currentSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("gender")}
+                />
+              </th>
+              <th style={{ padding: "14px 16px", textAlign: "left" }}>
+                <HeaderSortButton
+                  label="NÄƒm sinh"
+                  sortKey="birth_year"
+                  currentSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("birth_year")}
+                />
+              </th>
+              <th style={{ padding: "14px 16px", textAlign: "left" }}>
+                <HeaderSortButton
+                  label="NgÃ y táº¡o ca"
+                  sortKey="created_at"
+                  currentSortKey={sortKey}
+                  sortDirection={sortDirection}
+                  onClick={() => toggleSort("created_at")}
+                />
+              </th>
+              <th
+                style={{
+                  padding: "14px 16px",
+                  textAlign: "center",
+                  fontSize: 13,
+                  color: "#475569",
+                }}
+              >
+                Thao tÃ¡c
+              </th>
+            </tr>
+
+            <tr
+              style={{
+                borderBottom: "1px solid #e2e8f0",
+                background: "#ffffff",
+              }}
+            >
+              <th style={{ padding: "10px 16px" }}>
+                <input
+                  value={quickCaseCode}
+                  onChange={(e) => setQuickCaseCode(e.target.value)}
+                  placeholder="Lá»c mÃ£ ca"
+                  style={inputStyle()}
+                />
+              </th>
+              <th style={{ padding: "10px 16px" }}>
+                <input
+                  value={quickCaseName}
+                  onChange={(e) => setQuickCaseName(e.target.value)}
+                  placeholder="Lá»c tÃªn ca"
+                  style={inputStyle()}
+                />
+              </th>
+              <th style={{ padding: "10px 16px" }}>
+                <input
+                  value={quickGender}
+                  onChange={(e) => setQuickGender(e.target.value)}
+                  placeholder="Lá»c giá»›i tÃ­nh"
+                  style={inputStyle()}
+                />
+              </th>
+              <th style={{ padding: "10px 16px" }}>
+                <input
+                  value={quickBirthYear}
+                  onChange={(e) => setQuickBirthYear(e.target.value)}
+                  placeholder="Lá»c nÄƒm sinh"
+                  style={inputStyle()}
+                />
+              </th>
+              <th style={{ padding: "10px 16px" }}>
+                <input
+                  value={quickCreatedAt}
+                  onChange={(e) => setQuickCreatedAt(e.target.value)}
+                  placeholder="Lá»c ngÃ y táº¡o"
+                  style={inputStyle()}
+                />
+              </th>
+              <th style={{ padding: "10px 16px" }} />
+            </tr>
+          </thead>
+
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 20, color: "#64748b" }}>
+                  Äang táº£i danh sÃ¡ch ca...
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 20, color: "#dc2626" }}>
+                  {error}
+                </td>
+              </tr>
+            ) : filteredCases.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 20, color: "#64748b" }}>
+                  KhÃ´ng cÃ³ ca phÃ¹ há»£p bá»™ lá»c hiá»‡n táº¡i.
+                </td>
+              </tr>
+            ) : (
+              filteredCases.map((item) => (
+                <tr
+                  key={item.id}
+                  onDoubleClick={() => navigate(`/app/cases/${item.id}`)}
+                  style={{
+                    borderBottom: "1px solid #e2e8f0",
+                    cursor: "pointer",
+                  }}
+                  title="Double click Ä‘á»ƒ má»Ÿ chi tiáº¿t ca"
+                >
+                  <td
+                    style={{
+                      padding: "14px 16px",
+                      fontSize: 14,
+                      color: "#0f172a",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {item.caseCode}
+                  </td>
+
+                  <td style={{ padding: "14px 16px", fontSize: 14 }}>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(`/app/cases/${item.id}`);
+                      }}
+                      style={linkButtonStyle()}
+                      title="Má»Ÿ chi tiáº¿t ca"
+                    >
+                      {item.caseName}
+                    </button>
+                  </td>
+
+                  <td
+                    style={{
+                      padding: "14px 16px",
+                      fontSize: 14,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {formatGender(item.gender)}
+                  </td>
+
+                  <td
+                    style={{
+                      padding: "14px 16px",
+                      fontSize: 14,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {item.birthYear ?? "â€”"}
+                  </td>
+
+                  <td
+                    style={{
+                      padding: "14px 16px",
+                      fontSize: 14,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {formatCreatedDate(item.createdAt)}
+                  </td>
+
+                  <td
+                    style={{
+                      padding: "14px 16px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        gap: 8,
+                      }}
+                    >
+                      <IconButton
+                        label="Xem chi tiáº¿t"
+                        icon="ðŸ““"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/app/cases/${item.id}`);
+                        }}
+                      />
+                      <IconButton
+                        label="XÃ³a ca"
+                        icon="ðŸ—‘ï¸"
+                        tone="danger"
+                        disabled={deletingCaseId === item.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDeleteCase(item);
+                        }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {isCreateModalOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 760,
+              background: "#ffffff",
+              borderRadius: 16,
+              border: "1px solid #e2e8f0",
+              padding: 20,
+              display: "grid",
+              gap: 16,
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "#64748b",
+                  marginBottom: 6,
+                  fontWeight: 600,
+                }}
+              >
+                Táº¡o ca má»›i
+              </div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 26,
+                  color: "#0f172a",
+                }}
+              >
+                ThÃ´ng tin ca bá»‡nh
+              </h2>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 14,
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              }}
+            >
+              <Field label="Há» vÃ  tÃªn" required>
+                <input
+                  value={createForm.fullName}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      fullName: e.target.value,
+                    }))
+                  }
+                  style={inputStyle()}
+                />
+              </Field>
+
+              <Field label="NgÃ y thÃ¡ng nÄƒm sinh" required>
+                <input
+                  type="date"
+                  value={createForm.dateOfBirth}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      dateOfBirth: e.target.value,
+                    }))
+                  }
+                  style={inputStyle()}
+                />
+              </Field>
+
+              <Field label="Giá»›i tÃ­nh" required>
+                <select
+                  value={createForm.gender}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      gender: e.target.value as CreateCaseForm["gender"],
+                    }))
+                  }
+                  style={inputStyle()}
+                >
+                  <option value="">ChÆ°a chá»n</option>
+                  <option value="male">Nam</option>
+                  <option value="female">Ná»¯</option>
+                  <option value="other">KhÃ¡c</option>
+                </select>
+              </Field>
+
+              <Field label="Nghá» nghiá»‡p">
+                <input
+                  value={createForm.occupation}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      occupation: e.target.value,
+                    }))
+                  }
+                  placeholder="KhÃ´ng báº¯t buá»™c"
+                  style={inputStyle()}
+                />
+              </Field>
+
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Äá»‹a chá»‰">
+                  <input
+                    value={createForm.address}
+                    onChange={(e) =>
+                      setCreateForm((prev) => ({
+                        ...prev,
+                        address: e.target.value,
+                      }))
+                    }
+                    placeholder="KhÃ´ng báº¯t buá»™c"
+                    style={inputStyle()}
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <ActionButton
+                label="ÄÃ³ng"
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setCreateCaseError("");
+                }}
+                disabled={creatingCase}
+              />
+              <ActionButton
+                label={creatingCase ? "Äang lÆ°u..." : "LÆ°u ca má»›i"}
+                tone="primary"
+                disabled={creatingCase}
+                onClick={() => {
+                  void handleCreateCase();
+                }}
+              />
+            </div>
+
+            {createCaseError ? (
+              <div style={{ color: "#dc2626", fontSize: 14 }}>{createCaseError}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+==================================================
+FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\pages\CaseAssessmentRedirectPage.tsx
+==================================================
+
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { supabase } from "../../../lib/supabase";
+import { useCreateAssessment } from "../hooks/useCreateAssessment";
+
+type LatestAssessmentRow = {
+  id: string;
+  assessment_no: number | null;
+  assessment_date: string | null;
+};
+
+type CaseRow = {
+  id: string;
+  patient_id: string | null;
+};
+
+async function findLatestAssessment(caseId: string) {
+  const { data, error } = await supabase
+    .from("case_assessments")
+    .select("id, assessment_no, assessment_date")
+    .eq("case_id", caseId)
+    .order("assessment_no", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? null) as LatestAssessmentRow | null;
+}
+
+function hardRedirect(caseId: string, assessmentId: string) {
+  const target = `/app/cases/${caseId}/assessments/${assessmentId}`;
+  console.log("[CaseAssessmentRedirectPage] redirect target =", target);
+  window.location.replace(target);
+}
+
+export default function CaseAssessmentRedirectPage() {
+  const { caseId } = useParams();
+  const { createAssessment } = useCreateAssessment();
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      if (!caseId) {
+        setError("Thiáº¿u caseId.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError("");
+
+        const latestBefore = await findLatestAssessment(caseId);
+        console.log("[CaseAssessmentRedirectPage] caseId =", caseId);
+        console.log("[CaseAssessmentRedirectPage] latestBefore =", latestBefore);
+
+        if (latestBefore?.id) {
+          if (!cancelled) {
+            hardRedirect(caseId, latestBefore.id);
+          }
+          return;
+        }
+
+        const { data: caseRowRaw, error: caseError } = await supabase
+          .from("cases")
+          .select("id, patient_id")
+          .eq("id", caseId)
+          .single();
+
+        if (caseError) {
+          throw caseError;
+        }
+
+        const caseRow = caseRowRaw as CaseRow | null;
+        console.log("[CaseAssessmentRedirectPage] caseRow =", caseRow);
+
+        if (!caseRow?.id) {
+          throw new Error("KhÃ´ng tÃ¬m tháº¥y ca bá»‡nh.");
+        }
+
+        if (!caseRow.patient_id) {
+          throw new Error("Ca bá»‡nh chÆ°a cÃ³ patient_id há»£p lá»‡.");
+        }
+
+        let createdAssessmentId: string | null = null;
+        let createErr: unknown = null;
+
+        try {
+          const created = await createAssessment({
+            caseId: caseRow.id,
+            patientId: caseRow.patient_id,
+            nextAssessmentNo: 1,
+            sourceAssessmentId: undefined,
+            assessmentType: "initial",
+            careSetting: "outpatient",
+            status: "draft",
+          });
+
+          console.log("[CaseAssessmentRedirectPage] created =", created);
+          createdAssessmentId = created?.id ?? null;
+        } catch (err) {
+          console.error("[CaseAssessmentRedirectPage] createAssessment error =", err);
+          createErr = err;
+        }
+
+        if (createdAssessmentId) {
+          if (!cancelled) {
+            hardRedirect(caseId, createdAssessmentId);
+          }
+          return;
+        }
+
+        const latestAfter = await findLatestAssessment(caseId);
+        console.log("[CaseAssessmentRedirectPage] latestAfter =", latestAfter);
+
+        if (latestAfter?.id) {
+          if (!cancelled) {
+            hardRedirect(caseId, latestAfter.id);
+          }
+          return;
+        }
+
+        if (createErr instanceof Error) {
+          throw createErr;
+        }
+
+        throw new Error("KhÃ´ng má»Ÿ Ä‘Æ°á»£c chi tiáº¿t ca.");
+      } catch (err) {
+        console.error("[CaseAssessmentRedirectPage] final error =", err);
+        const message =
+          err instanceof Error ? err.message : "KhÃ´ng má»Ÿ Ä‘Æ°á»£c chi tiáº¿t ca.";
+
+        if (!cancelled) {
+          setError(message);
+          setLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, createAssessment]);
+
+  if (loading) {
+    return <div style={{ padding: 24 }}>Äang má»Ÿ chi tiáº¿t ca...</div>;
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 24, color: "#dc2626" }}>
+        {error}
+      </div>
+    );
+  }
+
+  return <div style={{ padding: 24 }}>Äang chuyá»ƒn hÆ°á»›ng...</div>;
+}
+
+==================================================
+FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\pages\CaseDetailPage.tsx
+==================================================
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { supabase } from "../../../lib/supabase";
+import { useCreateAssessment } from "../hooks/useCreateAssessment";
+
+type TabKey =
+  | "overview"
+  | "history"
+  | "ice"
+  | "risk"
+  | "biopsychosocial"
+  | "labs"
+  | "management"
+  | "treatment"
+  | "immunization";
+
+type CaseRow = {
+  id: string;
+  patient_id: string | null;
+  case_code: string | null;
+  title: string | null;
+  primary_problem?: string | null;
+  primary_diagnosis?: string | null;
+  red_flag?: boolean | null;
+  created_at?: string | null;
+};
+
+type PatientRow = {
+  id: string;
+  patient_code?: string | null;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation: string | null;
+};
+
+type AssessmentRow = Record<string, unknown> & {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no: number | null;
+  assessment_date: string | null;
+  assessment_type?: string | null;
+  care_setting?: string | null;
+  status?: string | null;
+  chief_complaint?: string | null;
+  created_at?: string | null;
+};
+
+type VitalsRow = Record<string, unknown> & {
+  assessment_id: string;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  pulse_bpm?: number | null;
+  temperature_c?: number | null;
+  respiratory_rate?: number | null;
+  spo2_percent?: number | null;
+  waist_cm?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  bmi?: number | null;
+};
+
+type NoteRow = Record<string, unknown> & {
+  assessment_id: string;
+  history_of_present_illness?: string | null;
+  past_medical_history?: string | null;
+  past_surgical_history?: string | null;
+  medication_history?: string | null;
+  allergy_history?: string | null;
+  family_history?: string | null;
+  social_history?: string | null;
+  ideas?: string | null;
+  concerns?: string | null;
+  expectations?: string | null;
+  biological_factors?: string | null;
+  psychological_factors?: string | null;
+  social_factors?: string | null;
+  functional_limitations?: string | null;
+  participation_restrictions?: string | null;
+  environmental_factors?: string | null;
+  personal_factors?: string | null;
+  protective_factors?: string | null;
+  barriers_to_recovery?: string | null;
+  general_appearance?: string | null;
+  mental_status?: string | null;
+  head_neck_exam?: string | null;
+  cardiovascular_exam?: string | null;
+  respiratory_exam?: string | null;
+  abdominal_exam?: string | null;
+  musculoskeletal_exam?: string | null;
+  neurological_exam?: string | null;
+  skin_exam?: string | null;
+  other_exam?: string | null;
+};
+
+type DiagnosisRow = Record<string, unknown> & {
+  id: string;
+  assessment_id: string;
+  diagnosis_label?: string | null;
+  diagnosis_name?: string | null;
+  problem_name?: string | null;
+  icd10_code?: string | null;
+  is_active?: boolean | null;
+  is_primary?: boolean | null;
+  note?: string | null;
+  created_at?: string | null;
+};
+
+type TreatmentRow = Record<string, unknown> & {
+  id: string;
+  assessment_id: string;
+  treatment_name?: string | null;
+  medication_name?: string | null;
+  dose?: string | null;
+  route?: string | null;
+  frequency?: string | null;
+  duration?: string | null;
+  instructions?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+type PlanItemRow = Record<string, unknown> & {
+  id: string;
+  assessment_id: string;
+  item_type?: string | null;
+  title?: string | null;
+  description?: string | null;
+  status?: string | null;
+  due_date?: string | null;
+  created_at?: string | null;
+};
+
+type RedFlagRow = Record<string, unknown> & {
+  id: string;
+  assessment_id: string;
+  label?: string | null;
+  name?: string | null;
+  code?: string | null;
+  severity?: string | null;
+  is_present?: boolean | null;
+  note?: string | null;
+  created_at?: string | null;
+};
+
+type ObservationRow = Record<string, unknown> & {
+  id: string;
+  assessment_id: string;
+  observation_code?: string | null;
+  observation_label?: string | null;
+  value_type?: string | null;
+  value_numeric?: number | null;
+  value_text?: string | null;
+  value_boolean?: boolean | null;
+  value_date?: string | null;
+  unit?: string | null;
+  note?: string | null;
+  created_at?: string | null;
+};
+
+type CalculatorRunRow = Record<string, unknown> & {
+  id: string;
+  assessment_id?: string | null;
+  run_at?: string | null;
+  result_value?: number | null;
+  result_text?: string | null;
+  risk_level?: string | null;
+  interpretation?: string | null;
+  created_at?: string | null;
+};
+
+function pageCardStyle(): CSSProperties {
+  return {
+    border: "1px solid #e2e8f0",
+    borderRadius: 16,
+    background: "#ffffff",
+  };
+}
+
+function smallMutedStyle(): CSSProperties {
+  return {
+    fontSize: 13,
+    color: "#64748b",
+  };
+}
+
+function buttonStyle(tone: "default" | "primary" | "danger" = "default"): CSSProperties {
+  const tones: Record<string, CSSProperties> = {
+    default: {
+      border: "1px solid #cbd5e1",
+      background: "#ffffff",
+      color: "#0f172a",
+    },
+    primary: {
+      border: "1px solid #2563eb",
+      background: "#eff6ff",
+      color: "#1d4ed8",
+    },
+    danger: {
+      border: "1px solid #fecaca",
+      background: "#fef2f2",
+      color: "#b91c1c",
+    },
+  };
+
+  return {
+    padding: "10px 14px",
+    borderRadius: 10,
+    fontWeight: 600,
+    fontSize: 14,
+    cursor: "pointer",
+    ...tones[tone],
+  };
+}
+
+function tabStyle(active: boolean): CSSProperties {
+  return {
+    padding: "10px 14px",
+    borderRadius: 999,
+    border: active ? "1px solid #2563eb" : "1px solid #cbd5e1",
+    background: active ? "#eff6ff" : "#ffffff",
+    color: active ? "#1d4ed8" : "#0f172a",
+    fontWeight: 600,
+    fontSize: 14,
+    cursor: "pointer",
+  };
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "â€”";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("vi-VN");
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "â€”";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("vi-VN");
+}
+
+function calcAge(dateOfBirth?: string | null) {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function formatGender(value?: string | null) {
+  if (value === "male") return "Nam";
+  if (value === "female") return "Ná»¯";
+  if (value === "other") return "KhÃ¡c";
+  return "â€”";
+}
+
+function getText(row: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!row) return "";
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function getNumber(row: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!row) return null;
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getBoolean(row: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!row) return null;
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function compactText(value?: string | null, maxLength = 220) {
+  if (!value) return "â€”";
+  const trimmed = value.trim();
+  if (!trimmed) return "â€”";
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength).trim()}...`;
+}
+
+function formatBloodPressure(vitals: VitalsRow | null) {
+  const sys = getNumber(vitals, "systolic_bp", "bp_systolic");
+  const dia = getNumber(vitals, "diastolic_bp", "bp_diastolic");
+  if (sys == null || dia == null) return "â€”";
+  return `${sys}/${dia}`;
+}
+
+function formatNumberWithUnit(value: number | null, unit?: string) {
+  if (value == null) return "â€”";
+  return unit ? `${value} ${unit}` : `${value}`;
+}
+
+function renderEmpty(text = "ChÆ°a cÃ³ dá»¯ liá»‡u.") {
+  return <div style={{ color: "#64748b", fontSize: 14 }}>{text}</div>;
+}
+
+function ActionButton({
+  children,
+  tone = "default",
+  onClick,
+  disabled,
+}: {
+  children: ReactNode;
+  tone?: "default" | "primary" | "danger";
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button type="button" style={buttonStyle(tone)} onClick={onClick} disabled={disabled}>
+      {children}
+    </button>
+  );
+}
+
+function TabButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" style={tabStyle(active)} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function SummaryBlock({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        padding: 14,
+        background: "#ffffff",
+      }}
+    >
+      <div style={{ ...smallMutedStyle(), fontWeight: 700, marginBottom: 8 }}>{title}</div>
+      <div style={{ color: "#0f172a", fontSize: 15, fontWeight: 600 }}>
+        {value || "â€”"}
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      style={{
+        ...pageCardStyle(),
+        padding: 20,
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      <h3 style={{ margin: 0, fontSize: 22, color: "#0f172a" }}>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+export default function CaseDetailPage() {
+  const { caseId, assessmentId } = useParams();
+  const navigate = useNavigate();
+  const { createAssessment } = useCreateAssessment();
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
+
+  const [caseItem, setCaseItem] = useState<CaseRow | null>(null);
+  const [patient, setPatient] = useState<PatientRow | null>(null);
+  const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
+  const [selectedAssessment, setSelectedAssessment] = useState<AssessmentRow | null>(null);
+
+  const [vitals, setVitals] = useState<VitalsRow | null>(null);
+  const [note, setNote] = useState<NoteRow | null>(null);
+  const [diagnoses, setDiagnoses] = useState<DiagnosisRow[]>([]);
+  const [treatments, setTreatments] = useState<TreatmentRow[]>([]);
+  const [planItems, setPlanItems] = useState<PlanItemRow[]>([]);
+  const [redFlags, setRedFlags] = useState<RedFlagRow[]>([]);
+  const [observations, setObservations] = useState<ObservationRow[]>([]);
+  const [calculatorRuns, setCalculatorRuns] = useState<CalculatorRunRow[]>([]);
+
+  const [creatingAssessment, setCreatingAssessment] = useState(false);
+  const [deletingAssessment, setDeletingAssessment] = useState(false);
+
+  const age = useMemo(() => calcAge(patient?.date_of_birth), [patient?.date_of_birth]);
+
+  const hasRedFlag = useMemo(() => {
+    if (getBoolean(selectedAssessment, "is_red_flag_present")) return true;
+    if (getBoolean(caseItem, "red_flag")) return true;
+    return redFlags.some((item) => item.is_present !== false);
+  }, [caseItem, redFlags, selectedAssessment]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPage() {
+      if (!caseId) {
+        setError("Thiáº¿u caseId.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError("");
+
+        const { data: caseRaw, error: caseError } = await supabase
+          .from("cases")
+          .select("*")
+          .eq("id", caseId)
+          .single();
+
+        if (caseError) {
+          throw caseError;
+        }
+
+        const currentCase = caseRaw as CaseRow;
+        if (cancelled) return;
+        setCaseItem(currentCase);
+
+        if (currentCase.patient_id) {
+          const { data: patientRaw, error: patientError } = await supabase
+            .from("patients")
+            .select("*")
+            .eq("id", currentCase.patient_id)
+            .single();
+
+          if (patientError) {
+            throw patientError;
+          }
+
+          if (!cancelled) {
+            setPatient(patientRaw as PatientRow);
+          }
+        } else {
+          setPatient(null);
+        }
+
+        const { data: assessmentsRaw, error: assessmentsError } = await supabase
+          .from("case_assessments")
+          .select("*")
+          .eq("case_id", caseId)
+          .order("assessment_no", { ascending: false });
+
+        if (assessmentsError) {
+          throw assessmentsError;
+        }
+
+        const assessmentList = (assessmentsRaw ?? []) as AssessmentRow[];
+        if (cancelled) return;
+        setAssessments(assessmentList);
+
+        if (assessmentList.length === 0) {
+          setSelectedAssessment(null);
+          setVitals(null);
+          setNote(null);
+          setDiagnoses([]);
+          setTreatments([]);
+          setPlanItems([]);
+          setRedFlags([]);
+          setObservations([]);
+          setCalculatorRuns([]);
+          setLoading(false);
+          return;
+        }
+
+        const resolvedAssessment =
+          assessmentList.find((item) => item.id === assessmentId) ?? assessmentList[0];
+
+        if (!resolvedAssessment) {
+          setLoading(false);
+          return;
+        }
+
+        if (assessmentId !== resolvedAssessment.id) {
+          navigate(`/app/cases/${caseId}/assessments/${resolvedAssessment.id}`, {
+            replace: true,
+          });
+          return;
+        }
+
+        setSelectedAssessment(resolvedAssessment);
+
+        const [
+          vitalsResult,
+          noteResult,
+          diagnosesResult,
+          treatmentsResult,
+          planItemsResult,
+          redFlagsResult,
+          observationsResult,
+          calculatorRunsResult,
+        ] = await Promise.all([
+          supabase
+            .from("assessment_vitals")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .maybeSingle(),
+          supabase
+            .from("assessment_notes")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .maybeSingle(),
+          supabase
+            .from("assessment_diagnoses")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_treatments")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_plan_items")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_red_flags")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_observations")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("calculator_runs")
+            .select("*")
+            .eq("assessment_id", resolvedAssessment.id)
+            .order("run_at", { ascending: false }),
+        ]);
+
+        if (vitalsResult.error) throw vitalsResult.error;
+        if (noteResult.error) throw noteResult.error;
+        if (diagnosesResult.error) throw diagnosesResult.error;
+        if (treatmentsResult.error) throw treatmentsResult.error;
+        if (planItemsResult.error) throw planItemsResult.error;
+        if (redFlagsResult.error) throw redFlagsResult.error;
+        if (observationsResult.error) throw observationsResult.error;
+        if (calculatorRunsResult.error) throw calculatorRunsResult.error;
+
+        if (cancelled) return;
+
+        setVitals((vitalsResult.data ?? null) as VitalsRow | null);
+        setNote((noteResult.data ?? null) as NoteRow | null);
+        setDiagnoses((diagnosesResult.data ?? []) as DiagnosisRow[]);
+        setTreatments((treatmentsResult.data ?? []) as TreatmentRow[]);
+        setPlanItems((planItemsResult.data ?? []) as PlanItemRow[]);
+        setRedFlags((redFlagsResult.data ?? []) as RedFlagRow[]);
+        setObservations((observationsResult.data ?? []) as ObservationRow[]);
+        setCalculatorRuns((calculatorRunsResult.data ?? []) as CalculatorRunRow[]);
+        setLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : "KhÃ´ng táº£i Ä‘Æ°á»£c chi tiáº¿t ca.";
+        setError(message);
+        setLoading(false);
+      }
+    }
+
+    void loadPage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assessmentId, caseId, navigate]);
+
+  async function handleOpenAssessment(nextAssessmentId: string) {
+    if (!caseId) return;
+    navigate(`/app/cases/${caseId}/assessments/${nextAssessmentId}`);
+  }
+
+  async function handleCreateAssessment() {
+    if (!caseItem?.id || !patient?.id) {
+      window.alert("Thiáº¿u thÃ´ng tin case hoáº·c patient.");
+      return;
+    }
+
+    try {
+      setCreatingAssessment(true);
+
+      const nextAssessmentNo =
+        Math.max(
+          0,
+          ...assessments.map((item) =>
+            typeof item.assessment_no === "number" ? item.assessment_no : 0
+          )
+        ) + 1;
+
+      const created = await createAssessment({
+        caseId: caseItem.id,
+        patientId: patient.id,
+        nextAssessmentNo,
+        sourceAssessmentId: selectedAssessment?.id,
+        assessmentType: nextAssessmentNo === 1 ? "initial" : "follow_up",
+        careSetting: getText(selectedAssessment, "care_setting") || "outpatient",
+        status: "draft",
+      });
+
+      if (!created?.id) {
+        throw new Error("KhÃ´ng táº¡o Ä‘Æ°á»£c láº§n Ä‘Ã¡nh giÃ¡ má»›i.");
+      }
+
+      navigate(`/app/cases/${caseItem.id}/assessments/${created.id}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "KhÃ´ng táº¡o Ä‘Æ°á»£c láº§n Ä‘Ã¡nh giÃ¡ má»›i.";
+      window.alert(message);
+    } finally {
+      setCreatingAssessment(false);
+    }
+  }
+
+  async function deleteAssessmentBundle(targetAssessmentId: string) {
+    const { data: runRows, error: runError } = await supabase
+      .from("calculator_runs")
+      .select("id")
+      .eq("assessment_id", targetAssessmentId);
+
+    if (runError) {
+      throw runError;
+    }
+
+    const runIds = ((runRows ?? []) as { id: string }[]).map((item) => item.id);
+
+    if (runIds.length > 0) {
+      const { error: deleteRunInputsError } = await supabase
+        .from("calculator_run_inputs")
+        .delete()
+        .in("calculator_run_id", runIds);
+
+      if (deleteRunInputsError) {
+        throw deleteRunInputsError;
+      }
+    }
+
+    const deleteByAssessmentId = async (table: string) => {
+      const { error: deleteError } = await supabase
+        .from(table)
+        .delete()
+        .eq("assessment_id", targetAssessmentId);
+
+      if (deleteError) {
+        throw deleteError;
+      }
+    };
+
+    await deleteByAssessmentId("calculator_runs");
+    await deleteByAssessmentId("assessment_observations");
+    await deleteByAssessmentId("assessment_red_flags");
+    await deleteByAssessmentId("assessment_plan_items");
+    await deleteByAssessmentId("assessment_treatments");
+    await deleteByAssessmentId("assessment_diagnoses");
+    await deleteByAssessmentId("assessment_notes");
+    await deleteByAssessmentId("assessment_vitals");
+
+    const { error: deleteAssessmentError } = await supabase
+      .from("case_assessments")
+      .delete()
+      .eq("id", targetAssessmentId);
+
+    if (deleteAssessmentError) {
+      throw deleteAssessmentError;
+    }
+  }
+
+  async function handleDeleteAssessment() {
+    if (!selectedAssessment?.id || !caseItem?.id) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Báº¡n cÃ³ cháº¯c muá»‘n xÃ³a láº§n Ä‘Ã¡nh giÃ¡ ${
+        selectedAssessment.assessment_no ?? ""
+      } khÃ´ng?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingAssessment(true);
+
+      await deleteAssessmentBundle(selectedAssessment.id);
+
+      const remaining = assessments.filter((item) => item.id !== selectedAssessment.id);
+
+      if (remaining.length > 0) {
+        navigate(`/app/cases/${caseItem.id}/assessments/${remaining[0].id}`);
+      } else {
+        navigate(`/app/cases/${caseItem.id}`);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "KhÃ´ng xÃ³a Ä‘Æ°á»£c láº§n Ä‘Ã¡nh giÃ¡.";
+      window.alert(message);
+    } finally {
+      setDeletingAssessment(false);
+    }
+  }
+
+  const overviewData = useMemo(() => {
+    const primaryDiagnosisRow =
+      diagnoses.find((item) => item.is_primary) ??
+      diagnoses.find((item) => item.is_active !== false) ??
+      diagnoses[0] ??
+      null;
+
+    const historySummary = compactText(getText(note, "history_of_present_illness"));
+    const pastHistorySummary = compactText(
+      [
+        getText(note, "past_medical_history"),
+        getText(note, "past_surgical_history"),
+        getText(note, "medication_history"),
+        getText(note, "allergy_history"),
+        getText(note, "family_history"),
+        getText(note, "social_history"),
+      ]
+        .filter(Boolean)
+        .join(" â€¢ ")
+    );
+
+    const iceSummary = compactText(
+      [
+        getText(note, "ideas") && `Ideas: ${getText(note, "ideas")}`,
+        getText(note, "concerns") && `Concerns: ${getText(note, "concerns")}`,
+        getText(note, "expectations") && `Expectations: ${getText(note, "expectations")}`,
+      ]
+        .filter(Boolean)
+        .join(" â€¢ ")
+    );
+
+    const bpsSummary = compactText(
+      [
+        getText(note, "biological_factors"),
+        getText(note, "psychological_factors"),
+        getText(note, "social_factors"),
+      ]
+        .filter(Boolean)
+        .join(" â€¢ ")
+    );
+
+    const examSummary = compactText(
+      [
+        getText(note, "general_appearance"),
+        getText(note, "mental_status"),
+        getText(note, "head_neck_exam"),
+        getText(note, "cardiovascular_exam"),
+        getText(note, "respiratory_exam"),
+        getText(note, "abdominal_exam"),
+        getText(note, "musculoskeletal_exam"),
+        getText(note, "neurological_exam"),
+        getText(note, "skin_exam"),
+        getText(note, "other_exam"),
+      ]
+        .filter(Boolean)
+        .join(" â€¢ ")
+    );
+
+    const labSummary = compactText(
+      observations
+        .slice(0, 6)
+        .map((item) => {
+          const label =
+            getText(item, "observation_label") ||
+            getText(item, "observation_code") ||
+            "Observation";
+          const numeric = getNumber(item, "value_numeric");
+          const text = getText(item, "value_text");
+          const boolValue = getBoolean(item, "value_boolean");
+          const dateValue = getText(item, "value_date");
+          const unit = getText(item, "unit");
+          const value =
+            numeric != null
+              ? `${numeric}${unit ? ` ${unit}` : ""}`
+              : text || (boolValue != null ? (boolValue ? "CÃ³" : "KhÃ´ng") : dateValue || "â€”");
+          return `${label}: ${value}`;
+        })
+        .join(" â€¢ ")
+    );
+
+    const diagnosisSummary =
+      getText(primaryDiagnosisRow, "diagnosis_label") ||
+      getText(primaryDiagnosisRow, "diagnosis_name") ||
+      getText(primaryDiagnosisRow, "problem_name") ||
+      getText(caseItem, "primary_diagnosis") ||
+      "â€”";
+
+    const planSummary = compactText(
+      planItems
+        .slice(0, 6)
+        .map((item) => {
+          const title =
+            getText(item, "title") || getText(item, "item_type") || "Káº¿ hoáº¡ch";
+          const description = getText(item, "description");
+          return description ? `${title}: ${description}` : title;
+        })
+        .join(" â€¢ ")
+    );
+
+    return {
+      reason:
+        getText(selectedAssessment, "chief_complaint") ||
+        getText(caseItem, "primary_problem") ||
+        "â€”",
+      historySummary,
+      pastHistorySummary,
+      iceSummary,
+      bpsSummary,
+      examSummary,
+      labSummary,
+      diagnosisSummary,
+      planSummary,
+    };
+  }, [caseItem, diagnoses, note, observations, planItems, selectedAssessment]);
+
+  if (loading) {
+    return <div style={{ padding: 24 }}>Äang táº£i chi tiáº¿t ca...</div>;
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 24, color: "#dc2626" }}>
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        padding: 24,
+        display: "grid",
+        gridTemplateColumns: "240px minmax(0, 1fr)",
+        gap: 20,
+        background: "#f8fafc",
+        minHeight: "100vh",
+      }}
+    >
+      <aside
+        style={{
+          ...pageCardStyle(),
+          overflow: "hidden",
+          alignSelf: "start",
+        }}
+      >
+        <div
+          style={{
+            padding: 16,
+            borderBottom: "1px solid #e2e8f0",
+            fontWeight: 700,
+            color: "#0f172a",
+          }}
+        >
+          Láº§n Ä‘Ã¡nh giÃ¡
+        </div>
+
+        {assessments.length === 0 ? (
+          <div style={{ padding: 16, color: "#64748b" }}>ChÆ°a cÃ³ láº§n Ä‘Ã¡nh giÃ¡ nÃ o.</div>
+        ) : (
+          assessments.map((item) => {
+            const active = item.id === selectedAssessment?.id;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  void handleOpenAssessment(item.id);
+                }}
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  border: "none",
+                  borderBottom: "1px solid #e2e8f0",
+                  background: active ? "#eff6ff" : "#ffffff",
+                  padding: 16,
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
+                  {formatDate(item.assessment_date)}
+                </div>
+                <div style={{ ...smallMutedStyle(), marginBottom: 4 }}>
+                  {formatDateTime(item.created_at)}
+                </div>
+                <div style={{ ...smallMutedStyle(), fontWeight: 600 }}>
+                  Láº§n {item.assessment_no ?? "â€”"}
+                </div>
+              </button>
+            );
+          })
+        )}
+      </aside>
+
+      <main style={{ display: "grid", gap: 20 }}>
+        <section
+          style={{
+            ...pageCardStyle(),
+            padding: 20,
+            display: "grid",
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 16,
+              flexWrap: "wrap",
+              alignItems: "flex-start",
+            }}
+          >
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", ...smallMutedStyle() }}>
+                <span>MÃ£ ca: {caseItem?.case_code ?? "â€”"}</span>
+                <span>NgÃ y giá» Ä‘Ã¡nh giÃ¡: {formatDateTime(selectedAssessment?.created_at)}</span>
+                <span>Láº§n Ä‘Ã¡nh giÃ¡: {selectedAssessment?.assessment_no ?? "â€”"}</span>
+              </div>
+
+              <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.2, color: "#0f172a" }}>
+                {caseItem?.title || patient?.full_name || "Chi tiáº¿t ca"}
+              </h1>
+
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", ...smallMutedStyle() }}>
+                <span>
+                  NgÃ y sinh:{" "}
+                  {patient?.date_of_birth
+                    ? `${formatDate(patient.date_of_birth)}${age != null ? ` (${age} tuá»•i)` : ""}`
+                    : "â€”"}
+                </span>
+                <span>Giá»›i tÃ­nh: {formatGender(patient?.gender)}</span>
+                <span>Nghá» nghiá»‡p: {patient?.occupation || "â€”"}</span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <ActionButton onClick={() => navigate("/")}>Vá» trang chá»§</ActionButton>
+              <ActionButton onClick={() => navigate("/app/cases")}>Danh sÃ¡ch ca</ActionButton>
+              <ActionButton
+                tone="primary"
+                onClick={() => {
+                  void handleCreateAssessment();
+                }}
+                disabled={creatingAssessment}
+              >
+                {creatingAssessment ? "Äang táº¡o..." : "+ Táº¡o láº§n Ä‘Ã¡nh giÃ¡ má»›i"}
+              </ActionButton>
+              <ActionButton
+                tone="danger"
+                onClick={() => {
+                  void handleDeleteAssessment();
+                }}
+                disabled={deletingAssessment || !selectedAssessment}
+              >
+                {deletingAssessment ? "Äang xÃ³a..." : "XÃ³a láº§n Ä‘Ã¡nh giÃ¡"}
+              </ActionButton>
+            </div>
+          </div>
+        </section>
+
+        <section
+          style={{
+            ...pageCardStyle(),
+            padding: 20,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 2fr 1fr 1fr",
+              gap: 10,
+            }}
+          >
+            <SummaryBlock
+              title="Cháº©n Ä‘oÃ¡n chÃ­nh cá»§a láº§n Ä‘Ã¡nh giÃ¡"
+              value={overviewData.diagnosisSummary}
+            />
+            <SummaryBlock title="LÃ½ do Ä‘Ã¡nh giÃ¡" value={overviewData.reason} />
+            <SummaryBlock title="Red flag" value={hasRedFlag ? "CÃ³" : "KhÃ´ng"} />
+            <div
+              style={{
+                border: "1px solid #fbbf24",
+                background: "#fffbeb",
+                color: "#b45309",
+                borderRadius: 12,
+                display: "grid",
+                placeItems: "center",
+                fontWeight: 700,
+                fontSize: 18,
+                minHeight: 78,
+              }}
+            >
+              Chuyá»ƒn tuyáº¿n
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
+              gap: 10,
+            }}
+          >
+            <SummaryBlock title="HA" value={formatBloodPressure(vitals)} />
+            <SummaryBlock
+              title="Máº¡ch"
+              value={formatNumberWithUnit(getNumber(vitals, "pulse_bpm"), "bpm")}
+            />
+            <SummaryBlock
+              title="Nhiá»‡t Ä‘á»™"
+              value={formatNumberWithUnit(getNumber(vitals, "temperature_c"), "Â°C")}
+            />
+            <SummaryBlock
+              title="Nhá»‹p thá»Ÿ"
+              value={formatNumberWithUnit(getNumber(vitals, "respiratory_rate"), "/phÃºt")}
+            />
+            <SummaryBlock
+              title="SpO2"
+              value={formatNumberWithUnit(getNumber(vitals, "spo2_percent"), "%")}
+            />
+            <SummaryBlock
+              title="Chiá»u cao"
+              value={formatNumberWithUnit(getNumber(vitals, "height_cm"), "cm")}
+            />
+            <SummaryBlock
+              title="CÃ¢n náº·ng"
+              value={formatNumberWithUnit(getNumber(vitals, "weight_kg"), "kg")}
+            />
+            <SummaryBlock
+              title="BMI"
+              value={formatNumberWithUnit(getNumber(vitals, "bmi"))}
+            />
+          </div>
+        </section>
+
+        <section
+          style={{
+            ...pageCardStyle(),
+            padding: 16,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <TabButton active={activeTab === "overview"} onClick={() => setActiveTab("overview")}>
+            Tá»•ng quan
+          </TabButton>
+          <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
+            Tiá»n sá»­
+          </TabButton>
+          <TabButton active={activeTab === "ice"} onClick={() => setActiveTab("ice")}>
+            ICE
+          </TabButton>
+          <TabButton active={activeTab === "risk"} onClick={() => setActiveTab("risk")}>
+            Yáº¿u tá»‘ nguy cÆ¡
+          </TabButton>
+          <TabButton
+            active={activeTab === "biopsychosocial"}
+            onClick={() => setActiveTab("biopsychosocial")}
+          >
+            BioPsychoSocial
+          </TabButton>
+          <TabButton active={activeTab === "labs"} onClick={() => setActiveTab("labs")}>
+            Cáº­n lÃ¢m sÃ ng ({observations.length})
+          </TabButton>
+          <TabButton active={activeTab === "management"} onClick={() => setActiveTab("management")}>
+            Káº¿ hoáº¡ch quáº£n lÃ½ ({planItems.length})
+          </TabButton>
+          <TabButton active={activeTab === "treatment"} onClick={() => setActiveTab("treatment")}>
+            Äiá»u trá»‹ cá»¥ thá»ƒ ({treatments.length})
+          </TabButton>
+          <TabButton
+            active={activeTab === "immunization"}
+            onClick={() => setActiveTab("immunization")}
+          >
+            TiÃªm chá»§ng
+          </TabButton>
+        </section>
+
+        {activeTab === "overview" ? (
+          <SectionCard title="TÃ³m táº¯t bá»‡nh Ã¡n">
+            <div style={{ display: "grid", gap: 12 }}>
+              <SummaryBlock title="LÃ½ do Ä‘Ã¡nh giÃ¡" value={overviewData.reason} />
+              <SummaryBlock title="Bá»‡nh sá»­" value={overviewData.historySummary} />
+              <SummaryBlock title="Tiá»n sá»­" value={overviewData.pastHistorySummary} />
+              <SummaryBlock title="ICE" value={overviewData.iceSummary} />
+              <SummaryBlock title="BioPsychoSocial" value={overviewData.bpsSummary} />
+              <SummaryBlock title="KhÃ¡m tÃ³m táº¯t" value={overviewData.examSummary} />
+              <SummaryBlock title="Cáº­n lÃ¢m sÃ ng tÃ³m táº¯t" value={overviewData.labSummary} />
+              <SummaryBlock title="Cháº©n Ä‘oÃ¡n" value={overviewData.diagnosisSummary} />
+              <SummaryBlock title="Káº¿ hoáº¡ch quáº£n lÃ½" value={overviewData.planSummary} />
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "history" ? (
+          <SectionCard title="Tiá»n sá»­">
+            <SummaryBlock
+              title="History of Present Illness"
+              value={getText(note, "history_of_present_illness") || "â€”"}
+            />
+            <SummaryBlock
+              title="Past Medical History"
+              value={getText(note, "past_medical_history") || "â€”"}
+            />
+            <SummaryBlock
+              title="Past Surgical History"
+              value={getText(note, "past_surgical_history") || "â€”"}
+            />
+            <SummaryBlock
+              title="Medication History"
+              value={getText(note, "medication_history") || "â€”"}
+            />
+            <SummaryBlock
+              title="Allergy History"
+              value={getText(note, "allergy_history") || "â€”"}
+            />
+            <SummaryBlock
+              title="Family History"
+              value={getText(note, "family_history") || "â€”"}
+            />
+            <SummaryBlock
+              title="Social History"
+              value={getText(note, "social_history") || "â€”"}
+            />
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "ice" ? (
+          <SectionCard title="ICE">
+            <SummaryBlock title="Ideas" value={getText(note, "ideas") || "â€”"} />
+            <SummaryBlock title="Concerns" value={getText(note, "concerns") || "â€”"} />
+            <SummaryBlock title="Expectations" value={getText(note, "expectations") || "â€”"} />
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "risk" ? (
+          <SectionCard title="Yáº¿u tá»‘ nguy cÆ¡ / Red flags">
+            {redFlags.length === 0 ? (
+              renderEmpty("ChÆ°a ghi nháº­n red flag.")
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {redFlags.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 12,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                      {getText(item, "label") || getText(item, "name") || "Red flag"}
+                    </div>
+                    <div style={{ ...smallMutedStyle(), marginBottom: 6 }}>
+                      MÃ£: {getText(item, "code") || "â€”"} â€¢ Má»©c Ä‘á»™: {getText(item, "severity") || "â€”"} â€¢ Hiá»‡n diá»‡n:{" "}
+                      {item.is_present === false ? "KhÃ´ng" : "CÃ³"}
+                    </div>
+                    <div style={{ color: "#0f172a" }}>
+                      {getText(item, "note") || "â€”"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "biopsychosocial" ? (
+          <SectionCard title="BioPsychoSocial / KhÃ¡m">
+            <SummaryBlock
+              title="Biological Factors"
+              value={getText(note, "biological_factors") || "â€”"}
+            />
+            <SummaryBlock
+              title="Psychological Factors"
+              value={getText(note, "psychological_factors") || "â€”"}
+            />
+            <SummaryBlock
+              title="Social Factors"
+              value={getText(note, "social_factors") || "â€”"}
+            />
+            <SummaryBlock
+              title="Functional Limitations"
+              value={getText(note, "functional_limitations") || "â€”"}
+            />
+            <SummaryBlock
+              title="Participation Restrictions"
+              value={getText(note, "participation_restrictions") || "â€”"}
+            />
+            <SummaryBlock
+              title="Environmental Factors"
+              value={getText(note, "environmental_factors") || "â€”"}
+            />
+            <SummaryBlock
+              title="Personal Factors"
+              value={getText(note, "personal_factors") || "â€”"}
+            />
+            <SummaryBlock
+              title="Protective Factors"
+              value={getText(note, "protective_factors") || "â€”"}
+            />
+            <SummaryBlock
+              title="Barriers to Recovery"
+              value={getText(note, "barriers_to_recovery") || "â€”"}
+            />
+            <SummaryBlock
+              title="General Appearance"
+              value={getText(note, "general_appearance") || "â€”"}
+            />
+            <SummaryBlock
+              title="Mental Status"
+              value={getText(note, "mental_status") || "â€”"}
+            />
+            <SummaryBlock
+              title="Head / Neck Exam"
+              value={getText(note, "head_neck_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Cardiovascular Exam"
+              value={getText(note, "cardiovascular_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Respiratory Exam"
+              value={getText(note, "respiratory_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Abdominal Exam"
+              value={getText(note, "abdominal_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Musculoskeletal Exam"
+              value={getText(note, "musculoskeletal_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Neurological Exam"
+              value={getText(note, "neurological_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Skin Exam"
+              value={getText(note, "skin_exam") || "â€”"}
+            />
+            <SummaryBlock
+              title="Other Exam"
+              value={getText(note, "other_exam") || "â€”"}
+            />
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "labs" ? (
+          <SectionCard title="Cáº­n lÃ¢m sÃ ng / Observations">
+            {observations.length === 0 ? (
+              renderEmpty("ChÆ°a cÃ³ observations.")
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {observations.map((item) => {
+                  const label =
+                    getText(item, "observation_label") ||
+                    getText(item, "observation_code") ||
+                    "Observation";
+                  const numeric = getNumber(item, "value_numeric");
+                  const text = getText(item, "value_text");
+                  const boolValue = getBoolean(item, "value_boolean");
+                  const dateValue = getText(item, "value_date");
+                  const unit = getText(item, "unit");
+                  const value =
+                    numeric != null
+                      ? `${numeric}${unit ? ` ${unit}` : ""}`
+                      : text ||
+                        (boolValue != null
+                          ? boolValue
+                            ? "CÃ³"
+                            : "KhÃ´ng"
+                          : dateValue || "â€”");
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 12,
+                        padding: 14,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: 6 }}>{label}</div>
+                      <div style={{ ...smallMutedStyle(), marginBottom: 6 }}>
+                        Code: {getText(item, "observation_code") || "â€”"} â€¢ Type:{" "}
+                        {getText(item, "value_type") || "â€”"}
+                      </div>
+                      <div style={{ color: "#0f172a", fontWeight: 600 }}>{value}</div>
+                      {getText(item, "note") ? (
+                        <div style={{ marginTop: 8, color: "#334155" }}>
+                          {getText(item, "note")}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "management" ? (
+          <SectionCard title="Káº¿ hoáº¡ch quáº£n lÃ½">
+            <div style={{ display: "grid", gap: 16 }}>
+              <div>
+                <h4 style={{ margin: "0 0 10px 0", color: "#0f172a" }}>Cháº©n Ä‘oÃ¡n</h4>
+                {diagnoses.length === 0 ? (
+                  renderEmpty("ChÆ°a cÃ³ cháº©n Ä‘oÃ¡n.")
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {diagnoses.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 12,
+                          padding: 14,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          {getText(item, "diagnosis_label") ||
+                            getText(item, "diagnosis_name") ||
+                            getText(item, "problem_name") ||
+                            "Cháº©n Ä‘oÃ¡n"}
+                        </div>
+                        <div style={{ ...smallMutedStyle(), marginTop: 6 }}>
+                          ICD10: {getText(item, "icd10_code") || "â€”"} â€¢ Active:{" "}
+                          {item.is_active === false ? "KhÃ´ng" : "CÃ³"} â€¢ Primary:{" "}
+                          {item.is_primary ? "CÃ³" : "KhÃ´ng"}
+                        </div>
+                        {getText(item, "note") ? (
+                          <div style={{ marginTop: 8 }}>{getText(item, "note")}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 style={{ margin: "0 0 10px 0", color: "#0f172a" }}>Plan items</h4>
+                {planItems.length === 0 ? (
+                  renderEmpty("ChÆ°a cÃ³ káº¿ hoáº¡ch quáº£n lÃ½.")
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {planItems.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 12,
+                          padding: 14,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          {getText(item, "title") ||
+                            getText(item, "item_type") ||
+                            "Plan item"}
+                        </div>
+                        <div style={{ ...smallMutedStyle(), marginTop: 6 }}>
+                          Status: {getText(item, "status") || "â€”"} â€¢ Due:{" "}
+                          {getText(item, "due_date") || "â€”"}
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          {getText(item, "description") || "â€”"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <h4 style={{ margin: "0 0 10px 0", color: "#0f172a" }}>
+                  Calculator runs
+                </h4>
+                {calculatorRuns.length === 0 ? (
+                  renderEmpty("ChÆ°a cÃ³ calculator runs.")
+                ) : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {calculatorRuns.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 12,
+                          padding: 14,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700 }}>
+                          {getText(item, "result_text") || "Calculator run"}
+                        </div>
+                        <div style={{ ...smallMutedStyle(), marginTop: 6 }}>
+                          Run at: {formatDateTime(item.run_at)} â€¢ Risk:{" "}
+                          {getText(item, "risk_level") || "â€”"}
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          {getText(item, "interpretation") ||
+                            (getNumber(item, "result_value") != null
+                              ? String(getNumber(item, "result_value"))
+                              : "â€”")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "treatment" ? (
+          <SectionCard title="Äiá»u trá»‹ cá»¥ thá»ƒ">
+            {treatments.length === 0 ? (
+              renderEmpty("ChÆ°a cÃ³ Ä‘iá»u trá»‹.")
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {treatments.map((item) => (
+                  <div
+                    key={item.id}
+                    style={{
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 12,
+                      padding: 14,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700 }}>
+                      {getText(item, "treatment_name") ||
+                        getText(item, "medication_name") ||
+                        "Äiá»u trá»‹"}
+                    </div>
+                    <div style={{ ...smallMutedStyle(), marginTop: 6 }}>
+                      Dose: {getText(item, "dose") || "â€”"} â€¢ Route:{" "}
+                      {getText(item, "route") || "â€”"} â€¢ Frequency:{" "}
+                      {getText(item, "frequency") || "â€”"} â€¢ Duration:{" "}
+                      {getText(item, "duration") || "â€”"} â€¢ Status:{" "}
+                      {getText(item, "status") || "â€”"}
+                    </div>
+                    <div style={{ marginTop: 8 }}>
+                      {getText(item, "instructions") || "â€”"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        ) : null}
+
+        {activeTab === "immunization" ? (
+          <SectionCard title="TiÃªm chá»§ng">
+            {renderEmpty("Tab tiÃªm chá»§ng Ä‘ang chá» ná»‘i DB tháº­t.")}
+          </SectionCard>
+        ) : null}
+      </main>
+    </div>
+  );
+}

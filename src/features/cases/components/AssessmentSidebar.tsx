@@ -14,11 +14,18 @@ type Props = {
   assessments: AssessmentItem[];
 };
 
-function formatDate(value?: string | null) {
+function formatDateOnly(value?: string | null) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("vi-VN");
+}
+
+function formatTimeOnly(value?: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("vi-VN");
 }
 
 export default function AssessmentSidebar({
@@ -29,7 +36,7 @@ export default function AssessmentSidebar({
   return (
     <aside
       style={{
-        width: 240,
+        width: 248,
         background: "#ffffff",
         borderRight: "1px solid #e2e8f0",
         minHeight: "100%",
@@ -37,11 +44,11 @@ export default function AssessmentSidebar({
     >
       <div
         style={{
-          padding: "14px 16px",
+          padding: "16px 18px",
           borderBottom: "1px solid #e2e8f0",
-          fontSize: 14,
-          fontWeight: 600,
-          color: "#334155",
+          fontSize: 16,
+          fontWeight: 700,
+          color: "#0f172a",
         }}
       >
         Lần đánh giá
@@ -68,27 +75,38 @@ export default function AssessmentSidebar({
                 to={`/app/cases/${caseId}/assessments/${item.id}`}
                 style={{
                   display: "block",
-                  padding: "14px 16px",
+                  padding: "16px 18px",
                   borderBottom: "1px solid #e2e8f0",
                   textDecoration: "none",
-                  background: active ? "#f1f5f9" : "#ffffff",
+                  background: active ? "#eef2ff" : "#ffffff",
                   color: "#0f172a",
                 }}
               >
                 <div
                   style={{
                     fontSize: 15,
-                    fontWeight: active ? 700 : 500,
-                    marginBottom: 4,
+                    fontWeight: 800,
+                    marginBottom: 8,
                   }}
                 >
-                  {formatDate(item.assessment_date)}
+                  {formatDateOnly(item.assessment_date)}
                 </div>
 
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     color: "#64748b",
+                    marginBottom: 6,
+                  }}
+                >
+                  {formatTimeOnly(item.assessment_date)} {item.assessment_date ? item.assessment_date.includes("T") ? "" : "" : ""}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: active ? "#1d4ed8" : "#475569",
                   }}
                 >
                   Lần {item.assessment_no ?? "—"}
@@ -97,10 +115,15 @@ export default function AssessmentSidebar({
                 {item.is_red_flag_present ? (
                   <div
                     style={{
-                      marginTop: 6,
+                      marginTop: 8,
+                      display: "inline-block",
                       fontSize: 12,
-                      fontWeight: 600,
-                      color: "#dc2626",
+                      fontWeight: 700,
+                      color: "#b91c1c",
+                      background: "#fff1f2",
+                      border: "1px solid #fecdd3",
+                      borderRadius: 999,
+                      padding: "4px 8px",
                     }}
                   >
                     Red flag

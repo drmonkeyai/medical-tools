@@ -1,0 +1,618 @@
+import type { ReactNode, RefObject } from "react";
+import type { CaseDetailTabKey } from "../types/caseDetail";
+import ClinicalNoteEditSection, {
+  type ClinicalNoteEditSectionRef,
+} from "../../../modules/cases/clinical-note/ClinicalNoteEditSection";
+import HistoryTab from "../../../modules/cases/history/HistoryTab";
+import ICETab from "../../../modules/cases/ice/ICETab";
+import BioPsychoSocialTab from "../../../modules/cases/biopsychosocial/BioPsychoSocialTab";
+import AssessmentToolsSection from "../../../modules/cases/assessment-tools/AssessmentToolsSection";
+import type { CalculatorRunsSectionData } from "../../../modules/cases/calculator-runs/types";
+
+type GenericItem = Record<string, unknown>;
+
+type Props = {
+  activeTab: CaseDetailTabKey;
+  isEditing: boolean;
+  assessmentId?: string;
+  clinicalNote: Record<string, unknown> | null;
+  diagnoses: Record<string, unknown> | null;
+  treatment: Record<string, unknown> | null;
+  plan: Record<string, unknown> | null;
+  redFlags: Record<string, unknown> | null;
+  observations: Record<string, unknown> | null;
+  calculatorRuns: Record<string, unknown> | null;
+  clinicalNoteEditRef: RefObject<ClinicalNoteEditSectionRef | null>;
+  onClinicalNoteChanged?: () => Promise<void> | void;
+};
+
+function toArray<T = GenericItem>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  return values.map((item) => item?.trim()).find(Boolean) ?? "";
+}
+
+function joinNonEmpty(
+  values: Array<string | null | undefined>,
+  separator = " • "
+) {
+  return values.map((item) => item?.trim()).filter(Boolean).join(separator);
+}
+
+function formatDateOnly(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("vi-VN");
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("vi-VN");
+}
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function formatObservationLabel(item: GenericItem) {
+  return firstNonEmpty(
+    typeof item.label === "string" ? item.label : "",
+    typeof item.observationLabel === "string" ? item.observationLabel : "",
+    typeof item.observation_label === "string" ? item.observation_label : "",
+    typeof item.name === "string" ? item.name : "",
+    typeof item.displayName === "string" ? item.displayName : "",
+    typeof item.observationCode === "string" ? item.observationCode : "",
+    typeof item.observation_code === "string" ? item.observation_code : "",
+    typeof item.code === "string" ? item.code : "",
+    "Observation"
+  );
+}
+
+function formatObservationValue(item: GenericItem) {
+  const unit = firstNonEmpty(
+    typeof item.unit === "string" ? item.unit : "",
+    typeof item.displayUnit === "string" ? item.displayUnit : ""
+  );
+
+  const textValue = firstNonEmpty(
+    typeof item.displayValue === "string" ? item.displayValue : "",
+    typeof item.valueText === "string" ? item.valueText : "",
+    typeof item.value_text === "string" ? item.value_text : "",
+    typeof item.resultText === "string" ? item.resultText : "",
+    typeof item.result_text === "string" ? item.result_text : "",
+    typeof item.value === "string" ? item.value : ""
+  );
+
+  if (textValue) {
+    return joinNonEmpty([textValue, unit], " ");
+  }
+
+  const numericCandidate = [
+    item.valueNumeric,
+    item.value_numeric,
+    item.resultValue,
+    item.result_value,
+    item.numeric_value,
+    item.valueNumber,
+  ].find((value) => typeof value === "number" && Number.isFinite(value));
+
+  if (typeof numericCandidate === "number") {
+    return joinNonEmpty([String(numericCandidate), unit], " ");
+  }
+
+  const booleanCandidate = [
+    item.valueBoolean,
+    item.value_boolean,
+    item.resultBoolean,
+    item.result_boolean,
+  ].find((value) => typeof value === "boolean");
+
+  if (typeof booleanCandidate === "boolean") {
+    return booleanCandidate ? "Có" : "Không";
+  }
+
+  return "—";
+}
+
+function Card({
+  title,
+  children,
+}: {
+  title: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 18,
+        padding: 18,
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          color: "#0f172a",
+        }}
+      >
+        {title}
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        border: "1px dashed #cbd5e1",
+        borderRadius: 14,
+        padding: 18,
+        color: "#64748b",
+        background: "#f8fafc",
+        fontSize: 14,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+function SummaryGrid({
+  items,
+}: {
+  items: Array<{ label: string; value: string }>;
+}) {
+  const normalizedItems = items.map((item) => ({
+    ...item,
+    value: item.value?.trim() || "Chưa có dữ liệu.",
+  }));
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 12,
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      }}
+    >
+      {normalizedItems.map((item) => (
+        <div
+          key={item.label}
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 14,
+            padding: 14,
+            background: "#ffffff",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#64748b",
+              marginBottom: 8,
+            }}
+          >
+            {item.label}
+          </div>
+
+          <div
+            style={{
+              fontSize: 15,
+              lineHeight: 1.55,
+              color: item.value === "Chưa có dữ liệu." ? "#64748b" : "#0f172a",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {item.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SimpleList({
+  items,
+  emptyText,
+}: {
+  items: string[];
+  emptyText: string;
+}) {
+  if (items.length === 0) {
+    return <EmptyState text={emptyText} />;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {items.map((item, index) => (
+        <div
+          key={`${index}-${item}`}
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 12,
+            padding: 14,
+            background: "#ffffff",
+            color: "#0f172a",
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {item}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function ActiveTabSection({
+  activeTab,
+  isEditing,
+  assessmentId,
+  clinicalNote,
+  diagnoses,
+  treatment,
+  plan,
+  redFlags,
+  observations,
+  calculatorRuns,
+  clinicalNoteEditRef,
+  onClinicalNoteChanged,
+}: Props) {
+  const diagnosisItems = toArray<GenericItem>(diagnoses?.items);
+  const treatmentItems = toArray<GenericItem>(treatment?.items);
+  const planItems = toArray<GenericItem>(plan?.items);
+  const redFlagItems = toArray<GenericItem>(redFlags?.items);
+  const observationItems = toArray<GenericItem>(observations?.items);
+  const calculatorRunItems = toArray<CalculatorRunsSectionData["runs"][number]>(
+    calculatorRuns?.runs
+  );
+
+  const calculatorRunsData: CalculatorRunsSectionData = {
+    runs: calculatorRunItems,
+  };
+
+  if (activeTab === "overview") {
+    const overviewItems = [
+      {
+        label: "Bệnh sử",
+        value: joinNonEmpty([
+          getText(
+            clinicalNote,
+            "historyOfPresentIllness",
+            "history_of_present_illness"
+          ),
+          getText(clinicalNote, "pastMedicalHistory", "past_medical_history"),
+        ]),
+      },
+      {
+        label: "ICE",
+        value: joinNonEmpty([
+          getText(clinicalNote, "ideas", "ice_ideas"),
+          getText(clinicalNote, "concerns", "ice_concerns"),
+          getText(clinicalNote, "expectations", "ice_expectations"),
+        ]),
+      },
+      {
+        label: "BioPsychoSocial",
+        value: joinNonEmpty([
+          getText(clinicalNote, "biologicalFactors", "biological_factors"),
+          getText(
+            clinicalNote,
+            "psychologicalFactors",
+            "psychological_factors"
+          ),
+          getText(clinicalNote, "socialFactors", "social_factors"),
+        ]),
+      },
+      {
+        label: "Chẩn đoán",
+        value: diagnosisItems
+          .map((item) =>
+            firstNonEmpty(
+              typeof item.diagnosisName === "string" ? item.diagnosisName : "",
+              typeof item.diagnosis_name === "string"
+                ? item.diagnosis_name
+                : "",
+              typeof item.name === "string" ? item.name : ""
+            )
+          )
+          .filter(Boolean)
+          .join(" • "),
+      },
+      {
+        label: "Cận lâm sàng",
+        value: observationItems
+          .slice(0, 6)
+          .map(
+            (item) =>
+              `${formatObservationLabel(item)}: ${formatObservationValue(item)}`
+          )
+          .join(" • "),
+      },
+      {
+        label: "Kế hoạch quản lý",
+        value: planItems
+          .map((item) =>
+            joinNonEmpty(
+              [
+                typeof item.type === "string" ? item.type : "",
+                typeof item.description === "string" ? item.description : "",
+              ],
+              " — "
+            )
+          )
+          .filter(Boolean)
+          .join(" • "),
+      },
+    ];
+
+    return (
+      <Card title="Tổng quan">
+        <SummaryGrid items={overviewItems} />
+      </Card>
+    );
+  }
+
+  if (activeTab === "history") {
+    return (
+      <Card title="Tiền sử / Bệnh sử">
+        {isEditing ? (
+          <ClinicalNoteEditSection
+            ref={clinicalNoteEditRef}
+            assessmentId={assessmentId}
+            data={clinicalNote}
+            mode="history"
+            onChanged={onClinicalNoteChanged}
+          />
+        ) : (
+          <HistoryTab data={clinicalNote} />
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "ice") {
+    return (
+      <Card title="ICE">
+        {isEditing ? (
+          <ClinicalNoteEditSection
+            ref={clinicalNoteEditRef}
+            assessmentId={assessmentId}
+            data={clinicalNote}
+            mode="ice"
+            onChanged={onClinicalNoteChanged}
+          />
+        ) : (
+          <ICETab data={clinicalNote} />
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "risk") {
+    return (
+      <Card title="Yếu tố nguy cơ / Red flags">
+        <SimpleList
+          items={redFlagItems
+            .map((item) =>
+              joinNonEmpty([
+                typeof item.name === "string" ? item.name : "",
+                typeof item.severity === "string" ? item.severity : "",
+                typeof item.note === "string" ? item.note : "",
+              ])
+            )
+            .filter(Boolean)}
+          emptyText="Chưa có red flags."
+        />
+      </Card>
+    );
+  }
+
+  if (activeTab === "biopsychosocial") {
+    return (
+      <Card title="BioPsychoSocial">
+        {isEditing ? (
+          <ClinicalNoteEditSection
+            ref={clinicalNoteEditRef}
+            assessmentId={assessmentId}
+            data={clinicalNote}
+            mode="biopsychosocial"
+            onChanged={onClinicalNoteChanged}
+          />
+        ) : (
+          <BioPsychoSocialTab data={clinicalNote} />
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "labs") {
+    return (
+      <Card title="Cận lâm sàng / Observations">
+        {observationItems.length === 0 ? (
+          <EmptyState text="Chưa có observations." />
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {observationItems.map((item, index) => (
+              <div
+                key={String(item.id ?? index)}
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: 14,
+                  background: "#ffffff",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 800,
+                    marginBottom: 6,
+                    color: "#0f172a",
+                  }}
+                >
+                  {formatObservationLabel(item)}
+                </div>
+
+                <div
+                  style={{
+                    color: "#0f172a",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {formatObservationValue(item)}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: "#64748b",
+                  }}
+                >
+                  {formatDateTime(
+                    firstNonEmpty(
+                      typeof item.observedAt === "string"
+                        ? item.observedAt
+                        : "",
+                      typeof item.observed_at === "string"
+                        ? item.observed_at
+                        : ""
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "calculator") {
+    return (
+      <Card
+        title={
+          calculatorRunItems.length > 0
+            ? `Công cụ đánh giá (${calculatorRunItems.length})`
+            : "Công cụ đánh giá"
+        }
+      >
+        <AssessmentToolsSection
+          data={calculatorRunsData}
+          assessmentId={assessmentId}
+        />
+      </Card>
+    );
+  }
+
+  if (activeTab === "management") {
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        <Card title="Kế hoạch quản lý">
+          <SimpleList
+            items={planItems
+              .map((item) =>
+                joinNonEmpty([
+                  typeof item.type === "string" ? item.type : "",
+                  typeof item.description === "string" ? item.description : "",
+                  typeof item.dueDate === "string"
+                    ? `Hẹn: ${formatDateOnly(item.dueDate)}`
+                    : "",
+                  item.isCompleted === true || item.is_completed === true
+                    ? "Đã hoàn tất"
+                    : "",
+                ])
+              )
+              .filter(Boolean)}
+            emptyText="Chưa có kế hoạch quản lý."
+          />
+        </Card>
+
+        <Card title="Red flags">
+          <SimpleList
+            items={redFlagItems
+              .map((item) =>
+                joinNonEmpty([
+                  typeof item.name === "string" ? item.name : "",
+                  typeof item.severity === "string" ? item.severity : "",
+                  typeof item.note === "string" ? item.note : "",
+                ])
+              )
+              .filter(Boolean)}
+            emptyText="Chưa có red flags."
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  if (activeTab === "treatment") {
+    return (
+      <Card title="Điều trị cụ thể">
+        <SimpleList
+          items={treatmentItems
+            .map((item) =>
+              joinNonEmpty(
+                [
+                  firstNonEmpty(
+                    typeof item.name === "string" ? item.name : "",
+                    typeof item.treatmentName === "string"
+                      ? item.treatmentName
+                      : "",
+                    typeof item.treatment_name === "string"
+                      ? item.treatment_name
+                      : ""
+                  ),
+                  typeof item.description === "string"
+                    ? item.description
+                    : "",
+                  typeof item.instructions === "string"
+                    ? item.instructions
+                    : "",
+                ],
+                " — "
+              )
+            )
+            .filter(Boolean)}
+          emptyText="Chưa có điều trị."
+        />
+      </Card>
+    );
+  }
+
+  if (activeTab === "immunization") {
+    return (
+      <Card title="Tiêm chủng">
+        <EmptyState text="Tab tiêm chủng đang chờ nối DB thật." />
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Tab chưa hỗ trợ">
+      <EmptyState text="Tab hiện tại chưa được cấu hình đúng." />
+    </Card>
+  );
+}

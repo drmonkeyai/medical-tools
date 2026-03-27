@@ -1,0 +1,284 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.patient_monitoring_links (
+  id uuid primary key default gen_random_uuid(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  case_id uuid null references public.cases(id) on delete set null,
+  token text not null unique,
+  is_active boolean not null default true,
+  expires_at timestamptz null,
+  created_at timestamptz not null default now(),
+  created_by uuid null
+);
+
+create table if not exists public.patient_monitoring_submissions (
+  id uuid primary key default gen_random_uuid(),
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  case_id uuid null references public.cases(id) on delete set null,
+  assessment_id uuid null references public.case_assessments(id) on delete set null,
+  submitted_at timestamptz not null default now(),
+  source_type text not null default 'mixed',
+  status text not null default 'submitted',
+  note text null
+);
+
+create table if not exists public.patient_monitoring_values (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null references public.patient_monitoring_submissions(id) on delete cascade,
+  field_code text not null,
+  value_numeric numeric null,
+  value_text text null,
+  unit text null
+);
+
+create table if not exists public.patient_monitoring_files (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null references public.patient_monitoring_submissions(id) on delete cascade,
+  storage_path text not null,
+  file_type text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.patient_monitoring_links enable row level security;
+alter table public.patient_monitoring_submissions enable row level security;
+alter table public.patient_monitoring_values enable row level security;
+alter table public.patient_monitoring_files enable row level security;
+
+drop policy if exists patient_monitoring_links_select_authenticated on public.patient_monitoring_links;
+create policy patient_monitoring_links_select_authenticated
+on public.patient_monitoring_links
+for select
+to authenticated
+using (true);
+
+drop policy if exists patient_monitoring_links_insert_authenticated on public.patient_monitoring_links;
+create policy patient_monitoring_links_insert_authenticated
+on public.patient_monitoring_links
+for insert
+to authenticated
+with check (true);
+
+drop policy if exists patient_monitoring_links_update_authenticated on public.patient_monitoring_links;
+create policy patient_monitoring_links_update_authenticated
+on public.patient_monitoring_links
+for update
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists patient_monitoring_submissions_select_authenticated on public.patient_monitoring_submissions;
+create policy patient_monitoring_submissions_select_authenticated
+on public.patient_monitoring_submissions
+for select
+to authenticated
+using (true);
+
+drop policy if exists patient_monitoring_values_select_authenticated on public.patient_monitoring_values;
+create policy patient_monitoring_values_select_authenticated
+on public.patient_monitoring_values
+for select
+to authenticated
+using (true);
+
+drop policy if exists patient_monitoring_files_select_authenticated on public.patient_monitoring_files;
+create policy patient_monitoring_files_select_authenticated
+on public.patient_monitoring_files
+for select
+to authenticated
+using (true);
+
+create or replace function public.get_patient_monitoring_context(p_token text)
+returns table (
+  link_id uuid,
+  patient_id uuid,
+  case_id uuid,
+  patient_name text,
+  case_code text,
+  expires_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    l.id as link_id,
+    l.patient_id,
+    l.case_id,
+    p.full_name as patient_name,
+    c.case_code,
+    l.expires_at
+  from public.patient_monitoring_links l
+  join public.patients p on p.id = l.patient_id
+  left join public.cases c on c.id = l.case_id
+  where l.token = p_token
+    and l.is_active = true
+    and (l.expires_at is null or l.expires_at > now())
+  order by l.created_at desc
+  limit 1
+$$;
+
+grant execute on function public.get_patient_monitoring_context(text) to anon, authenticated;
+
+create or replace function public.submit_patient_monitoring(
+  p_token text,
+  p_note text default null,
+  p_source_type text default 'mixed',
+  p_values jsonb default '[]'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_link public.patient_monitoring_links%rowtype;
+  v_submission_id uuid;
+begin
+  select *
+  into v_link
+  from public.patient_monitoring_links
+  where token = p_token
+    and is_active = true
+    and (expires_at is null or expires_at > now())
+  order by created_at desc
+  limit 1;
+
+  if v_link.id is null then
+    raise exception 'Liên kết theo dõi không hợp lệ hoặc đã hết hạn.';
+  end if;
+
+  insert into public.patient_monitoring_submissions (
+    patient_id,
+    case_id,
+    assessment_id,
+    submitted_at,
+    source_type,
+    status,
+    note
+  )
+  values (
+    v_link.patient_id,
+    v_link.case_id,
+    null,
+    now(),
+    coalesce(nullif(btrim(coalesce(p_source_type, '')), ''), 'mixed'),
+    'submitted',
+    nullif(btrim(coalesce(p_note, '')), '')
+  )
+  returning id into v_submission_id;
+
+  insert into public.patient_monitoring_values (
+    submission_id,
+    field_code,
+    value_numeric,
+    value_text,
+    unit
+  )
+  select
+    v_submission_id,
+    x.field_code,
+    x.value_numeric,
+    nullif(btrim(coalesce(x.value_text, '')), ''),
+    nullif(btrim(coalesce(x.unit, '')), '')
+  from jsonb_to_recordset(coalesce(p_values, '[]'::jsonb)) as x(
+    field_code text,
+    value_numeric numeric,
+    value_text text,
+    unit text
+  )
+  where nullif(btrim(coalesce(x.field_code, '')), '') is not null;
+
+  return v_submission_id;
+end;
+$$;
+
+grant execute on function public.submit_patient_monitoring(text, text, text, jsonb) to anon, authenticated;
+
+create or replace function public.attach_patient_monitoring_files(
+  p_token text,
+  p_submission_id uuid,
+  p_files jsonb default '[]'::jsonb
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_link public.patient_monitoring_links%rowtype;
+  v_submission public.patient_monitoring_submissions%rowtype;
+  v_count integer := 0;
+begin
+  select *
+  into v_link
+  from public.patient_monitoring_links
+  where token = p_token
+    and is_active = true
+    and (expires_at is null or expires_at > now())
+  order by created_at desc
+  limit 1;
+
+  if v_link.id is null then
+    raise exception 'Liên kết theo dõi không hợp lệ hoặc đã hết hạn.';
+  end if;
+
+  select *
+  into v_submission
+  from public.patient_monitoring_submissions
+  where id = p_submission_id
+    and patient_id = v_link.patient_id
+  limit 1;
+
+  if v_submission.id is null then
+    raise exception 'Không tìm thấy submission cần gắn file.';
+  end if;
+
+  with rows as (
+    select
+      nullif(btrim(coalesce(x.storage_path, '')), '') as storage_path,
+      coalesce(nullif(btrim(coalesce(x.file_type, '')), ''), 'image') as file_type
+    from jsonb_to_recordset(coalesce(p_files, '[]'::jsonb)) as x(
+      storage_path text,
+      file_type text
+    )
+    where nullif(btrim(coalesce(x.storage_path, '')), '') is not null
+  ),
+  inserted as (
+    insert into public.patient_monitoring_files (
+      submission_id,
+      storage_path,
+      file_type
+    )
+    select
+      v_submission.id,
+      rows.storage_path,
+      rows.file_type
+    from rows
+    returning 1
+  )
+  select count(*) into v_count from inserted;
+
+  return v_count;
+end;
+$$;
+
+grant execute on function public.attach_patient_monitoring_files(text, uuid, jsonb) to anon, authenticated;
+
+insert into storage.buckets (id, name, public)
+values ('patient-monitoring', 'patient-monitoring', false)
+on conflict (id) do nothing;
+
+drop policy if exists patient_monitoring_storage_insert_anon on storage.objects;
+create policy patient_monitoring_storage_insert_anon
+on storage.objects
+for insert
+to anon, authenticated
+with check (bucket_id = 'patient-monitoring');
+
+drop policy if exists patient_monitoring_storage_select_authenticated on storage.objects;
+create policy patient_monitoring_storage_select_authenticated
+on storage.objects
+for select
+to authenticated
+using (bucket_id = 'patient-monitoring');

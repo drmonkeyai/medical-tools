@@ -1,12 +1,12 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
 import { supabase } from "../lib/supabase";
-import { useAuth } from "./AuthContext";
 
 export type SexLabel = "Nam" | "Nữ" | "Khác";
 export type SexValue = "male" | "female" | "other";
@@ -15,6 +15,13 @@ export type Patient = {
   name: string;
   yob: number;
   sex: SexLabel;
+
+  /**
+   * Legacy compatibility only.
+   * Calculator cũ vẫn đang đọc weightKg / heightCm từ activeCase.patient.
+   * Về lâu dài nên chuyển sang latestVitals ở case list
+   * hoặc chỉ load ở case detail.
+   */
   weightKg?: number;
   heightCm?: number;
 };
@@ -24,6 +31,7 @@ export type CreateCasePayload = {
     fullName: string;
     sex: SexLabel;
     dateOfBirth?: string;
+    occupation?: string;
   };
   initialAssessment: {
     assessmentType: "initial" | "follow_up" | "review" | "urgent" | "discharge";
@@ -45,7 +53,7 @@ export type ToolResult = {
 };
 
 export type CaseItem = {
-  id: string; // MUST be public.cases.id
+  id: string;
   caseCode: string;
   createdAt: string;
   patientId: string;
@@ -54,19 +62,13 @@ export type CaseItem = {
   results: ToolResult[];
 };
 
-type PendingSave = {
-  tool: string;
-  inputs: unknown;
-  outputs: unknown;
-  summary?: string;
-};
-
 type DbPatientRow = {
   id: string;
   patient_code: string;
   full_name: string | null;
   date_of_birth: string | null;
   gender: string | null;
+  occupation?: string | null;
 };
 
 type DbCaseRow = {
@@ -120,6 +122,13 @@ type DbCalculatorRunRow = {
   interpretation: string | null;
 };
 
+type PendingSave = {
+  tool: string;
+  inputs: unknown;
+  outputs: unknown;
+  summary?: string;
+};
+
 export type CasesContextValue = {
   cases: CaseItem[];
   activeCaseId: string | null;
@@ -135,13 +144,16 @@ export type CasesContextValue = {
 
   createCase: (payload: CreateCasePayload) => Promise<CaseItem | null>;
 
-  saveToActiveCase: (payload: {
-    tool: string;
-    inputs: unknown;
-    outputs: unknown;
-    summary?: string;
-  }) => Promise<void>;
+  /**
+   * Legacy compatibility only.
+   * Calculator cũ vẫn gọi hàm này.
+   */
+  saveToActiveCase: (payload: PendingSave) => Promise<void>;
 
+  /**
+   * Legacy compatibility only.
+   * Về lâu dài nên tách thành updatePatientProfile + upsertAssessmentVitals.
+   */
   updateCasePatient: (id: string, patient: Patient) => Promise<void>;
 
   getCaseLabel: (c: CaseItem, opts?: { compact?: boolean }) => string;
@@ -152,13 +164,11 @@ export type CasesContextValue = {
 
 const CasesContext = createContext<CasesContextValue | null>(null);
 
-function safeParse<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+const ACTIVE_CASE_STORAGE_KEY = "medical-tools.active-case-id";
+
+function toArray<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
 }
 
 function clampInt(value: number, min: number, max: number) {
@@ -173,211 +183,278 @@ function mapSexLabelToDbValue(sex: SexLabel): SexValue {
 }
 
 function mapDbSexToLabel(sex?: string | null): SexLabel {
-  if (sex === "female") return "Nữ";
-  if (sex === "other") return "Khác";
+  const normalized = (sex ?? "").toLowerCase().trim();
+  if (normalized === "female") return "Nữ";
+  if (normalized === "other") return "Khác";
   return "Nam";
 }
 
-function buildActiveCaseStorageKey(userId?: string | null) {
-  return userId
-    ? `medical_tools_active_case_${userId}`
-    : "medical_tools_active_case_guest";
+function getYobFromDate(dateOfBirth?: string | null) {
+  if (!dateOfBirth) return new Date().getFullYear() - 30;
+  const year = Number(String(dateOfBirth).slice(0, 4));
+  if (!Number.isFinite(year)) return new Date().getFullYear() - 30;
+  return clampInt(year, 1900, new Date().getFullYear());
 }
 
-function getYobFromDateOfBirth(dateOfBirth?: string | null) {
-  if (!dateOfBirth) return new Date().getFullYear();
-  const date = new Date(dateOfBirth);
-  if (Number.isNaN(date.getTime())) return new Date().getFullYear();
-  return date.getFullYear();
+function buildDateOfBirthFromYob(yob: number) {
+  const safeYear = clampInt(yob, 1900, new Date().getFullYear());
+  return `${safeYear}-01-01`;
 }
 
-function makeCode(prefix: string) {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-  return `${prefix}-${yyyy}${mm}${dd}-${rand}`;
+function generatePatientCode() {
+  return `PT-${Date.now()}-${Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, "0")}`;
 }
 
-function extractResultValue(outputs: unknown): number | null {
-  if (outputs && typeof outputs === "object") {
-    const obj = outputs as Record<string, unknown>;
+function generateCaseCode() {
+  return `CA-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(
+    new Date().getDate()
+  ).padStart(2, "0")}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+}
 
-    if (typeof obj.resultValue === "number" && Number.isFinite(obj.resultValue)) {
-      return obj.resultValue;
-    }
-    if (typeof obj.result_value === "number" && Number.isFinite(obj.result_value)) {
-      return obj.result_value;
-    }
-    if (typeof obj.score === "number" && Number.isFinite(obj.score)) {
-      return obj.score;
-    }
-    if (typeof obj.value === "number" && Number.isFinite(obj.value)) {
-      return obj.value;
-    }
+function formatCaseLabel(c: CaseItem, opts?: { compact?: boolean }) {
+  const compact = Boolean(opts?.compact);
+  const base = `${c.patient.name} • ${c.patient.yob} • ${c.patient.sex}`;
+  if (compact) return base;
+  return `${c.caseCode} • ${base}`;
+}
+
+function tryGetRiskLevel(outputs: unknown): string | null {
+  if (!outputs || typeof outputs !== "object") return null;
+
+  const value =
+    (outputs as Record<string, unknown>).riskLevel ??
+    (outputs as Record<string, unknown>).risk_level ??
+    (outputs as Record<string, unknown>).level;
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function tryGetInterpretation(outputs: unknown): string | null {
+  if (!outputs || typeof outputs !== "object") return null;
+
+  const value =
+    (outputs as Record<string, unknown>).interpretation ??
+    (outputs as Record<string, unknown>).detail ??
+    (outputs as Record<string, unknown>).text;
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function tryGetNumericResult(outputs: unknown): number | null {
+  if (!outputs || typeof outputs !== "object") return null;
+
+  const candidateKeys = [
+    "resultValue",
+    "result_value",
+    "score",
+    "bmi",
+    "bsa",
+    "egfr",
+    "crcl",
+    "value",
+    "total",
+  ];
+
+  for (const key of candidateKeys) {
+    const value = (outputs as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
   }
 
   return null;
 }
 
-function extractResultText(outputs: unknown, summary?: string): string | null {
-  if (summary?.trim()) return summary.trim();
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-  if (outputs && typeof outputs === "object") {
-    const obj = outputs as Record<string, unknown>;
+type CalculatorRunInputInsertRow = {
+  calculator_run_id: string;
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  input_value_text: string | null;
+  input_value_numeric: number | null;
+  input_value_boolean: boolean | null;
+  input_value_date: string | null;
+  input_value_json: unknown | null;
+  unit: string | null;
+  source_observation_id: string | null;
+};
 
-    if (typeof obj.resultText === "string" && obj.resultText.trim()) {
-      return obj.resultText.trim();
-    }
-    if (typeof obj.result_text === "string" && obj.result_text.trim()) {
-      return obj.result_text.trim();
-    }
-    if (typeof obj.interpretation === "string" && obj.interpretation.trim()) {
-      return obj.interpretation.trim();
-    }
-    if (typeof obj.category === "string" && obj.category.trim()) {
-      return obj.category.trim();
-    }
+function toTitleCase(input: string) {
+  return input
+    .replace(/\[(\d+)\]/g, " $1 ")
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function humanizeKey(path: string) {
+  return toTitleCase(path || "Input");
+}
+
+function isLikelyDateString(value: string) {
+  if (!value.trim()) return false;
+
+  const directDate = /^\d{4}-\d{2}-\d{2}$/;
+  const isoDateTime =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+
+  return directDate.test(value) || isoDateTime.test(value);
+}
+
+function createInputRow(
+  calculatorRunId: string,
+  key: string,
+  value: unknown
+): CalculatorRunInputInsertRow | null {
+  const normalizedKey = key.trim();
+  if (!normalizedKey) return null;
+
+  const base: CalculatorRunInputInsertRow = {
+    calculator_run_id: calculatorRunId,
+    input_key: normalizedKey,
+    input_label: humanizeKey(normalizedKey),
+    input_type: "text",
+    input_value_text: null,
+    input_value_numeric: null,
+    input_value_boolean: null,
+    input_value_date: null,
+    input_value_json: null,
+    unit: null,
+    source_observation_id: null,
+  };
+
+  if (value === null || value === undefined) {
+    return null;
   }
 
-  return null;
-}
-
-function extractRiskLevel(outputs: unknown): string | null {
-  if (outputs && typeof outputs === "object") {
-    const obj = outputs as Record<string, unknown>;
-
-    if (typeof obj.riskLevel === "string" && obj.riskLevel.trim()) {
-      return obj.riskLevel.trim();
-    }
-    if (typeof obj.risk_level === "string" && obj.risk_level.trim()) {
-      return obj.risk_level.trim();
-    }
-    if (typeof obj.risk === "string" && obj.risk.trim()) {
-      return obj.risk.trim();
-    }
+  if (typeof value === "number") {
+    return {
+      ...base,
+      input_type: "numeric",
+      input_value_numeric: Number.isFinite(value) ? value : null,
+      input_value_text: Number.isFinite(value) ? String(value) : null,
+    };
   }
 
-  return null;
-}
+  if (typeof value === "boolean") {
+    return {
+      ...base,
+      input_type: "boolean",
+      input_value_boolean: value,
+      input_value_text: value ? "true" : "false",
+    };
+  }
 
-function mapCalculatorRunToToolResult(
-  row: DbCalculatorRunRow,
-  calculatorName?: string
-): ToolResult {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (isLikelyDateString(trimmed)) {
+      return {
+        ...base,
+        input_type: "date",
+        input_value_date: trimmed,
+        input_value_text: trimmed,
+      };
+    }
+
+    return {
+      ...base,
+      input_type: "text",
+      input_value_text: trimmed,
+    };
+  }
+
   return {
-    id: row.id,
-    tool: calculatorName || "calculator",
-    when: row.run_at,
-    inputs: {},
-    outputs: {
-      result_value: row.result_value,
-      result_text: row.result_text,
-      risk_level: row.risk_level,
-      interpretation: row.interpretation,
-    },
-    summary: row.interpretation || row.result_text || row.risk_level || undefined,
+    ...base,
+    input_type: "json",
+    input_value_json: value,
+    input_value_text: JSON.stringify(value),
   };
 }
 
-function normalizePatientInput(patient: Patient): Patient {
-  return {
-    name: patient.name.trim(),
-    yob: clampInt(patient.yob, 1900, new Date().getFullYear()),
-    sex: patient.sex,
-    weightKg: patient.weightKg,
-    heightCm: patient.heightCm,
-  };
-}
+function flattenInputs(
+  calculatorRunId: string,
+  value: unknown,
+  path = ""
+): CalculatorRunInputInsertRow[] {
+  if (value === null || value === undefined) return [];
 
-function mapDbCaseToCaseItem(args: {
-  caseRow: DbCaseRow;
-  latestAssessmentId?: string | null;
-  latestVitals?: DbVitalsRow | null;
-  calculatorRuns?: ToolResult[];
-}): CaseItem {
-  const patientRowRaw = Array.isArray(args.caseRow.patients)
-    ? args.caseRow.patients[0] ?? null
-    : args.caseRow.patients ?? null;
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    const row = createInputRow(calculatorRunId, path || "value", value);
+    return row ? [row] : [];
+  }
 
-  const patientRow = patientRowRaw as DbPatientRow | null;
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      flattenInputs(
+        calculatorRunId,
+        item,
+        path ? `${path}[${index}]` : `[${index}]`
+      )
+    );
+  }
 
-  return {
-    id: args.caseRow.id,
-    caseCode: args.caseRow.case_code,
-    createdAt: args.caseRow.created_at,
-    patientId: args.caseRow.patient_id,
-    latestAssessmentId: args.latestAssessmentId ?? null,
-    patient: {
-      name: patientRow?.full_name ?? "",
-      yob: getYobFromDateOfBirth(patientRow?.date_of_birth),
-      sex: mapDbSexToLabel(patientRow?.gender),
-      weightKg: args.latestVitals?.weight_kg ?? undefined,
-      heightCm: args.latestVitals?.height_cm ?? undefined,
-    },
-    results: args.calculatorRuns ?? [],
-  };
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value);
+
+    if (entries.length === 0) return [];
+
+    return entries.flatMap(([childKey, childValue]) =>
+      flattenInputs(
+        calculatorRunId,
+        childValue,
+        path ? `${path}.${childKey}` : childKey
+      )
+    );
+  }
+
+  const row = createInputRow(calculatorRunId, path || "value", value);
+  return row ? [row] : [];
 }
 
 export function CasesProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, user } = useAuth();
-
-  const storageKey = useMemo(() => buildActiveCaseStorageKey(user?.id), [user?.id]);
-
   const [cases, setCases] = useState<CaseItem[]>([]);
-  const [activeCaseId, setActiveCaseId] = useState<string | null>(() =>
-    safeParse<string | null>(
-      localStorage.getItem("medical_tools_active_case_guest"),
-      null
-    )
-  );
+  const [activeCaseId, setActiveCaseIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ACTIVE_CASE_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(true);
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
-  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const saved = safeParse<string | null>(localStorage.getItem(storageKey), null);
-    setActiveCaseId(saved);
-  }, [storageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(activeCaseId));
-  }, [storageKey, activeCaseId]);
-
-  useEffect(() => {
-    if (!isAuthenticated || !user?.id) {
-      setCases([]);
-      setActiveCaseId(null);
-      setPendingSave(null);
-      setIsNewCaseModalOpen(false);
+  const setActiveCaseId = useCallback((id: string | null) => {
+    setActiveCaseIdState(id);
+    try {
+      if (id) {
+        localStorage.setItem(ACTIVE_CASE_STORAGE_KEY, id);
+      } else {
+        localStorage.removeItem(ACTIVE_CASE_STORAGE_KEY);
+      }
+    } catch {
+      // ignore storage error
     }
-  }, [isAuthenticated, user?.id]);
+  }, []);
 
-  useEffect(() => {
-    if (!activeCaseId) return;
-
-    const exists = cases.some((c) => c.id === activeCaseId);
-    if (!exists) {
-      setActiveCaseId(cases[0]?.id ?? null);
-    }
-  }, [cases, activeCaseId]);
-
-  const activeCase = useMemo(() => {
-    return cases.find((c) => c.id === activeCaseId) ?? null;
-  }, [cases, activeCaseId]);
-
-  async function refreshCases() {
-    if (!isAuthenticated || !user?.id) {
-      setCases([]);
-      setActiveCaseId(null);
-      return;
-    }
-
+  const refreshCases = useCallback(async () => {
     setLoading(true);
 
     try {
-      const { data: caseRows, error: caseError } = await supabase
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData.user;
+
+      let query = supabase
         .from("cases")
         .select(`
           id,
@@ -397,12 +474,18 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
             patient_code,
             full_name,
             date_of_birth,
-            gender
+            gender,
+            occupation
           )
         `)
-        .eq("created_by", user.id)
-        .order("opened_at", { ascending: false });
+        .order("opened_at", { ascending: false })
+        .order("created_at", { ascending: false });
 
+      if (currentUser?.id) {
+        query = query.eq("created_by", currentUser.id);
+      }
+
+      const { data: caseRows, error: caseError } = await query;
       if (caseError) throw caseError;
 
       const safeCaseRows = (caseRows ?? []) as DbCaseRow[];
@@ -412,11 +495,18 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       if (caseIds.length > 0) {
         const { data, error } = await supabase
           .from("case_assessments")
-          .select(
-            "id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at"
-          )
+          .select(`
+            id,
+            case_id,
+            patient_id,
+            assessment_no,
+            assessment_date,
+            assessment_type,
+            created_at
+          `)
           .in("case_id", caseIds)
-          .order("assessment_date", { ascending: false });
+          .order("assessment_date", { ascending: false })
+          .order("assessment_no", { ascending: false });
 
         if (error) throw error;
         assessmentRows = (data ?? []) as DbAssessmentRow[];
@@ -424,13 +514,27 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       const latestAssessmentByCase = new Map<string, DbAssessmentRow>();
       for (const row of assessmentRows) {
-        if (!latestAssessmentByCase.has(row.case_id)) {
+        const existing = latestAssessmentByCase.get(row.case_id);
+        if (!existing) {
+          latestAssessmentByCase.set(row.case_id, row);
+          continue;
+        }
+
+        const existingDate = new Date(existing.assessment_date).getTime();
+        const nextDate = new Date(row.assessment_date).getTime();
+
+        if (nextDate > existingDate) {
+          latestAssessmentByCase.set(row.case_id, row);
+          continue;
+        }
+
+        if (nextDate === existingDate && row.assessment_no > existing.assessment_no) {
           latestAssessmentByCase.set(row.case_id, row);
         }
       }
 
       const latestAssessmentIds = Array.from(latestAssessmentByCase.values()).map(
-        (row) => row.id
+        (item) => item.id
       );
 
       let vitalsRows: DbVitalsRow[] = [];
@@ -444,489 +548,534 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
         vitalsRows = (data ?? []) as DbVitalsRow[];
       }
 
-      const vitalsByAssessment = new Map<string, DbVitalsRow>();
+      const vitalsByAssessmentId = new Map<string, DbVitalsRow>();
       for (const row of vitalsRows) {
-        vitalsByAssessment.set(row.assessment_id, row);
+        vitalsByAssessmentId.set(row.assessment_id, row);
+      }
+
+      let calculatorDefinitions: DbCalculatorDefinitionRow[] = [];
+      {
+        const { data, error } = await supabase
+          .from("calculator_definitions")
+          .select("id, code, name");
+
+        if (error) {
+          console.warn("Không tải được calculator_definitions:", error.message);
+        } else {
+          calculatorDefinitions = (data ?? []) as DbCalculatorDefinitionRow[];
+        }
       }
 
       let calculatorRuns: DbCalculatorRunRow[] = [];
       if (caseIds.length > 0) {
         const { data, error } = await supabase
           .from("calculator_runs")
-          .select(
-            "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation"
-          )
+          .select(`
+            id,
+            calculator_id,
+            assessment_id,
+            patient_id,
+            case_id,
+            run_at,
+            result_value,
+            result_text,
+            risk_level,
+            interpretation
+          `)
           .in("case_id", caseIds)
           .order("run_at", { ascending: false });
 
-        if (error) throw error;
-        calculatorRuns = (data ?? []) as DbCalculatorRunRow[];
+        if (error) {
+          console.warn("Không tải được calculator_runs:", error.message);
+        } else {
+          calculatorRuns = (data ?? []) as DbCalculatorRunRow[];
+        }
       }
 
-      const calculatorIds = Array.from(new Set(calculatorRuns.map((r) => r.calculator_id)));
-
-      let calculatorDefs: DbCalculatorDefinitionRow[] = [];
-      if (calculatorIds.length > 0) {
-        const { data, error } = await supabase
-          .from("calculator_definitions")
-          .select("id, code, name")
-          .in("id", calculatorIds);
-
-        if (error) throw error;
-        calculatorDefs = (data ?? []) as DbCalculatorDefinitionRow[];
+      const calculatorDefById = new Map<string, DbCalculatorDefinitionRow>();
+      for (const def of calculatorDefinitions) {
+        calculatorDefById.set(def.id, def);
       }
 
-      const calculatorNameById = new Map<string, string>();
-      for (const def of calculatorDefs) {
-        calculatorNameById.set(def.id, def.name || def.code);
+      const runsByCaseId = new Map<string, ToolResult[]>();
+      for (const run of calculatorRuns) {
+        if (!run.case_id) continue;
+
+        const definition = calculatorDefById.get(run.calculator_id);
+        const toolCode = definition?.code ?? "unknown-calculator";
+        const summary =
+          run.result_text ??
+          `${definition?.name ?? toolCode}${
+            run.result_value != null ? `: ${run.result_value}` : ""
+          }`;
+
+        const bucket = runsByCaseId.get(run.case_id) ?? [];
+        bucket.push({
+          id: run.id,
+          tool: toolCode,
+          when: run.run_at,
+          inputs: null,
+          outputs: {
+            resultValue: run.result_value,
+            resultText: run.result_text,
+            riskLevel: run.risk_level,
+            interpretation: run.interpretation,
+          },
+          summary,
+        });
+        runsByCaseId.set(run.case_id, bucket);
       }
 
-      const resultsByCaseId = new Map<string, ToolResult[]>();
-      for (const row of calculatorRuns) {
-        if (!row.case_id) continue;
-        const list = resultsByCaseId.get(row.case_id) ?? [];
-        list.push(
-          mapCalculatorRunToToolResult(row, calculatorNameById.get(row.calculator_id))
-        );
-        resultsByCaseId.set(row.case_id, list);
-      }
-
-      const mappedCases = safeCaseRows.map((row) => {
-        const latestAssessment = latestAssessmentByCase.get(row.id);
+      const mappedCases: CaseItem[] = safeCaseRows.map((row) => {
+        const patientRow = toArray(row.patients)[0] ?? null;
+        const latestAssessment = latestAssessmentByCase.get(row.id) ?? null;
         const latestVitals = latestAssessment
-          ? vitalsByAssessment.get(latestAssessment.id) ?? null
+          ? vitalsByAssessmentId.get(latestAssessment.id) ?? null
           : null;
 
-        return mapDbCaseToCaseItem({
-          caseRow: row,
+        return {
+          id: row.id,
+          caseCode: row.case_code,
+          createdAt: row.created_at,
+          patientId: row.patient_id,
           latestAssessmentId: latestAssessment?.id ?? null,
-          latestVitals,
-          calculatorRuns: resultsByCaseId.get(row.id) ?? [],
-        });
+          patient: {
+            name: patientRow?.full_name?.trim() || row.title || "Chưa rõ tên",
+            yob: getYobFromDate(patientRow?.date_of_birth),
+            sex: mapDbSexToLabel(patientRow?.gender),
+            weightKg: latestVitals?.weight_kg ?? undefined,
+            heightCm: latestVitals?.height_cm ?? undefined,
+          },
+          results: runsByCaseId.get(row.id) ?? [],
+        };
       });
 
       setCases(mappedCases);
 
-      setActiveCaseId((prev) => {
-        if (prev && mappedCases.some((c) => c.id === prev)) return prev;
-        return mappedCases[0]?.id ?? null;
-      });
+      if (!mappedCases.length) {
+        setActiveCaseId(null);
+        return;
+      }
+
+      const stillExists = mappedCases.some((item) => item.id === activeCaseId);
+      if (!stillExists) {
+        setActiveCaseId(mappedCases[0].id);
+      }
     } catch (error) {
-      console.error("REFRESH CASES ERROR:", error);
-      setCases([]);
-      setActiveCaseId(null);
+      console.error("CasesContext.refreshCases error:", error);
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeCaseId, setActiveCaseId]);
 
   useEffect(() => {
-    refreshCases();
-  }, [isAuthenticated, user?.id]);
+    void refreshCases();
+  }, [refreshCases]);
 
-  function openNewCaseModal() {
+  const activeCase = useMemo(
+    () => cases.find((item) => item.id === activeCaseId) ?? null,
+    [cases, activeCaseId]
+  );
+
+  const openNewCaseModal = useCallback(() => {
     setIsNewCaseModalOpen(true);
-  }
+  }, []);
 
-  function closeNewCaseModal() {
+  const closeNewCaseModal = useCallback(() => {
     setIsNewCaseModalOpen(false);
-  }
+  }, []);
 
-  async function closeCase(id: string) {
-    const { error } = await supabase
-      .from("cases")
-      .delete()
-      .eq("id", id)
-      .eq("created_by", user?.id ?? "");
-
-    if (error) {
-      console.error("DELETE CASE ERROR:", error);
-      throw new Error(error.message);
+  const ensureAssessmentForCase = useCallback(async (caseItem: CaseItem) => {
+    if (caseItem.latestAssessmentId) {
+      return caseItem.latestAssessmentId;
     }
 
-    setCases((prev) => {
-      const next = prev.filter((c) => c.id !== id);
+    const { data: assessmentRow, error: assessmentError } = await supabase
+      .from("case_assessments")
+      .insert({
+        case_id: caseItem.id,
+        patient_id: caseItem.patientId,
+        assessment_no: 1,
+        assessment_date: new Date().toISOString(),
+        assessment_type: "review",
+        status: "draft",
+      })
+      .select("id")
+      .single();
 
-      setActiveCaseId((prevActive) => {
-        if (prevActive !== id) return prevActive;
-        return next[0]?.id ?? null;
-      });
+    if (assessmentError) throw assessmentError;
+    return assessmentRow.id as string;
+  }, []);
 
-      return next;
-    });
-  }
+  const createCase = useCallback(
+    async (payload: CreateCasePayload): Promise<CaseItem | null> => {
+      const fullName = payload.patient.fullName.trim();
+      if (!fullName) {
+        throw new Error("Tên người bệnh không được để trống.");
+      }
 
-  async function createCase(payload: CreateCasePayload): Promise<CaseItem | null> {
-    if (!user?.id) {
-      throw new Error("Chưa đăng nhập");
-    }
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!authData.user) {
+        throw new Error("Bạn chưa đăng nhập.");
+      }
 
-    const fullName = payload.patient.fullName.trim();
-    if (!fullName) {
-      throw new Error("Họ tên không được để trống");
-    }
+      const patientCode = generatePatientCode();
+      const caseCode = generateCaseCode();
 
-    const patientCode = makeCode("PT");
-    const caseCode = makeCode("CA");
-    const assessedAt = payload.initialAssessment.assessedAt || new Date().toISOString();
-    const assessmentType = payload.initialAssessment.assessmentType || "initial";
-
-    const { data: insertedPatient, error: patientError } = await supabase
-      .from("patients")
-      .insert([
-        {
+      const { data: patientRow, error: patientError } = await supabase
+        .from("patients")
+        .insert({
           patient_code: patientCode,
           full_name: fullName,
-          date_of_birth: payload.patient.dateOfBirth ?? null,
+          date_of_birth: payload.patient.dateOfBirth || null,
           gender: mapSexLabelToDbValue(payload.patient.sex),
-        },
-      ])
-      .select("id, patient_code, full_name, date_of_birth, gender")
-      .single();
-
-    if (patientError) {
-      console.error("CREATE PATIENT ERROR:", patientError);
-      throw new Error(patientError.message);
-    }
-
-    const { data: insertedCase, error: caseError } = await supabase
-      .from("cases")
-      .insert([
-        {
-          patient_id: insertedPatient.id,
-          case_code: caseCode,
-          title: `Ca - ${fullName}`,
-          case_status: "active",
-          priority_level: "normal",
-          red_flag: false,
-          created_by: user.id,
-        },
-      ])
-      .select(
-        "id, patient_id, case_code, title, primary_problem, primary_diagnosis, case_status, priority_level, red_flag, opened_at, created_at, created_by"
-      )
-      .single();
-
-    if (caseError) {
-      console.error("CREATE CASE ERROR:", caseError);
-      throw new Error(caseError.message);
-    }
-
-    const { data: insertedAssessment, error: assessmentError } = await supabase
-      .from("case_assessments")
-      .insert([
-        {
-          case_id: insertedCase.id,
-          patient_id: insertedPatient.id,
-          assessment_no: 1,
-          assessment_date: assessedAt,
-          assessment_type: assessmentType,
-          care_setting: "outpatient",
-          status: "draft",
-          created_by: user.id,
-        },
-      ])
-      .select(
-        "id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at"
-      )
-      .single();
-
-    if (assessmentError) {
-      console.error("CREATE ASSESSMENT ERROR:", assessmentError);
-      throw new Error(assessmentError.message);
-    }
-
-    let vitalsRow: DbVitalsRow | null = null;
-
-    if (
-      payload.initialVitals?.weightKg !== undefined ||
-      payload.initialVitals?.heightCm !== undefined
-    ) {
-      const { data: insertedVitals, error: vitalsError } = await supabase
-        .from("assessment_vitals")
-        .insert([
-          {
-            assessment_id: insertedAssessment.id,
-            weight_kg: payload.initialVitals?.weightKg ?? null,
-            height_cm: payload.initialVitals?.heightCm ?? null,
-          },
-        ])
-        .select("assessment_id, height_cm, weight_kg")
+          occupation: payload.patient.occupation || null,
+        })
+        .select("id, patient_code, full_name, date_of_birth, gender, occupation")
         .single();
 
-      if (vitalsError) {
-        console.error("CREATE VITALS ERROR:", vitalsError);
-        throw new Error(vitalsError.message);
+      if (patientError) throw patientError;
+
+      const caseTitle = `Ca bệnh - ${fullName}`;
+
+      const { data: caseRow, error: caseError } = await supabase
+        .from("cases")
+        .insert({
+          patient_id: patientRow.id,
+          case_code: caseCode,
+          title: caseTitle,
+          primary_problem: null,
+          primary_diagnosis: null,
+          case_status: "open",
+          priority_level: "routine",
+          red_flag: false,
+          opened_at: new Date().toISOString(),
+          created_by: authData.user.id,
+        })
+        .select(`
+          id,
+          patient_id,
+          case_code,
+          title,
+          primary_problem,
+          primary_diagnosis,
+          case_status,
+          priority_level,
+          red_flag,
+          opened_at,
+          created_at,
+          created_by
+        `)
+        .single();
+
+      if (caseError) throw caseError;
+
+      const { data: assessmentRow, error: assessmentError } = await supabase
+        .from("case_assessments")
+        .insert({
+          case_id: caseRow.id,
+          patient_id: patientRow.id,
+          assessment_no: 1,
+          assessment_date:
+            payload.initialAssessment.assessedAt || new Date().toISOString(),
+          assessment_type: payload.initialAssessment.assessmentType,
+          status: "draft",
+        })
+        .select(
+          "id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at"
+        )
+        .single();
+
+      if (assessmentError) throw assessmentError;
+
+      const weightKg = payload.initialVitals?.weightKg;
+      const heightCm = payload.initialVitals?.heightCm;
+
+      if (typeof weightKg === "number" || typeof heightCm === "number") {
+        const { error: vitalsError } = await supabase
+          .from("assessment_vitals")
+          .upsert(
+            {
+              assessment_id: assessmentRow.id,
+              weight_kg: typeof weightKg === "number" ? weightKg : null,
+              height_cm: typeof heightCm === "number" ? heightCm : null,
+            },
+            { onConflict: "assessment_id" }
+          );
+
+        if (vitalsError) throw vitalsError;
       }
 
-      vitalsRow = insertedVitals as DbVitalsRow;
-    }
+      await refreshCases();
+      setActiveCaseId(caseRow.id);
+      setIsNewCaseModalOpen(false);
 
-    const createdCase = mapDbCaseToCaseItem({
-      caseRow: {
-        ...insertedCase,
-        patients: insertedPatient,
-      },
-      latestAssessmentId: insertedAssessment.id,
-      latestVitals: vitalsRow,
-      calculatorRuns: [],
-    });
+      return {
+        id: caseRow.id,
+        caseCode: caseRow.case_code,
+        createdAt: caseRow.created_at,
+        patientId: patientRow.id,
+        latestAssessmentId: assessmentRow.id,
+        patient: {
+          name: patientRow.full_name ?? fullName,
+          yob: getYobFromDate(patientRow.date_of_birth),
+          sex: payload.patient.sex,
+          weightKg,
+          heightCm,
+        },
+        results: [],
+      };
+    },
+    [refreshCases, setActiveCaseId]
+  );
 
-    if (pendingSave) {
-      const { data: calculatorDef, error: calculatorDefError } = await supabase
+  const saveToActiveCase = useCallback(
+    async (payload: PendingSave) => {
+      if (!activeCase) {
+        throw new Error("Chưa có ca đang chọn.");
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+
+      const assessmentId = await ensureAssessmentForCase(activeCase);
+
+      const { data: definitionRow, error: definitionError } = await supabase
         .from("calculator_definitions")
         .select("id, code, name")
-        .eq("code", pendingSave.tool)
-        .single();
-
-      if (calculatorDefError) {
-        console.error("FIND CALCULATOR DEF ERROR:", calculatorDefError);
-        throw new Error(calculatorDefError.message);
-      }
-
-      const { data: insertedRun, error: runError } = await supabase
-        .from("calculator_runs")
-        .insert([
-          {
-            calculator_id: calculatorDef.id,
-            patient_id: insertedPatient.id,
-            case_id: insertedCase.id,
-            assessment_id: insertedAssessment.id,
-            run_at: new Date().toISOString(),
-            result_value: extractResultValue(pendingSave.outputs),
-            result_text: extractResultText(pendingSave.outputs, pendingSave.summary),
-            risk_level: extractRiskLevel(pendingSave.outputs),
-            interpretation: pendingSave.summary ?? null,
-            result_json: pendingSave.outputs,
-            created_by: user.id,
-          },
-        ])
-        .select(
-          "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation"
-        )
-        .single();
-
-      if (runError) {
-        console.error("CREATE PENDING CALCULATOR RUN ERROR:", runError);
-        throw new Error(runError.message);
-      }
-
-      if (insertedRun) {
-        createdCase.results = [
-          mapCalculatorRunToToolResult(
-            insertedRun as DbCalculatorRunRow,
-            calculatorDef.name || calculatorDef.code
-          ),
-        ];
-      }
-    }
-
-    setCases((prev) => [createdCase, ...prev]);
-    setActiveCaseId(createdCase.id);
-    setIsNewCaseModalOpen(false);
-    setPendingSave(null);
-
-    return createdCase;
-  }
-
-  async function saveToActiveCase(payload: {
-    tool: string;
-    inputs: unknown;
-    outputs: unknown;
-    summary?: string;
-  }) {
-    if (!user?.id) {
-      throw new Error("Chưa đăng nhập");
-    }
-
-    if (!activeCaseId) {
-      setPendingSave({
-        tool: payload.tool,
-        inputs: payload.inputs,
-        outputs: payload.outputs,
-        summary: payload.summary,
-      });
-      setIsNewCaseModalOpen(true);
-      return;
-    }
-
-    const active = cases.find((c) => c.id === activeCaseId) ?? null;
-    if (!active) {
-      throw new Error("Không tìm thấy ca đang chọn");
-    }
-
-    const targetAssessmentId = active.latestAssessmentId ?? null;
-    if (!targetAssessmentId) {
-      throw new Error("Ca bệnh chưa có lần đánh giá để lưu kết quả");
-    }
-
-    const { data: calculatorDef, error: calculatorDefError } = await supabase
-      .from("calculator_definitions")
-      .select("id, code, name")
-      .eq("code", payload.tool)
-      .single();
-
-    if (calculatorDefError) {
-      console.error("FIND CALCULATOR DEF ERROR:", calculatorDefError);
-      throw new Error(calculatorDefError.message);
-    }
-
-    const { data: insertedRun, error } = await supabase
-      .from("calculator_runs")
-      .insert([
-        {
-          calculator_id: calculatorDef.id,
-          patient_id: active.patientId,
-          case_id: activeCaseId,
-          assessment_id: targetAssessmentId,
-          run_at: new Date().toISOString(),
-          result_value: extractResultValue(payload.outputs),
-          result_text: extractResultText(payload.outputs, payload.summary),
-          risk_level: extractRiskLevel(payload.outputs),
-          interpretation: payload.summary ?? null,
-          result_json: payload.outputs,
-          created_by: user.id,
-        },
-      ])
-      .select(
-        "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_value, result_text, risk_level, interpretation"
-      )
-      .single();
-
-    if (error) {
-      console.error("SAVE CALCULATOR RUN ERROR:", error);
-      throw new Error(error.message);
-    }
-
-    const createdItem: ToolResult = insertedRun
-      ? mapCalculatorRunToToolResult(
-          insertedRun as DbCalculatorRunRow,
-          calculatorDef.name || calculatorDef.code
-        )
-      : {
-          tool: calculatorDef.name || payload.tool,
-          when: new Date().toISOString(),
-          inputs: payload.inputs,
-          outputs: payload.outputs,
-          summary: payload.summary,
-        };
-
-    setCases((prev) =>
-      prev.map((c) => {
-        if (c.id !== activeCaseId) return c;
-        return {
-          ...c,
-          results: [createdItem, ...c.results],
-        };
-      })
-    );
-  }
-
-  async function updateCasePatient(id: string, patient: Patient) {
-    const normalizedPatient = normalizePatientInput(patient);
-    const existingCase = cases.find((c) => c.id === id);
-
-    if (!existingCase) {
-      throw new Error("Không tìm thấy ca bệnh");
-    }
-
-    const dateOfBirth = `${normalizedPatient.yob}-01-01`;
-
-    const { error: patientError } = await supabase
-      .from("patients")
-      .update({
-        full_name: normalizedPatient.name,
-        date_of_birth: dateOfBirth,
-        gender: mapSexLabelToDbValue(normalizedPatient.sex),
-      })
-      .eq("id", existingCase.patientId);
-
-    if (patientError) {
-      console.error("UPDATE PATIENT ERROR:", patientError);
-      throw new Error(patientError.message);
-    }
-
-    const { error: caseError } = await supabase
-      .from("cases")
-      .update({
-        title: `Ca - ${normalizedPatient.name}`,
-      })
-      .eq("id", id);
-
-    if (caseError) {
-      console.error("UPDATE CASE ERROR:", caseError);
-      throw new Error(caseError.message);
-    }
-
-    if (existingCase.latestAssessmentId) {
-      const { data: existingVitals, error: vitalsReadError } = await supabase
-        .from("assessment_vitals")
-        .select("assessment_id")
-        .eq("assessment_id", existingCase.latestAssessmentId)
+        .eq("code", payload.tool)
         .maybeSingle();
 
-      if (vitalsReadError) {
-        console.error("READ VITALS ERROR:", vitalsReadError);
-        throw new Error(vitalsReadError.message);
+      if (definitionError) throw definitionError;
+      if (!definitionRow?.id) {
+        throw new Error(
+          `Không tìm thấy calculator_definitions cho code "${payload.tool}".`
+        );
       }
 
-      if (existingVitals) {
-        const { error: vitalsUpdateError } = await supabase
-          .from("assessment_vitals")
-          .update({
-            weight_kg: normalizedPatient.weightKg ?? null,
-            height_cm: normalizedPatient.heightCm ?? null,
-          })
-          .eq("assessment_id", existingCase.latestAssessmentId);
+      const { data: runRow, error: insertRunError } = await supabase
+        .from("calculator_runs")
+        .insert({
+          calculator_id: definitionRow.id,
+          assessment_id: assessmentId,
+          patient_id: activeCase.patientId,
+          case_id: activeCase.id,
+          run_at: new Date().toISOString(),
+          result_value: tryGetNumericResult(payload.outputs),
+          result_text:
+            payload.summary ||
+            (typeof (payload.outputs as Record<string, unknown> | null)?.resultText ===
+            "string"
+              ? String((payload.outputs as Record<string, unknown>).resultText)
+              : null),
+          risk_level: tryGetRiskLevel(payload.outputs),
+          interpretation: tryGetInterpretation(payload.outputs),
+          result_json: payload.outputs,
+          created_by: authData.user?.id ?? null,
+        })
+        .select("id")
+        .single();
 
-        if (vitalsUpdateError) {
-          console.error("UPDATE VITALS ERROR:", vitalsUpdateError);
-          throw new Error(vitalsUpdateError.message);
+      if (insertRunError || !runRow?.id) {
+        throw new Error(
+          insertRunError?.message || "Không lưu được calculator run."
+        );
+      }
+
+      const inputRows = flattenInputs(runRow.id, payload.inputs);
+
+      if (inputRows.length > 0) {
+        const { error: inputInsertError } = await supabase
+          .from("calculator_run_inputs")
+          .insert(inputRows);
+
+        if (inputInsertError) {
+          await supabase.from("calculator_runs").delete().eq("id", runRow.id);
+          throw new Error(inputInsertError.message);
         }
-      } else if (
-        normalizedPatient.weightKg !== undefined ||
-        normalizedPatient.heightCm !== undefined
+      }
+
+      await refreshCases();
+    },
+    [activeCase, ensureAssessmentForCase, refreshCases]
+  );
+
+  const updateCasePatient = useCallback(
+    async (id: string, patient: Patient) => {
+      const caseItem = cases.find((item) => item.id === id);
+      if (!caseItem) {
+        throw new Error("Không tìm thấy ca cần cập nhật.");
+      }
+
+      const { error: patientError } = await supabase
+        .from("patients")
+        .update({
+          full_name: patient.name,
+          date_of_birth: buildDateOfBirthFromYob(patient.yob),
+          gender: mapSexLabelToDbValue(patient.sex),
+        })
+        .eq("id", caseItem.patientId);
+
+      if (patientError) throw patientError;
+
+      if (
+        typeof patient.weightKg === "number" ||
+        typeof patient.heightCm === "number"
       ) {
-        const { error: vitalsInsertError } = await supabase
+        const assessmentId = await ensureAssessmentForCase(caseItem);
+
+        const { error: vitalsError } = await supabase
           .from("assessment_vitals")
-          .insert([
+          .upsert(
             {
-              assessment_id: existingCase.latestAssessmentId,
-              weight_kg: normalizedPatient.weightKg ?? null,
-              height_cm: normalizedPatient.heightCm ?? null,
+              assessment_id: assessmentId,
+              weight_kg:
+                typeof patient.weightKg === "number" ? patient.weightKg : null,
+              height_cm:
+                typeof patient.heightCm === "number" ? patient.heightCm : null,
             },
-          ]);
+            { onConflict: "assessment_id" }
+          );
 
-        if (vitalsInsertError) {
-          console.error("INSERT VITALS ERROR:", vitalsInsertError);
-          throw new Error(vitalsInsertError.message);
-        }
+        if (vitalsError) throw vitalsError;
       }
-    }
 
-    setCases((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        return {
-          ...c,
-          patient: { ...normalizedPatient },
+      await refreshCases();
+    },
+    [cases, ensureAssessmentForCase, refreshCases]
+  );
+
+  const closeCase = useCallback(
+    async (id: string) => {
+      const caseItem = cases.find((item) => item.id === id);
+      if (!caseItem) return;
+
+      // load assessments under case
+      const { data: assessmentRows, error: assessmentsError } = await supabase
+        .from("case_assessments")
+        .select("id")
+        .eq("case_id", id);
+
+      if (assessmentsError) throw assessmentsError;
+
+      const assessmentIds = (assessmentRows ?? []).map((row) => row.id as string);
+
+      if (assessmentIds.length > 0) {
+        const { data: runRows, error: runSelectError } = await supabase
+          .from("calculator_runs")
+          .select("id")
+          .in("assessment_id", assessmentIds);
+
+        if (runSelectError) throw runSelectError;
+
+        const runIds = (runRows ?? []).map((row) => row.id as string);
+
+        if (runIds.length > 0) {
+          const { error: runInputsDeleteError } = await supabase
+            .from("calculator_run_inputs")
+            .delete()
+            .in("calculator_run_id", runIds);
+
+          if (runInputsDeleteError) throw runInputsDeleteError;
+
+          const { error: runsDeleteError } = await supabase
+            .from("calculator_runs")
+            .delete()
+            .in("id", runIds);
+
+          if (runsDeleteError) throw runsDeleteError;
+        }
+
+        const deleteByAssessmentId = async (table: string) => {
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .in("assessment_id", assessmentIds);
+          if (error) throw error;
         };
-      })
-    );
-  }
 
-  function getCaseLabel(c: CaseItem, opts?: { compact?: boolean }) {
-    if (opts?.compact) {
-      return `${c.patient.name} • ${c.patient.yob}`;
-    }
-    return `${c.patient.name} • ${c.patient.yob} • ${c.patient.sex}`;
-  }
+        await deleteByAssessmentId("assessment_observations");
+        await deleteByAssessmentId("assessment_red_flags");
+        await deleteByAssessmentId("assessment_plan_items");
+        await deleteByAssessmentId("assessment_treatments");
+        await deleteByAssessmentId("assessment_diagnoses");
+        await deleteByAssessmentId("assessment_notes");
+        await deleteByAssessmentId("assessment_vitals");
 
-  function getActiveCaseLabel(opts?: { compact?: boolean; fallback?: string }) {
-    const fallback = opts?.fallback ?? "Chưa chọn ca";
-    if (!activeCase) return fallback;
-    return getCaseLabel(activeCase, { compact: opts?.compact });
-  }
+        const { error: assessmentsDeleteError } = await supabase
+          .from("case_assessments")
+          .delete()
+          .in("id", assessmentIds);
+
+        if (assessmentsDeleteError) throw assessmentsDeleteError;
+      }
+
+      // delete any calculator runs linked by case_id but not by assessment_id
+      const { data: danglingRuns, error: danglingRunsError } = await supabase
+        .from("calculator_runs")
+        .select("id")
+        .eq("case_id", id);
+
+      if (danglingRunsError) throw danglingRunsError;
+
+      const danglingRunIds = (danglingRuns ?? []).map((row) => row.id as string);
+      if (danglingRunIds.length > 0) {
+        const { error: deleteInputsError } = await supabase
+          .from("calculator_run_inputs")
+          .delete()
+          .in("calculator_run_id", danglingRunIds);
+
+        if (deleteInputsError) throw deleteInputsError;
+
+        const { error: deleteRunsError } = await supabase
+          .from("calculator_runs")
+          .delete()
+          .in("id", danglingRunIds);
+
+        if (deleteRunsError) throw deleteRunsError;
+      }
+
+      const { error: caseDeleteError } = await supabase
+        .from("cases")
+        .delete()
+        .eq("id", id);
+
+      if (caseDeleteError) throw caseDeleteError;
+
+      // best effort: delete patient if no remaining cases use it
+      const { data: remainingCases, error: remainingCasesError } = await supabase
+        .from("cases")
+        .select("id")
+        .eq("patient_id", caseItem.patientId)
+        .limit(1);
+
+      if (!remainingCasesError && (!remainingCases || remainingCases.length === 0)) {
+        await supabase.from("patients").delete().eq("id", caseItem.patientId);
+      }
+
+      if (activeCaseId === id) {
+        const next = cases.find((item) => item.id !== id) ?? null;
+        setActiveCaseId(next?.id ?? null);
+      }
+
+      await refreshCases();
+    },
+    [activeCaseId, cases, refreshCases, setActiveCaseId]
+  );
+
+  const getCaseLabel = useCallback(
+    (c: CaseItem, opts?: { compact?: boolean }) => formatCaseLabel(c, opts),
+    []
+  );
+
+  const getActiveCaseLabel = useCallback(
+    (opts?: { compact?: boolean; fallback?: string }) => {
+      if (!activeCase) return opts?.fallback ?? "Chưa chọn ca";
+      return formatCaseLabel(activeCase, { compact: opts?.compact });
+    },
+    [activeCase]
+  );
 
   const value = useMemo<CasesContextValue>(
     () => ({
@@ -948,9 +1097,26 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       getCaseLabel,
       getActiveCaseLabel,
+
       refreshCases,
     }),
-    [cases, activeCaseId, activeCase, loading, isNewCaseModalOpen]
+    [
+      cases,
+      activeCaseId,
+      activeCase,
+      loading,
+      setActiveCaseId,
+      closeCase,
+      isNewCaseModalOpen,
+      openNewCaseModal,
+      closeNewCaseModal,
+      createCase,
+      saveToActiveCase,
+      updateCasePatient,
+      getCaseLabel,
+      getActiveCaseLabel,
+      refreshCases,
+    ]
   );
 
   return <CasesContext.Provider value={value}>{children}</CasesContext.Provider>;
@@ -959,7 +1125,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 export function useCases() {
   const ctx = useContext(CasesContext);
   if (!ctx) {
-    throw new Error("useCases must be used within CasesProvider");
+    throw new Error("useCases must be used inside CasesProvider");
   }
   return ctx;
 }

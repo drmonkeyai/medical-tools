@@ -1,83 +1,163 @@
 import { useEffect, useState } from "react";
-import { Navigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../lib/supabase";
+import { useCreateAssessment } from "../hooks/useCreateAssessment";
+
+type LatestAssessmentRow = {
+  id: string;
+  assessment_no: number | null;
+  assessment_date: string | null;
+};
+
+type CaseRow = {
+  id: string;
+  patient_id: string | null;
+};
+
+async function findLatestAssessment(caseId: string) {
+  const { data, error } = await supabase
+    .from("case_assessments")
+    .select("id, assessment_no, assessment_date")
+    .eq("case_id", caseId)
+    .order("assessment_date", { ascending: false })
+    .order("assessment_no", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? null) as LatestAssessmentRow | null;
+}
 
 export default function CaseAssessmentRedirectPage() {
-  const { caseId } = useParams();
+  const { caseId } = useParams<{ caseId: string }>();
+  const navigate = useNavigate();
+  const { createAssessment } = useCreateAssessment();
+
   const [loading, setLoading] = useState(true);
-  const [targetAssessmentId, setTargetAssessmentId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadFirstAssessment() {
+    async function run() {
       if (!caseId) {
-        setError("Thiếu caseId.");
-        setLoading(false);
+        if (!cancelled) {
+          setError("Thiếu caseId.");
+          setLoading(false);
+        }
         return;
       }
 
       try {
-        setLoading(true);
-        setError(null);
-
-        const { data, error } = await supabase
-          .from("case_assessments")
-          .select("id, assessment_date")
-          .eq("case_id", caseId)
-          .order("assessment_date", { ascending: false })
-          .limit(1);
-
-        if (error) throw error;
-
-        const firstAssessment = data?.[0] ?? null;
-
         if (!cancelled) {
-          setTargetAssessmentId(firstAssessment?.id ?? null);
+          setLoading(true);
+          setError("");
         }
+
+        const latestBefore = await findLatestAssessment(caseId);
+
+        if (latestBefore?.id) {
+          if (!cancelled) {
+            navigate(`/app/cases/${caseId}/assessments/${latestBefore.id}`, {
+              replace: true,
+            });
+          }
+          return;
+        }
+
+        const { data: caseRowRaw, error: caseError } = await supabase
+          .from("cases")
+          .select("id, patient_id")
+          .eq("id", caseId)
+          .single();
+
+        if (caseError) {
+          throw caseError;
+        }
+
+        const caseRow = (caseRowRaw ?? null) as CaseRow | null;
+
+        if (!caseRow?.id) {
+          throw new Error("Không tìm thấy ca bệnh.");
+        }
+
+        if (!caseRow.patient_id) {
+          throw new Error("Ca bệnh chưa có patient_id hợp lệ.");
+        }
+
+        let createdAssessmentId: string | null = null;
+        let createError: unknown = null;
+
+        try {
+          const created = await createAssessment({
+            caseId: caseRow.id,
+            patientId: caseRow.patient_id,
+            nextAssessmentNo: 1,
+            sourceAssessmentId: undefined,
+            assessmentType: "initial",
+            careSetting: "outpatient",
+            status: "draft",
+          });
+
+          createdAssessmentId = created?.id ?? null;
+        } catch (err) {
+          createError = err;
+        }
+
+        if (createdAssessmentId) {
+          if (!cancelled) {
+            navigate(
+              `/app/cases/${caseId}/assessments/${createdAssessmentId}`,
+              { replace: true }
+            );
+          }
+          return;
+        }
+
+        const latestAfter = await findLatestAssessment(caseId);
+
+        if (latestAfter?.id) {
+          if (!cancelled) {
+            navigate(`/app/cases/${caseId}/assessments/${latestAfter.id}`, {
+              replace: true,
+            });
+          }
+          return;
+        }
+
+        if (createError instanceof Error) {
+          throw createError;
+        }
+
+        throw new Error("Không mở được chi tiết ca.");
       } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Không mở được chi tiết ca.";
+
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Không tải được assessment.");
-        }
-      } finally {
-        if (!cancelled) {
+          setError(message);
           setLoading(false);
         }
       }
     }
 
-    loadFirstAssessment();
+    void run();
 
     return () => {
       cancelled = true;
     };
-  }, [caseId]);
-
-  if (!caseId) {
-    return <div className="p-6 text-sm text-red-600">Thiếu caseId.</div>;
-  }
+  }, [caseId, createAssessment, navigate]);
 
   if (loading) {
-    return <div className="p-6 text-sm text-slate-500">Đang chuyển assessment...</div>;
+    return <div style={{ padding: 24 }}>Đang mở chi tiết ca...</div>;
   }
 
   if (error) {
-    return <div className="p-6 text-sm text-red-600">{error}</div>;
+    return <div style={{ padding: 24, color: "#dc2626" }}>{error}</div>;
   }
 
-  if (!targetAssessmentId) {
-    return (
-      <div className="p-6 text-sm text-slate-500">
-        Ca này chưa có lần đánh giá nào.
-      </div>
-    );
-  }
-
-  return (
-    <Navigate
-      to={`/app/cases/${caseId}/assessments/${targetAssessmentId}`}
-      replace
-    />
-  );
+  return <div style={{ padding: 24 }}>Đang chuyển hướng...</div>;
 }
