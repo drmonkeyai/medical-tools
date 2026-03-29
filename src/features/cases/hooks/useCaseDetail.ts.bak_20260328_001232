@@ -44,10 +44,6 @@ import type {
   CalculatorRunRow,
   CalculatorRunsSectionData,
 } from "../../../modules/cases/calculator-runs/types";
-import type {
-  AssessmentLabReport,
-  AssessmentLabResult,
-} from "../../../modules/cases/labs/types";
 
 export type CaseDetailPatient = {
   id: string;
@@ -108,8 +104,6 @@ type UseCaseDetailState = {
   plan: PlanSectionData;
   redFlags: RedFlagsSectionData;
   observations: ObservationsSectionData;
-  labs: AssessmentLabResult[];
-  labReports: AssessmentLabReport[];
   calculatorRuns: CalculatorRunsSectionData;
 };
 
@@ -121,7 +115,6 @@ type SectionReloadState = {
   plan: number;
   redFlags: number;
   observations: number;
-  labs: number;
   calculatorRuns: number;
 };
 
@@ -131,8 +124,6 @@ const emptyTreatment = mapAssessmentToTreatment([]);
 const emptyPlan = mapAssessmentToPlan([]);
 const emptyRedFlags = mapAssessmentToRedFlags([]);
 const emptyObservations = mapAssessmentToObservations([]);
-const emptyLabs: AssessmentLabResult[] = [];
-const emptyLabReports: AssessmentLabReport[] = [];
 const emptyCalculatorRuns = mapCalculatorRunsSection({
   runs: [],
   definitions: [],
@@ -154,8 +145,6 @@ const initialState: UseCaseDetailState = {
   plan: emptyPlan,
   redFlags: emptyRedFlags,
   observations: emptyObservations,
-  labs: emptyLabs,
-  labReports: emptyLabReports,
   calculatorRuns: emptyCalculatorRuns,
 };
 
@@ -167,7 +156,6 @@ const initialSectionReloadState: SectionReloadState = {
   plan: 0,
   redFlags: 0,
   observations: 0,
-  labs: 0,
   calculatorRuns: 0,
 };
 
@@ -212,7 +200,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
       plan: prev.plan + 1,
       redFlags: prev.redFlags + 1,
       observations: prev.observations + 1,
-      labs: prev.labs + 1,
       calculatorRuns: prev.calculatorRuns + 1,
     }));
   }, []);
@@ -247,9 +234,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
 
   const refreshObservations = useCallback(() => {
     bumpSectionKey(setSectionReloadKeys, "observations");
-  }, []);
-  const refreshLabs = useCallback(() => {
-    bumpSectionKey(setSectionReloadKeys, "labs");
   }, []);
 
   const refreshCalculatorRuns = useCallback(() => {
@@ -364,8 +348,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
         plan: emptyPlan,
         redFlags: emptyRedFlags,
         observations: emptyObservations,
-        labs: emptyLabs,
-        labReports: emptyLabReports,
         calculatorRuns: emptyCalculatorRuns,
       };
     });
@@ -388,8 +370,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
           plan: emptyPlan,
           redFlags: emptyRedFlags,
           observations: emptyObservations,
-          labs: emptyLabs,
-          labReports: emptyLabReports,
           calculatorRuns: emptyCalculatorRuns,
         }));
         return;
@@ -410,8 +390,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
           planResult,
           redFlagsResult,
           observationsResult,
-          labsResult,
-          labReportsResult,
           calculatorRunsResult,
         ] = await Promise.all([
           supabase
@@ -461,19 +439,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
             .eq("assessment_id", selectedAssessmentId)
             .order("observed_at", { ascending: false }),
           supabase
-            .from("assessment_lab_results")
-            .select("*")
-            .eq("assessment_id", selectedAssessmentId)
-            .order("section", { ascending: true })
-            .order("group_name", { ascending: true })
-            .order("lab_name", { ascending: true }),
-          supabase
-            .from("assessment_lab_reports")
-            .select("*")
-            .eq("assessment_id", selectedAssessmentId)
-            .order("performed_at", { ascending: false })
-            .order("created_at", { ascending: false }),
-          supabase
             .from("calculator_runs")
             .select(
               "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_label, result_value, result_text, risk_level, interpretation, result_json"
@@ -489,8 +454,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
         if (planResult.error) throw planResult.error;
         if (redFlagsResult.error) throw redFlagsResult.error;
         if (observationsResult.error) throw observationsResult.error;
-        if (labsResult.error) throw labsResult.error;
-        if (labReportsResult.error) throw labReportsResult.error;
         if (calculatorRunsResult.error) throw calculatorRunsResult.error;
 
         const runRows = (calculatorRunsResult.data ?? []) as CalculatorRunRow[];
@@ -548,8 +511,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
           observations: mapAssessmentToObservations(
             (observationsResult.data ?? []) as AssessmentObservationRow[]
           ),
-          labs: (labsResult.data ?? []) as AssessmentLabResult[],
-          labReports: (labReportsResult.data ?? []) as AssessmentLabReport[],
           calculatorRuns: mapCalculatorRunsSection({
             runs: runRows,
             definitions: definitionRows,
@@ -583,7 +544,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
     sectionReloadKeys.plan,
     sectionReloadKeys.redFlags,
     sectionReloadKeys.observations,
-    sectionReloadKeys.labs,
     sectionReloadKeys.calculatorRuns,
   ]);
 
@@ -603,8 +563,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
       plan: state.plan,
       redFlags: state.redFlags,
       observations: state.observations,
-      labs: state.labs,
-      labReports: state.labReports,
       calculatorRuns: state.calculatorRuns,
       refresh,
       refreshShell,
@@ -615,7 +573,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
       refreshPlan,
       refreshRedFlags,
       refreshObservations,
-      refreshLabs,
       refreshCalculatorRuns,
     }),
     [
@@ -629,7 +586,6 @@ export function useCaseDetail(caseId?: string, assessmentId?: string) {
       refreshPlan,
       refreshRedFlags,
       refreshObservations,
-      refreshLabs,
       refreshCalculatorRuns,
     ]
   );

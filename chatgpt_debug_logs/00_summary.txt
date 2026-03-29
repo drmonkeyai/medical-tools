@@ -1,0 +1,29 @@
+﻿=== DEBUG RUN 2026-03-28 00:15:24 ===
+
+--- Node version ---
+COMMAND: node -v
+LOG: chatgpt_debug_logs\01_node_version.txt
+
+--- NPM version ---
+COMMAND: npm -v
+LOG: chatgpt_debug_logs\02_npm_version.txt
+
+--- Supabase CLI version ---
+COMMAND: npx supabase --version
+LOG: chatgpt_debug_logs\03_supabase_version.txt
+
+--- TypeScript check ---
+COMMAND: npx tsc -p tsconfig.json --noEmit
+LOG: chatgpt_debug_logs\10_tsc_check.txt
+
+--- App build ---
+COMMAND: npm run build
+LOG: chatgpt_debug_logs\11_build.txt
+
+--- Supabase migration list ---
+COMMAND: npx supabase migration list
+LOG: chatgpt_debug_logs\20_supabase_migration_list.txt
+
+--- Supabase local db reset ---
+COMMAND: npx supabase db reset
+LOG: chatgpt_debug_logs\21_supabase_db_reset.txt

@@ -1,0 +1,42 @@
+﻿import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import type { AssessmentLabResult } from "@/modules/cases/labs/types";
+
+interface Params {
+  patientId?: string | null;
+  labCode?: string | null;
+  excludeAssessmentId?: string | null;
+}
+
+export function usePatientLabHistory(params: Params) {
+  const { patientId, labCode, excludeAssessmentId } = params;
+
+  return useQuery({
+    queryKey: ["patient-lab-history", patientId, labCode, excludeAssessmentId],
+    enabled: Boolean(patientId && labCode),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("assessment_lab_results")
+        .select(`
+          *,
+          case_assessments!inner(
+            id,
+            case_id,
+            performed_at,
+            cases!inner(
+              id,
+              patient_id
+            )
+          )
+        `)
+        .eq("lab_code", labCode)
+        .eq("case_assessments.cases.patient_id", patientId)
+        .neq("assessment_id", excludeAssessmentId ?? "")
+        .order("measured_at", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return (data ?? []) as AssessmentLabResult[];
+    },
+  });
+}

@@ -1,0 +1,30 @@
+﻿import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import type { CreateAssessmentLabReportInput } from "@/modules/cases/labs/types";
+
+export function useCreateAssessmentLabReport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: CreateAssessmentLabReportInput) => {
+      const { data, error } = await supabase
+        .from("assessment_lab_reports")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.assessment_id) {
+        queryClient.invalidateQueries({
+          queryKey: ["assessment-lab-reports", data.assessment_id],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["assessment-labs", data.assessment_id],
+        });
+      }
+    },
+  });
+}

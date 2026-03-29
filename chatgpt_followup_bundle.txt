@@ -1,0 +1,2513 @@
+﻿
+========================================================================================================================
+FILE: src\context\CasesContext.tsx
+========================================================================================================================
+
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { supabase } from "../lib/supabase";
+
+export type SexLabel = "Nam" | "Ná»¯" | "KhÃ¡c";
+export type SexValue = "male" | "female" | "other";
+
+export type Patient = {
+  name: string;
+  yob: number;
+  sex: SexLabel;
+
+  /**
+   * Legacy compatibility only.
+   * Calculator cÅ© váº«n Ä‘ang Ä‘á»c weightKg / heightCm tá»« activeCase.patient.
+   * Vá» lÃ¢u dÃ i nÃªn chuyá»ƒn sang latestVitals á»Ÿ case list
+   * hoáº·c chá»‰ load á»Ÿ case detail.
+   */
+  weightKg?: number;
+  heightCm?: number;
+};
+
+export type CreateCasePayload = {
+  patient: {
+    fullName: string;
+    sex: SexLabel;
+    dateOfBirth?: string;
+    occupation?: string;
+  };
+  initialAssessment: {
+    assessmentType: "initial" | "follow_up" | "review" | "urgent" | "discharge";
+    assessedAt: string;
+  };
+  initialVitals?: {
+    weightKg?: number;
+    heightCm?: number;
+  };
+};
+
+export type ToolResult = {
+  id?: string;
+  tool: string;
+  when: string;
+  inputs: unknown;
+  outputs: unknown;
+  summary?: string;
+};
+
+export type CaseItem = {
+  id: string;
+  caseCode: string;
+  createdAt: string;
+  patientId: string;
+  latestAssessmentId?: string | null;
+  patient: Patient;
+  results: ToolResult[];
+};
+
+type DbPatientRow = {
+  id: string;
+  patient_code: string;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation?: string | null;
+};
+
+type DbCaseRow = {
+  id: string;
+  patient_id: string;
+  case_code: string;
+  title: string;
+  primary_problem: string | null;
+  primary_diagnosis: string | null;
+  case_status: string;
+  priority_level: string;
+  red_flag: boolean;
+  opened_at: string;
+  created_at: string;
+  created_by: string | null;
+  patients?: DbPatientRow | DbPatientRow[] | null;
+};
+
+type DbAssessmentRow = {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no: number;
+  assessment_date: string;
+  assessment_type: string;
+  created_at: string;
+};
+
+type DbVitalsRow = {
+  assessment_id: string;
+  height_cm: number | null;
+  weight_kg: number | null;
+};
+
+type DbCalculatorDefinitionRow = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+type DbCalculatorRunRow = {
+  id: string;
+  calculator_id: string;
+  assessment_id: string | null;
+  patient_id: string;
+  case_id: string | null;
+  run_at: string;
+  result_value: number | null;
+  result_text: string | null;
+  risk_level: string | null;
+  interpretation: string | null;
+};
+
+type PendingSave = {
+  tool: string;
+  inputs: unknown;
+  outputs: unknown;
+  summary?: string;
+};
+
+export type CasesContextValue = {
+  cases: CaseItem[];
+  activeCaseId: string | null;
+  activeCase: CaseItem | null;
+  loading: boolean;
+
+  setActiveCaseId: (id: string | null) => void;
+  closeCase: (id: string) => Promise<void>;
+
+  isNewCaseModalOpen: boolean;
+  openNewCaseModal: () => void;
+  closeNewCaseModal: () => void;
+
+  createCase: (payload: CreateCasePayload) => Promise<CaseItem | null>;
+
+  /**
+   * Legacy compatibility only.
+   * Calculator cÅ© váº«n gá»i hÃ m nÃ y.
+   */
+  saveToActiveCase: (payload: PendingSave) => Promise<void>;
+
+  /**
+   * Legacy compatibility only.
+   * Vá» lÃ¢u dÃ i nÃªn tÃ¡ch thÃ nh updatePatientProfile + upsertAssessmentVitals.
+   */
+  updateCasePatient: (id: string, patient: Patient) => Promise<void>;
+
+  getCaseLabel: (c: CaseItem, opts?: { compact?: boolean }) => string;
+  getActiveCaseLabel: (opts?: { compact?: boolean; fallback?: string }) => string;
+
+  refreshCases: () => Promise<void>;
+};
+
+const CasesContext = createContext<CasesContextValue | null>(null);
+
+const ACTIVE_CASE_STORAGE_KEY = "medical-tools.active-case-id";
+
+function toArray<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function mapSexLabelToDbValue(sex: SexLabel): SexValue {
+  if (sex === "Ná»¯") return "female";
+  if (sex === "KhÃ¡c") return "other";
+  return "male";
+}
+
+function mapDbSexToLabel(sex?: string | null): SexLabel {
+  const normalized = (sex ?? "").toLowerCase().trim();
+  if (normalized === "female") return "Ná»¯";
+  if (normalized === "other") return "KhÃ¡c";
+  return "Nam";
+}
+
+function getYobFromDate(dateOfBirth?: string | null) {
+  if (!dateOfBirth) return new Date().getFullYear() - 30;
+  const year = Number(String(dateOfBirth).slice(0, 4));
+  if (!Number.isFinite(year)) return new Date().getFullYear() - 30;
+  return clampInt(year, 1900, new Date().getFullYear());
+}
+
+function buildDateOfBirthFromYob(yob: number) {
+  const safeYear = clampInt(yob, 1900, new Date().getFullYear());
+  return `${safeYear}-01-01`;
+}
+
+function generatePatientCode() {
+  return `PT-${Date.now()}-${Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, "0")}`;
+}
+
+function generateCaseCode() {
+  return `CA-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(
+    new Date().getDate()
+  ).padStart(2, "0")}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+}
+
+function formatCaseLabel(c: CaseItem, opts?: { compact?: boolean }) {
+  const compact = Boolean(opts?.compact);
+  const base = `${c.patient.name} â€¢ ${c.patient.yob} â€¢ ${c.patient.sex}`;
+  if (compact) return base;
+  return `${c.caseCode} â€¢ ${base}`;
+}
+
+function tryGetRiskLevel(outputs: unknown): string | null {
+  if (!outputs || typeof outputs !== "object") return null;
+
+  const value =
+    (outputs as Record<string, unknown>).riskLevel ??
+    (outputs as Record<string, unknown>).risk_level ??
+    (outputs as Record<string, unknown>).level;
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function tryGetInterpretation(outputs: unknown): string | null {
+  if (!outputs || typeof outputs !== "object") return null;
+
+  const value =
+    (outputs as Record<string, unknown>).interpretation ??
+    (outputs as Record<string, unknown>).detail ??
+    (outputs as Record<string, unknown>).text;
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function tryGetNumericResult(outputs: unknown): number | null {
+  if (!outputs || typeof outputs !== "object") return null;
+
+  const candidateKeys = [
+    "resultValue",
+    "result_value",
+    "score",
+    "bmi",
+    "bsa",
+    "egfr",
+    "crcl",
+    "value",
+    "total",
+  ];
+
+  for (const key of candidateKeys) {
+    const value = (outputs as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+
+  return null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+type CalculatorRunInputInsertRow = {
+  calculator_run_id: string;
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  input_value_text: string | null;
+  input_value_numeric: number | null;
+  input_value_boolean: boolean | null;
+  input_value_date: string | null;
+  input_value_json: unknown | null;
+  unit: string | null;
+  source_observation_id: string | null;
+};
+
+function toTitleCase(input: string) {
+  return input
+    .replace(/\[(\d+)\]/g, " $1 ")
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function humanizeKey(path: string) {
+  return toTitleCase(path || "Input");
+}
+
+function isLikelyDateString(value: string) {
+  if (!value.trim()) return false;
+
+  const directDate = /^\d{4}-\d{2}-\d{2}$/;
+  const isoDateTime =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+
+  return directDate.test(value) || isoDateTime.test(value);
+}
+
+function createInputRow(
+  calculatorRunId: string,
+  key: string,
+  value: unknown
+): CalculatorRunInputInsertRow | null {
+  const normalizedKey = key.trim();
+  if (!normalizedKey) return null;
+
+  const base: CalculatorRunInputInsertRow = {
+    calculator_run_id: calculatorRunId,
+    input_key: normalizedKey,
+    input_label: humanizeKey(normalizedKey),
+    input_type: "text",
+    input_value_text: null,
+    input_value_numeric: null,
+    input_value_boolean: null,
+    input_value_date: null,
+    input_value_json: null,
+    unit: null,
+    source_observation_id: null,
+  };
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === "number") {
+    return {
+      ...base,
+      input_type: "numeric",
+      input_value_numeric: Number.isFinite(value) ? value : null,
+      input_value_text: Number.isFinite(value) ? String(value) : null,
+    };
+  }
+
+  if (typeof value === "boolean") {
+    return {
+      ...base,
+      input_type: "boolean",
+      input_value_boolean: value,
+      input_value_text: value ? "true" : "false",
+    };
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (isLikelyDateString(trimmed)) {
+      return {
+        ...base,
+        input_type: "date",
+        input_value_date: trimmed,
+        input_value_text: trimmed,
+      };
+    }
+
+    return {
+      ...base,
+      input_type: "text",
+      input_value_text: trimmed,
+    };
+  }
+
+  return {
+    ...base,
+    input_type: "json",
+    input_value_json: value,
+    input_value_text: JSON.stringify(value),
+  };
+}
+
+function flattenInputs(
+  calculatorRunId: string,
+  value: unknown,
+  path = ""
+): CalculatorRunInputInsertRow[] {
+  if (value === null || value === undefined) return [];
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    const row = createInputRow(calculatorRunId, path || "value", value);
+    return row ? [row] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      flattenInputs(
+        calculatorRunId,
+        item,
+        path ? `${path}[${index}]` : `[${index}]`
+      )
+    );
+  }
+
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value);
+
+    if (entries.length === 0) return [];
+
+    return entries.flatMap(([childKey, childValue]) =>
+      flattenInputs(
+        calculatorRunId,
+        childValue,
+        path ? `${path}.${childKey}` : childKey
+      )
+    );
+  }
+
+  const row = createInputRow(calculatorRunId, path || "value", value);
+  return row ? [row] : [];
+}
+
+export function CasesProvider({ children }: { children: React.ReactNode }) {
+  const [cases, setCases] = useState<CaseItem[]>([]);
+  const [activeCaseId, setActiveCaseIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ACTIVE_CASE_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(true);
+  const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
+
+  const setActiveCaseId = useCallback((id: string | null) => {
+    setActiveCaseIdState(id);
+    try {
+      if (id) {
+        localStorage.setItem(ACTIVE_CASE_STORAGE_KEY, id);
+      } else {
+        localStorage.removeItem(ACTIVE_CASE_STORAGE_KEY);
+      }
+    } catch {
+      // ignore storage error
+    }
+  }, []);
+
+  const refreshCases = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUser = authData.user;
+
+      let query = supabase
+        .from("cases")
+        .select(`
+          id,
+          patient_id,
+          case_code,
+          title,
+          primary_problem,
+          primary_diagnosis,
+          case_status,
+          priority_level,
+          red_flag,
+          opened_at,
+          created_at,
+          created_by,
+          patients (
+            id,
+            patient_code,
+            full_name,
+            date_of_birth,
+            gender,
+            occupation
+          )
+        `)
+        .order("opened_at", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (currentUser?.id) {
+        query = query.eq("created_by", currentUser.id);
+      }
+
+      const { data: caseRows, error: caseError } = await query;
+      if (caseError) throw caseError;
+
+      const safeCaseRows = (caseRows ?? []) as DbCaseRow[];
+      const caseIds = safeCaseRows.map((row) => row.id);
+
+      let assessmentRows: DbAssessmentRow[] = [];
+      if (caseIds.length > 0) {
+        const { data, error } = await supabase
+          .from("case_assessments")
+          .select(`
+            id,
+            case_id,
+            patient_id,
+            assessment_no,
+            assessment_date,
+            assessment_type,
+            created_at
+          `)
+          .in("case_id", caseIds)
+          .order("assessment_date", { ascending: false })
+          .order("assessment_no", { ascending: false });
+
+        if (error) throw error;
+        assessmentRows = (data ?? []) as DbAssessmentRow[];
+      }
+
+      const latestAssessmentByCase = new Map<string, DbAssessmentRow>();
+      for (const row of assessmentRows) {
+        const existing = latestAssessmentByCase.get(row.case_id);
+        if (!existing) {
+          latestAssessmentByCase.set(row.case_id, row);
+          continue;
+        }
+
+        const existingDate = new Date(existing.assessment_date).getTime();
+        const nextDate = new Date(row.assessment_date).getTime();
+
+        if (nextDate > existingDate) {
+          latestAssessmentByCase.set(row.case_id, row);
+          continue;
+        }
+
+        if (nextDate === existingDate && row.assessment_no > existing.assessment_no) {
+          latestAssessmentByCase.set(row.case_id, row);
+        }
+      }
+
+      const latestAssessmentIds = Array.from(latestAssessmentByCase.values()).map(
+        (item) => item.id
+      );
+
+      let vitalsRows: DbVitalsRow[] = [];
+      if (latestAssessmentIds.length > 0) {
+        const { data, error } = await supabase
+          .from("assessment_vitals")
+          .select("assessment_id, height_cm, weight_kg")
+          .in("assessment_id", latestAssessmentIds);
+
+        if (error) throw error;
+        vitalsRows = (data ?? []) as DbVitalsRow[];
+      }
+
+      const vitalsByAssessmentId = new Map<string, DbVitalsRow>();
+      for (const row of vitalsRows) {
+        vitalsByAssessmentId.set(row.assessment_id, row);
+      }
+
+      let calculatorDefinitions: DbCalculatorDefinitionRow[] = [];
+      {
+        const { data, error } = await supabase
+          .from("calculator_definitions")
+          .select("id, code, name");
+
+        if (error) {
+          console.warn("KhÃ´ng táº£i Ä‘Æ°á»£c calculator_definitions:", error.message);
+        } else {
+          calculatorDefinitions = (data ?? []) as DbCalculatorDefinitionRow[];
+        }
+      }
+
+      let calculatorRuns: DbCalculatorRunRow[] = [];
+      if (caseIds.length > 0) {
+        const { data, error } = await supabase
+          .from("calculator_runs")
+          .select(`
+            id,
+            calculator_id,
+            assessment_id,
+            patient_id,
+            case_id,
+            run_at,
+            result_value,
+            result_text,
+            risk_level,
+            interpretation
+          `)
+          .in("case_id", caseIds)
+          .order("run_at", { ascending: false });
+
+        if (error) {
+          console.warn("KhÃ´ng táº£i Ä‘Æ°á»£c calculator_runs:", error.message);
+        } else {
+          calculatorRuns = (data ?? []) as DbCalculatorRunRow[];
+        }
+      }
+
+      const calculatorDefById = new Map<string, DbCalculatorDefinitionRow>();
+      for (const def of calculatorDefinitions) {
+        calculatorDefById.set(def.id, def);
+      }
+
+      const runsByCaseId = new Map<string, ToolResult[]>();
+      for (const run of calculatorRuns) {
+        if (!run.case_id) continue;
+
+        const definition = calculatorDefById.get(run.calculator_id);
+        const toolCode = definition?.code ?? "unknown-calculator";
+        const summary =
+          run.result_text ??
+          `${definition?.name ?? toolCode}${
+            run.result_value != null ? `: ${run.result_value}` : ""
+          }`;
+
+        const bucket = runsByCaseId.get(run.case_id) ?? [];
+        bucket.push({
+          id: run.id,
+          tool: toolCode,
+          when: run.run_at,
+          inputs: null,
+          outputs: {
+            resultValue: run.result_value,
+            resultText: run.result_text,
+            riskLevel: run.risk_level,
+            interpretation: run.interpretation,
+          },
+          summary,
+        });
+        runsByCaseId.set(run.case_id, bucket);
+      }
+
+      const mappedCases: CaseItem[] = safeCaseRows.map((row) => {
+        const patientRow = toArray(row.patients)[0] ?? null;
+        const latestAssessment = latestAssessmentByCase.get(row.id) ?? null;
+        const latestVitals = latestAssessment
+          ? vitalsByAssessmentId.get(latestAssessment.id) ?? null
+          : null;
+
+        return {
+          id: row.id,
+          caseCode: row.case_code,
+          createdAt: row.created_at,
+          patientId: row.patient_id,
+          latestAssessmentId: latestAssessment?.id ?? null,
+          patient: {
+            name: patientRow?.full_name?.trim() || row.title || "ChÆ°a rÃµ tÃªn",
+            yob: getYobFromDate(patientRow?.date_of_birth),
+            sex: mapDbSexToLabel(patientRow?.gender),
+            weightKg: latestVitals?.weight_kg ?? undefined,
+            heightCm: latestVitals?.height_cm ?? undefined,
+          },
+          results: runsByCaseId.get(row.id) ?? [],
+        };
+      });
+
+      setCases(mappedCases);
+
+      if (!mappedCases.length) {
+        setActiveCaseId(null);
+        return;
+      }
+
+      const stillExists = mappedCases.some((item) => item.id === activeCaseId);
+      if (!stillExists) {
+        setActiveCaseId(mappedCases[0].id);
+      }
+    } catch (error) {
+      console.error("CasesContext.refreshCases error:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCaseId, setActiveCaseId]);
+
+  useEffect(() => {
+    void refreshCases();
+  }, [refreshCases]);
+
+  const activeCase = useMemo(
+    () => cases.find((item) => item.id === activeCaseId) ?? null,
+    [cases, activeCaseId]
+  );
+
+  const openNewCaseModal = useCallback(() => {
+    setIsNewCaseModalOpen(true);
+  }, []);
+
+  const closeNewCaseModal = useCallback(() => {
+    setIsNewCaseModalOpen(false);
+  }, []);
+
+  const ensureAssessmentForCase = useCallback(async (caseItem: CaseItem) => {
+    if (caseItem.latestAssessmentId) {
+      return caseItem.latestAssessmentId;
+    }
+
+    const { data: assessmentRow, error: assessmentError } = await supabase
+      .from("case_assessments")
+      .insert({
+        case_id: caseItem.id,
+        patient_id: caseItem.patientId,
+        assessment_no: 1,
+        assessment_date: new Date().toISOString(),
+        assessment_type: "review",
+        status: "draft",
+      })
+      .select("id")
+      .single();
+
+    if (assessmentError) throw assessmentError;
+    return assessmentRow.id as string;
+  }, []);
+
+  const createCase = useCallback(
+    async (payload: CreateCasePayload): Promise<CaseItem | null> => {
+      const fullName = payload.patient.fullName.trim();
+      if (!fullName) {
+        throw new Error("TÃªn ngÆ°á»i bá»‡nh khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng.");
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!authData.user) {
+        throw new Error("Báº¡n chÆ°a Ä‘Äƒng nháº­p.");
+      }
+
+      const patientCode = generatePatientCode();
+      const caseCode = generateCaseCode();
+
+      const { data: patientRow, error: patientError } = await supabase
+        .from("patients")
+        .insert({
+          patient_code: patientCode,
+          full_name: fullName,
+          date_of_birth: payload.patient.dateOfBirth || null,
+          gender: mapSexLabelToDbValue(payload.patient.sex),
+          occupation: payload.patient.occupation || null,
+        })
+        .select("id, patient_code, full_name, date_of_birth, gender, occupation")
+        .single();
+
+      if (patientError) throw patientError;
+
+      const caseTitle = `Ca bá»‡nh - ${fullName}`;
+
+      const { data: caseRow, error: caseError } = await supabase
+        .from("cases")
+        .insert({
+          patient_id: patientRow.id,
+          case_code: caseCode,
+          title: caseTitle,
+          primary_problem: null,
+          primary_diagnosis: null,
+          case_status: "open",
+          priority_level: "routine",
+          red_flag: false,
+          opened_at: new Date().toISOString(),
+          created_by: authData.user.id,
+        })
+        .select(`
+          id,
+          patient_id,
+          case_code,
+          title,
+          primary_problem,
+          primary_diagnosis,
+          case_status,
+          priority_level,
+          red_flag,
+          opened_at,
+          created_at,
+          created_by
+        `)
+        .single();
+
+      if (caseError) throw caseError;
+
+      const { data: assessmentRow, error: assessmentError } = await supabase
+        .from("case_assessments")
+        .insert({
+          case_id: caseRow.id,
+          patient_id: patientRow.id,
+          assessment_no: 1,
+          assessment_date:
+            payload.initialAssessment.assessedAt || new Date().toISOString(),
+          assessment_type: payload.initialAssessment.assessmentType,
+          status: "draft",
+        })
+        .select(
+          "id, case_id, patient_id, assessment_no, assessment_date, assessment_type, created_at"
+        )
+        .single();
+
+      if (assessmentError) throw assessmentError;
+
+      const weightKg = payload.initialVitals?.weightKg;
+      const heightCm = payload.initialVitals?.heightCm;
+
+      if (typeof weightKg === "number" || typeof heightCm === "number") {
+        const { error: vitalsError } = await supabase
+          .from("assessment_vitals")
+          .upsert(
+            {
+              assessment_id: assessmentRow.id,
+              weight_kg: typeof weightKg === "number" ? weightKg : null,
+              height_cm: typeof heightCm === "number" ? heightCm : null,
+            },
+            { onConflict: "assessment_id" }
+          );
+
+        if (vitalsError) throw vitalsError;
+      }
+
+      await refreshCases();
+      setActiveCaseId(caseRow.id);
+      setIsNewCaseModalOpen(false);
+
+      return {
+        id: caseRow.id,
+        caseCode: caseRow.case_code,
+        createdAt: caseRow.created_at,
+        patientId: patientRow.id,
+        latestAssessmentId: assessmentRow.id,
+        patient: {
+          name: patientRow.full_name ?? fullName,
+          yob: getYobFromDate(patientRow.date_of_birth),
+          sex: payload.patient.sex,
+          weightKg,
+          heightCm,
+        },
+        results: [],
+      };
+    },
+    [refreshCases, setActiveCaseId]
+  );
+
+  const saveToActiveCase = useCallback(
+    async (payload: PendingSave) => {
+      if (!activeCase) {
+        throw new Error("ChÆ°a cÃ³ ca Ä‘ang chá»n.");
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+
+      const assessmentId = await ensureAssessmentForCase(activeCase);
+
+      const { data: definitionRow, error: definitionError } = await supabase
+        .from("calculator_definitions")
+        .select("id, code, name")
+        .eq("code", payload.tool)
+        .maybeSingle();
+
+      if (definitionError) throw definitionError;
+      if (!definitionRow?.id) {
+        throw new Error(
+          `KhÃ´ng tÃ¬m tháº¥y calculator_definitions cho code "${payload.tool}".`
+        );
+      }
+
+      const { data: runRow, error: insertRunError } = await supabase
+        .from("calculator_runs")
+        .insert({
+          calculator_id: definitionRow.id,
+          assessment_id: assessmentId,
+          patient_id: activeCase.patientId,
+          case_id: activeCase.id,
+          run_at: new Date().toISOString(),
+          result_value: tryGetNumericResult(payload.outputs),
+          result_text:
+            payload.summary ||
+            (typeof (payload.outputs as Record<string, unknown> | null)?.resultText ===
+            "string"
+              ? String((payload.outputs as Record<string, unknown>).resultText)
+              : null),
+          risk_level: tryGetRiskLevel(payload.outputs),
+          interpretation: tryGetInterpretation(payload.outputs),
+          result_json: payload.outputs,
+          created_by: authData.user?.id ?? null,
+        })
+        .select("id")
+        .single();
+
+      if (insertRunError || !runRow?.id) {
+        throw new Error(
+          insertRunError?.message || "KhÃ´ng lÆ°u Ä‘Æ°á»£c calculator run."
+        );
+      }
+
+      const inputRows = flattenInputs(runRow.id, payload.inputs);
+
+      if (inputRows.length > 0) {
+        const { error: inputInsertError } = await supabase
+          .from("calculator_run_inputs")
+          .insert(inputRows);
+
+        if (inputInsertError) {
+          await supabase.from("calculator_runs").delete().eq("id", runRow.id);
+          throw new Error(inputInsertError.message);
+        }
+      }
+
+      await refreshCases();
+    },
+    [activeCase, ensureAssessmentForCase, refreshCases]
+  );
+
+  const updateCasePatient = useCallback(
+    async (id: string, patient: Patient) => {
+      const caseItem = cases.find((item) => item.id === id);
+      if (!caseItem) {
+        throw new Error("KhÃ´ng tÃ¬m tháº¥y ca cáº§n cáº­p nháº­t.");
+      }
+
+      const { error: patientError } = await supabase
+        .from("patients")
+        .update({
+          full_name: patient.name,
+          date_of_birth: buildDateOfBirthFromYob(patient.yob),
+          gender: mapSexLabelToDbValue(patient.sex),
+        })
+        .eq("id", caseItem.patientId);
+
+      if (patientError) throw patientError;
+
+      if (
+        typeof patient.weightKg === "number" ||
+        typeof patient.heightCm === "number"
+      ) {
+        const assessmentId = await ensureAssessmentForCase(caseItem);
+
+        const { error: vitalsError } = await supabase
+          .from("assessment_vitals")
+          .upsert(
+            {
+              assessment_id: assessmentId,
+              weight_kg:
+                typeof patient.weightKg === "number" ? patient.weightKg : null,
+              height_cm:
+                typeof patient.heightCm === "number" ? patient.heightCm : null,
+            },
+            { onConflict: "assessment_id" }
+          );
+
+        if (vitalsError) throw vitalsError;
+      }
+
+      await refreshCases();
+    },
+    [cases, ensureAssessmentForCase, refreshCases]
+  );
+
+  const closeCase = useCallback(
+    async (id: string) => {
+      const caseItem = cases.find((item) => item.id === id);
+      if (!caseItem) return;
+
+      // load assessments under case
+      const { data: assessmentRows, error: assessmentsError } = await supabase
+        .from("case_assessments")
+        .select("id")
+        .eq("case_id", id);
+
+      if (assessmentsError) throw assessmentsError;
+
+      const assessmentIds = (assessmentRows ?? []).map((row) => row.id as string);
+
+      if (assessmentIds.length > 0) {
+        const { data: runRows, error: runSelectError } = await supabase
+          .from("calculator_runs")
+          .select("id")
+          .in("assessment_id", assessmentIds);
+
+        if (runSelectError) throw runSelectError;
+
+        const runIds = (runRows ?? []).map((row) => row.id as string);
+
+        if (runIds.length > 0) {
+          const { error: runInputsDeleteError } = await supabase
+            .from("calculator_run_inputs")
+            .delete()
+            .in("calculator_run_id", runIds);
+
+          if (runInputsDeleteError) throw runInputsDeleteError;
+
+          const { error: runsDeleteError } = await supabase
+            .from("calculator_runs")
+            .delete()
+            .in("id", runIds);
+
+          if (runsDeleteError) throw runsDeleteError;
+        }
+
+        const deleteByAssessmentId = async (table: string) => {
+          const { error } = await supabase
+            .from(table)
+            .delete()
+            .in("assessment_id", assessmentIds);
+          if (error) throw error;
+        };
+
+        await deleteByAssessmentId("assessment_observations");
+        await deleteByAssessmentId("assessment_red_flags");
+        await deleteByAssessmentId("assessment_plan_items");
+        await deleteByAssessmentId("assessment_treatments");
+        await deleteByAssessmentId("assessment_diagnoses");
+        await deleteByAssessmentId("assessment_notes");
+        await deleteByAssessmentId("assessment_vitals");
+
+        const { error: assessmentsDeleteError } = await supabase
+          .from("case_assessments")
+          .delete()
+          .in("id", assessmentIds);
+
+        if (assessmentsDeleteError) throw assessmentsDeleteError;
+      }
+
+      // delete any calculator runs linked by case_id but not by assessment_id
+      const { data: danglingRuns, error: danglingRunsError } = await supabase
+        .from("calculator_runs")
+        .select("id")
+        .eq("case_id", id);
+
+      if (danglingRunsError) throw danglingRunsError;
+
+      const danglingRunIds = (danglingRuns ?? []).map((row) => row.id as string);
+      if (danglingRunIds.length > 0) {
+        const { error: deleteInputsError } = await supabase
+          .from("calculator_run_inputs")
+          .delete()
+          .in("calculator_run_id", danglingRunIds);
+
+        if (deleteInputsError) throw deleteInputsError;
+
+        const { error: deleteRunsError } = await supabase
+          .from("calculator_runs")
+          .delete()
+          .in("id", danglingRunIds);
+
+        if (deleteRunsError) throw deleteRunsError;
+      }
+
+      const { error: caseDeleteError } = await supabase
+        .from("cases")
+        .delete()
+        .eq("id", id);
+
+      if (caseDeleteError) throw caseDeleteError;
+
+      // best effort: delete patient if no remaining cases use it
+      const { data: remainingCases, error: remainingCasesError } = await supabase
+        .from("cases")
+        .select("id")
+        .eq("patient_id", caseItem.patientId)
+        .limit(1);
+
+      if (!remainingCasesError && (!remainingCases || remainingCases.length === 0)) {
+        await supabase.from("patients").delete().eq("id", caseItem.patientId);
+      }
+
+      if (activeCaseId === id) {
+        const next = cases.find((item) => item.id !== id) ?? null;
+        setActiveCaseId(next?.id ?? null);
+      }
+
+      await refreshCases();
+    },
+    [activeCaseId, cases, refreshCases, setActiveCaseId]
+  );
+
+  const getCaseLabel = useCallback(
+    (c: CaseItem, opts?: { compact?: boolean }) => formatCaseLabel(c, opts),
+    []
+  );
+
+  const getActiveCaseLabel = useCallback(
+    (opts?: { compact?: boolean; fallback?: string }) => {
+      if (!activeCase) return opts?.fallback ?? "ChÆ°a chá»n ca";
+      return formatCaseLabel(activeCase, { compact: opts?.compact });
+    },
+    [activeCase]
+  );
+
+  const value = useMemo<CasesContextValue>(
+    () => ({
+      cases,
+      activeCaseId,
+      activeCase,
+      loading,
+
+      setActiveCaseId,
+      closeCase,
+
+      isNewCaseModalOpen,
+      openNewCaseModal,
+      closeNewCaseModal,
+
+      createCase,
+      saveToActiveCase,
+      updateCasePatient,
+
+      getCaseLabel,
+      getActiveCaseLabel,
+
+      refreshCases,
+    }),
+    [
+      cases,
+      activeCaseId,
+      activeCase,
+      loading,
+      setActiveCaseId,
+      closeCase,
+      isNewCaseModalOpen,
+      openNewCaseModal,
+      closeNewCaseModal,
+      createCase,
+      saveToActiveCase,
+      updateCasePatient,
+      getCaseLabel,
+      getActiveCaseLabel,
+      refreshCases,
+    ]
+  );
+
+  return <CasesContext.Provider value={value}>{children}</CasesContext.Provider>;
+}
+
+export function useCases() {
+  const ctx = useContext(CasesContext);
+  if (!ctx) {
+    throw new Error("useCases must be used inside CasesProvider");
+  }
+  return ctx;
+}
+
+
+
+========================================================================================================================
+FILE: src\features\cases\hooks\useCasesList.ts
+========================================================================================================================
+
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "../../../lib/supabase";
+
+export type GenderValue = "male" | "female" | "other" | "unknown";
+
+type PatientRow = {
+  id: string;
+  patient_code?: string | null;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation: string | null;
+};
+
+type CaseRow = {
+  id: string;
+  patient_id: string;
+  case_code: string | null;
+  title: string | null;
+  primary_problem: string | null;
+  primary_diagnosis: string | null;
+  red_flag: boolean | null;
+  created_at?: string | null;
+  created_by?: string | null;
+};
+
+export type CaseListItem = {
+  id: string;
+  caseCode: string;
+  caseName: string;
+  patientId: string;
+  patientName: string;
+  gender: GenderValue;
+  dateOfBirth: string | null;
+  birthYear: number | null;
+  occupation: string;
+  createdAt: string | null;
+};
+
+function normalizeGender(value: string | null | undefined): GenderValue {
+  if (value === "male") return "male";
+  if (value === "female") return "female";
+  if (value === "other") return "other";
+  return "unknown";
+}
+
+function getBirthYear(dateOfBirth?: string | null) {
+  if (!dateOfBirth) return null;
+  const d = new Date(dateOfBirth);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.getFullYear();
+}
+
+function getErrorMessage(error: unknown) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "KhÃ´ng táº£i Ä‘Æ°á»£c danh sÃ¡ch ca.";
+}
+
+export function useCasesList() {
+  const [loading, setLoading] = useState(true);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [error, setError] = useState("");
+
+  const loadCases = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+
+      let query = supabase
+        .from("cases")
+        .select(
+          "id, patient_id, case_code, title, primary_problem, primary_diagnosis, red_flag, created_at, created_by"
+        )
+        .order("created_at", { ascending: false });
+
+      if (authData.user?.id) {
+        query = query.or(`created_by.eq.${authData.user.id},created_by.is.null`);
+      }
+
+      const { data: caseRows, error: caseError } = await query;
+      if (caseError) throw caseError;
+
+      const typedCaseRows = ((caseRows ?? []) as CaseRow[]).filter(
+        (row) => row.patient_id
+      );
+
+      const patientIds = Array.from(
+        new Set(typedCaseRows.map((row) => row.patient_id))
+      );
+
+      let patientRows: PatientRow[] = [];
+
+      if (patientIds.length > 0) {
+        const { data: patientsData, error: patientsError } = await supabase
+          .from("patients")
+          .select("id, patient_code, full_name, date_of_birth, gender, occupation")
+          .in("id", patientIds);
+
+        if (patientsError) throw patientsError;
+        patientRows = (patientsData ?? []) as PatientRow[];
+      }
+
+      const patientMap = new Map(patientRows.map((row) => [row.id, row]));
+
+      const merged: CaseListItem[] = typedCaseRows.map((row) => {
+        const patient = patientMap.get(row.patient_id);
+
+        return {
+          id: row.id,
+          caseCode: row.case_code ?? "â€”",
+          caseName: row.title ?? patient?.full_name ?? "Ca bá»‡nh",
+          patientId: row.patient_id,
+          patientName: patient?.full_name ?? "ChÆ°a cÃ³ tÃªn",
+          gender: normalizeGender(patient?.gender),
+          dateOfBirth: patient?.date_of_birth ?? null,
+          birthYear: getBirthYear(patient?.date_of_birth),
+          occupation: patient?.occupation ?? "â€”",
+          createdAt: row.created_at ?? null,
+        };
+      });
+
+      setCases(merged);
+    } catch (error) {
+      setError(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCases();
+  }, [loadCases]);
+
+  return {
+    loading,
+    cases,
+    error,
+    reloadCases: loadCases,
+    setCases,
+  };
+}
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\assessment-tools\AssessmentToolRunner.tsx
+========================================================================================================================
+
+import type { AssessmentToolCatalogItem } from "./types";
+import AutoToolPanel from "./renderers/AutoToolPanel";
+import QuestionnaireToolPanel from "./renderers/QuestionnaireToolPanel";
+import StructuredToolPanel from "./renderers/StructuredToolPanel";
+import PathwayToolPanel from "./renderers/PathwayToolPanel";
+
+type Props = {
+  tool: AssessmentToolCatalogItem | null;
+  assessmentId?: string;
+  onToolSaved?: () => void;
+};
+
+function EmptySelection() {
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px dashed #cbd5e1",
+        borderRadius: 18,
+        padding: 20,
+        color: "#64748b",
+        lineHeight: 1.7,
+      }}
+    >
+      Chá»n má»™t cÃ´ng cá»¥ á»Ÿ danh sÃ¡ch bÃªn trÃªn Ä‘á»ƒ báº¯t Ä‘áº§u Ä‘Ã¡nh giÃ¡ lÃ¢m sÃ ng cho assessment hiá»‡n táº¡i.
+    </section>
+  );
+}
+
+export default function AssessmentToolRunner({
+  tool,
+  assessmentId,
+  onToolSaved,
+}: Props) {
+  if (!tool) {
+    return <EmptySelection />;
+  }
+
+  if (tool.mode === "auto") {
+    return (
+      <AutoToolPanel
+        tool={tool}
+        assessmentId={assessmentId}
+        onRunSaved={onToolSaved}
+      />
+    );
+  }
+
+  if (tool.mode === "questionnaire") {
+    return <QuestionnaireToolPanel tool={tool} />;
+  }
+
+  if (tool.mode === "structured") {
+    return <StructuredToolPanel tool={tool} />;
+  }
+
+  if (tool.mode === "pathway") {
+    return <PathwayToolPanel tool={tool} />;
+  }
+
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 18,
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 800,
+          color: "#0f172a",
+          marginBottom: 12,
+        }}
+      >
+        {tool.title}
+      </div>
+
+      <div
+        style={{
+          border: "1px solid #e2e8f0",
+          background: "#f8fafc",
+          borderRadius: 14,
+          padding: 14,
+          color: "#334155",
+          lineHeight: 1.6,
+        }}
+      >
+        Tool nÃ y thuá»™c loáº¡i káº¿t há»£p dá»¯ liá»‡u tá»± Ä‘á»™ng vÃ  nháº­p bá»• sung. BÆ°á»›c tiáº¿p theo sáº½ ná»‘i mixed renderer riÃªng.
+      </div>
+    </section>
+  );
+}
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\assessment-tools\AssessmentToolsSection.tsx
+========================================================================================================================
+
+import { useMemo, useState } from "react";
+import { getAssessmentToolCatalog, findAssessmentTool } from "./catalog";
+import AssessmentToolPicker from "./AssessmentToolPicker";
+import AssessmentToolRunner from "./AssessmentToolRunner";
+import CalculatorRunsSection from "../calculator-runs/CalculatorRunsSection";
+import type { CalculatorRunsSectionData } from "../calculator-runs/types";
+
+type Props = {
+  assessmentId?: string;
+  data?: CalculatorRunsSectionData | null;
+};
+
+export default function AssessmentToolsSection({
+  assessmentId,
+  data,
+}: Props) {
+  const [selectedToolKey, setSelectedToolKey] = useState<string>("family_apgar");
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  const tools = useMemo(() => getAssessmentToolCatalog(), []);
+  const selectedTool = useMemo(
+    () => findAssessmentTool(selectedToolKey),
+    [selectedToolKey]
+  );
+
+  const historyData: CalculatorRunsSectionData = data ?? { runs: [] };
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <AssessmentToolPicker
+        tools={tools}
+        selectedToolKey={selectedToolKey}
+        onSelect={setSelectedToolKey}
+      />
+
+      <AssessmentToolRunner
+        tool={selectedTool}
+        assessmentId={assessmentId}
+        onToolSaved={() => setHistoryRefreshKey((value) => value + 1)}
+      />
+
+      <div
+        style={{
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 16,
+          padding: 20,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 18,
+            fontWeight: 800,
+            color: "#0f172a",
+            marginBottom: 14,
+          }}
+        >
+          Lá»‹ch sá»­ cÃ´ng cá»¥ Ä‘Ã¡nh giÃ¡
+        </div>
+
+        <CalculatorRunsSection
+          key={`${assessmentId ?? "no-assessment"}-${historyRefreshKey}`}
+          data={historyData}
+          assessmentId={assessmentId}
+        />
+      </div>
+    </div>
+  );
+}
+
+
+
+========================================================================================================================
+FILE: src\utils\runCalculator.ts
+========================================================================================================================
+
+import {
+  resolveCalculatorInputs,
+  type CalculatorDefinitionRow,
+  type CaseAssessmentRow,
+  type ResolvedCalculatorInput,
+} from "../lib/calculator/resolveCalculatorInputs";
+
+export type ComputationResult = {
+  resultLabel: string;
+  resultValue: number | null;
+  resultText: string;
+  riskLevel: string | null;
+  interpretation: string | null;
+  resultJson?: unknown;
+};
+
+export type RunCalculatorResult = {
+  assessment: CaseAssessmentRow;
+  calculator: CalculatorDefinitionRow;
+  resolvedInputs: ResolvedCalculatorInput[];
+  inputMap: Record<string, unknown>;
+  result: ComputationResult;
+};
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function numberRequired(
+  inputs: Record<string, unknown>,
+  key: string,
+  calculatorName: string
+): number {
+  const value = toNullableNumber(inputs[key]);
+  if (value === null) {
+    throw new Error(`Thiáº¿u dá»¯ liá»‡u báº¯t buá»™c "${key}" cho ${calculatorName}`);
+  }
+  return value;
+}
+
+function scoreRiskBand(
+  score: number,
+  bands: Array<{ max: number; label: string }>
+): string {
+  for (const band of bands) {
+    if (score <= band.max) return band.label;
+  }
+  return bands[bands.length - 1]?.label || "";
+}
+
+function sumRequired(
+  inputs: Record<string, unknown>,
+  keys: string[],
+  calculatorName: string
+) {
+  return keys.reduce((sum, key) => {
+    return sum + numberRequired(inputs, key, calculatorName);
+  }, 0);
+}
+
+function computeCalculator(
+  calculatorCode: string,
+  inputs: Record<string, unknown>
+): ComputationResult {
+  const code = calculatorCode.toLowerCase();
+
+  if (code === "fib4") {
+    const age = numberRequired(inputs, "age", "FIB-4");
+    const ast = numberRequired(inputs, "ast", "FIB-4");
+    const alt = numberRequired(inputs, "alt", "FIB-4");
+    const platelet = numberRequired(inputs, "platelet", "FIB-4");
+
+    if (alt <= 0 || platelet <= 0) {
+      throw new Error("ALT vÃ  platelet pháº£i lá»›n hÆ¡n 0 Ä‘á»ƒ tÃ­nh FIB-4");
+    }
+
+    const score = (age * ast) / (platelet * Math.sqrt(alt));
+
+    let riskLevel = "indeterminate";
+    let interpretation = "Nguy cÆ¡ trung gian xÆ¡ hÃ³a gan tiáº¿n triá»ƒn.";
+
+    if (score < 1.45) {
+      riskLevel = "low";
+      interpretation = "Nguy cÆ¡ tháº¥p xÆ¡ hÃ³a gan tiáº¿n triá»ƒn.";
+    } else if (score > 3.25) {
+      riskLevel = "high";
+      interpretation = "Nguy cÆ¡ cao xÆ¡ hÃ³a gan tiáº¿n triá»ƒn.";
+    }
+
+    return {
+      resultLabel: "FIB-4",
+      resultValue: Number(score.toFixed(4)),
+      resultText: "FIB-4 score",
+      riskLevel,
+      interpretation,
+      resultJson: { score, riskLevel, interpretation },
+    };
+  }
+
+  if (code === "apri") {
+    const ast = numberRequired(inputs, "ast", "APRI");
+    const astUln = numberRequired(inputs, "ast_uln", "APRI");
+    const platelet = numberRequired(inputs, "platelet", "APRI");
+
+    if (astUln <= 0 || platelet <= 0) {
+      throw new Error("AST ULN vÃ  platelet pháº£i lá»›n hÆ¡n 0 Ä‘á»ƒ tÃ­nh APRI");
+    }
+
+    const score = ((ast / astUln) * 100) / platelet;
+
+    let riskLevel = "indeterminate";
+    let interpretation = "Cáº§n diá»…n giáº£i theo bá»‘i cáº£nh lÃ¢m sÃ ng.";
+
+    if (score < 0.5) {
+      riskLevel = "low";
+      interpretation = "Nguy cÆ¡ tháº¥p xÆ¡ hÃ³a Ä‘Ã¡ng ká»ƒ.";
+    } else if (score >= 1.5) {
+      riskLevel = "high";
+      interpretation = "Nguy cÆ¡ cao xÆ¡ hÃ³a Ä‘Ã¡ng ká»ƒ.";
+    }
+
+    return {
+      resultLabel: "APRI",
+      resultValue: Number(score.toFixed(4)),
+      resultText: "APRI score",
+      riskLevel,
+      interpretation,
+      resultJson: { score, riskLevel, interpretation },
+    };
+  }
+
+  if (code === "child_pugh" || code === "child-pugh") {
+    const bilirubin = numberRequired(inputs, "bilirubin_total", "Child-Pugh");
+    const albumin = numberRequired(inputs, "albumin_serum", "Child-Pugh");
+    const inr = numberRequired(inputs, "inr", "Child-Pugh");
+    const ascites = numberRequired(inputs, "ascites_grade", "Child-Pugh");
+    const encephalopathy = numberRequired(
+      inputs,
+      "encephalopathy_grade",
+      "Child-Pugh"
+    );
+
+    let bilirubinScore = 1;
+    if (bilirubin > 3) bilirubinScore = 3;
+    else if (bilirubin >= 2) bilirubinScore = 2;
+
+    let albuminScore = 1;
+    if (albumin < 2.8) albuminScore = 3;
+    else if (albumin <= 3.5) albuminScore = 2;
+
+    let inrScore = 1;
+    if (inr > 2.2) inrScore = 3;
+    else if (inr >= 1.7) inrScore = 2;
+
+    const ascitesScore = Math.max(1, Math.min(3, Math.round(ascites)));
+    const encephalopathyScore = Math.max(
+      1,
+      Math.min(3, Math.round(encephalopathy))
+    );
+
+    const total =
+      bilirubinScore +
+      albuminScore +
+      inrScore +
+      ascitesScore +
+      encephalopathyScore;
+
+    let riskLevel = "A";
+    let interpretation = "Child-Pugh class A";
+
+    if (total >= 10) {
+      riskLevel = "C";
+      interpretation = "Child-Pugh class C";
+    } else if (total >= 7) {
+      riskLevel = "B";
+      interpretation = "Child-Pugh class B";
+    }
+
+    return {
+      resultLabel: "Child-Pugh",
+      resultValue: total,
+      resultText: `Class ${riskLevel}`,
+      riskLevel,
+      interpretation,
+      resultJson: {
+        total,
+        class: riskLevel,
+        bilirubinScore,
+        albuminScore,
+        inrScore,
+        ascitesScore,
+        encephalopathyScore,
+      },
+    };
+  }
+
+  if (code === "bmi") {
+    const heightCm = numberRequired(inputs, "height_cm", "BMI");
+    const weightKg = numberRequired(inputs, "weight_kg", "BMI");
+
+    if (heightCm <= 0 || weightKg <= 0) {
+      throw new Error("Chiá»u cao vÃ  cÃ¢n náº·ng pháº£i lá»›n hÆ¡n 0 Ä‘á»ƒ tÃ­nh BMI");
+    }
+
+    const heightM = heightCm / 100;
+    const bmi = weightKg / (heightM * heightM);
+
+    let riskLevel = "normal";
+    let interpretation = "BMI bÃ¬nh thÆ°á»ng.";
+
+    if (bmi < 18.5) {
+      riskLevel = "underweight";
+      interpretation = "Thiáº¿u cÃ¢n.";
+    } else if (bmi >= 25 && bmi < 30) {
+      riskLevel = "overweight";
+      interpretation = "Thá»«a cÃ¢n.";
+    } else if (bmi >= 30) {
+      riskLevel = "obesity";
+      interpretation = "BÃ©o phÃ¬.";
+    }
+
+    return {
+      resultLabel: "BMI",
+      resultValue: Number(bmi.toFixed(2)),
+      resultText: "Body Mass Index",
+      riskLevel,
+      interpretation,
+      resultJson: { bmi, riskLevel, interpretation },
+    };
+  }
+
+  if (code === "phq9") {
+    const score = sumRequired(
+      inputs,
+      [
+        "phq9_q1",
+        "phq9_q2",
+        "phq9_q3",
+        "phq9_q4",
+        "phq9_q5",
+        "phq9_q6",
+        "phq9_q7",
+        "phq9_q8",
+        "phq9_q9",
+      ],
+      "PHQ-9"
+    );
+
+    const riskLevel = scoreRiskBand(score, [
+      { max: 4, label: "minimal" },
+      { max: 9, label: "mild" },
+      { max: 14, label: "moderate" },
+      { max: 19, label: "moderately severe" },
+      { max: 27, label: "severe" },
+    ]);
+
+    return {
+      resultLabel: "PHQ-9",
+      resultValue: score,
+      resultText: "PHQ-9 score",
+      riskLevel,
+      interpretation: `Má»©c Ä‘á»™ tráº§m cáº£m: ${riskLevel}`,
+      resultJson: { score, riskLevel },
+    };
+  }
+
+  if (code === "gad7") {
+    const score = sumRequired(
+      inputs,
+      [
+        "gad7_q1",
+        "gad7_q2",
+        "gad7_q3",
+        "gad7_q4",
+        "gad7_q5",
+        "gad7_q6",
+        "gad7_q7",
+      ],
+      "GAD-7"
+    );
+
+    const riskLevel = scoreRiskBand(score, [
+      { max: 4, label: "minimal" },
+      { max: 9, label: "mild" },
+      { max: 14, label: "moderate" },
+      { max: 21, label: "severe" },
+    ]);
+
+    return {
+      resultLabel: "GAD-7",
+      resultValue: score,
+      resultText: "GAD-7 score",
+      riskLevel,
+      interpretation: `Má»©c Ä‘á»™ lo Ã¢u: ${riskLevel}`,
+      resultJson: { score, riskLevel },
+    };
+  }
+
+  if (code === "family_apgar" || code === "family_apgar_score") {
+    const score = sumRequired(
+      inputs,
+      [
+        "family_apgar_adaptation",
+        "family_apgar_partnership",
+        "family_apgar_growth",
+        "family_apgar_affection",
+        "family_apgar_resolve",
+      ],
+      "Family APGAR"
+    );
+
+    let riskLevel = "highly functional";
+    let interpretation = "Gia Ä‘Ã¬nh chá»©c nÄƒng tá»‘t.";
+
+    if (score <= 3) {
+      riskLevel = "severe dysfunction";
+      interpretation = "Rá»‘i loáº¡n chá»©c nÄƒng gia Ä‘Ã¬nh náº·ng.";
+    } else if (score <= 6) {
+      riskLevel = "moderate dysfunction";
+      interpretation = "Rá»‘i loáº¡n chá»©c nÄƒng gia Ä‘Ã¬nh má»©c trung bÃ¬nh.";
+    } else if (score <= 7) {
+      riskLevel = "mild dysfunction";
+      interpretation = "Rá»‘i loáº¡n chá»©c nÄƒng gia Ä‘Ã¬nh nháº¹.";
+    }
+
+    return {
+      resultLabel: "Family APGAR",
+      resultValue: score,
+      resultText: "Family APGAR score",
+      riskLevel,
+      interpretation,
+      resultJson: { score, riskLevel },
+    };
+  }
+
+  if (code === "screem") {
+    const score = sumRequired(
+      inputs,
+      [
+        "screem_social",
+        "screem_cultural",
+        "screem_religious",
+        "screem_economic",
+        "screem_educational",
+        "screem_medical",
+      ],
+      "SCREEM"
+    );
+
+    let riskLevel = "adequate";
+    let interpretation = "Nguá»“n lá»±c gia Ä‘Ã¬nh tÆ°Æ¡ng Ä‘á»‘i Ä‘áº§y Ä‘á»§.";
+
+    if (score <= 4) {
+      riskLevel = "severely limited";
+      interpretation = "Nguá»“n lá»±c gia Ä‘Ã¬nh ráº¥t háº¡n cháº¿.";
+    } else if (score <= 8) {
+      riskLevel = "limited";
+      interpretation = "Nguá»“n lá»±c gia Ä‘Ã¬nh háº¡n cháº¿.";
+    }
+
+    return {
+      resultLabel: "SCREEM",
+      resultValue: score,
+      resultText: "SCREEM score",
+      riskLevel,
+      interpretation,
+      resultJson: { score, riskLevel },
+    };
+  }
+
+  throw new Error(`Calculator ${calculatorCode} chÆ°a Ä‘Æ°á»£c há»— trá»£`);
+}
+
+export async function runCalculator(
+  calculatorCode: string,
+  assessmentId: string
+): Promise<RunCalculatorResult> {
+  const {
+    assessment,
+    calculator,
+    resolvedInputs,
+    inputMap,
+  } = await resolveCalculatorInputs(assessmentId, calculatorCode);
+
+  const missingRequired = resolvedInputs.filter(
+    (item) =>
+      item.is_required &&
+      (item.value === null || item.value === undefined || item.value === "")
+  );
+
+  if (missingRequired.length > 0) {
+    const labels = missingRequired.map((item) => item.input_label).join(", ");
+    throw new Error(`Thiáº¿u dá»¯ liá»‡u Ä‘áº§u vÃ o báº¯t buá»™c: ${labels}`);
+  }
+
+  const result = computeCalculator(calculator.code, inputMap);
+
+  return {
+    assessment,
+    calculator,
+    resolvedInputs,
+    inputMap,
+    result,
+  };
+}
+
+
+
+========================================================================================================================
+FILE: src\lib\calculator\resolveCalculatorInputs.ts
+========================================================================================================================
+
+import { supabase } from "../supabase";
+
+export type CalculatorDefinitionRow = {
+  id: string;
+  code: string;
+  name: string;
+  output_type?: string | null;
+};
+
+export type CalculatorInputDefinitionRow = {
+  id: string;
+  calculator_id: string;
+  input_key: string;
+  input_label: string;
+  observation_code: string | null;
+  data_type: string;
+  unit: string | null;
+  is_required: boolean | null;
+  sort_order: number | null;
+  default_value: string | null;
+  config_json?: Record<string, unknown> | null;
+};
+
+export type CaseAssessmentRow = {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no?: number | null;
+  assessment_date?: string | null;
+  assessment_type?: string | null;
+};
+
+export type PatientRow = {
+  id: string;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation: string | null;
+};
+
+export type AssessmentVitalsRow = {
+  assessment_id: string;
+  systolic_bp: number | null;
+  diastolic_bp: number | null;
+  heart_rate: number | null;
+  temperature_c: number | null;
+  respiratory_rate: number | null;
+  spo2_percent: number | null;
+  waist_cm: number | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  bmi: number | null;
+};
+
+export type AssessmentObservationRow = {
+  id: string;
+  assessment_id: string;
+  observation_code: string;
+  observation_label: string | null;
+  value_type: string | null;
+  value_text: string | null;
+  value_numeric: number | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_json: unknown | null;
+  unit: string | null;
+  observed_at: string | null;
+};
+
+export type AssessmentLabResultRow = {
+  id: string;
+  assessment_id: string;
+  lab_code: string;
+  canonical_code: string | null;
+  lab_name: string | null;
+  value_type: string | null;
+  value_numeric: number | null;
+  value_text: string | null;
+  value_boolean: boolean | null;
+  raw_result_text: string | null;
+  unit: string | null;
+  measured_at: string | null;
+};
+
+export type ResolvedCalculatorInput = {
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  observation_code: string | null;
+  value: unknown;
+  unit: string | null;
+  source:
+    | "patient"
+    | "computed_patient"
+    | "assessment_vitals"
+    | "assessment_lab_results"
+    | "assessment_observations"
+    | "default"
+    | "empty";
+  source_observation_id: string | null;
+  is_required: boolean;
+};
+
+export type ResolveCalculatorInputsResult = {
+  assessment: CaseAssessmentRow;
+  patient: PatientRow | null;
+  vitals: AssessmentVitalsRow | null;
+  labs: AssessmentLabResultRow[];
+  calculator: CalculatorDefinitionRow;
+  inputDefinitions: CalculatorInputDefinitionRow[];
+  resolvedInputs: ResolvedCalculatorInput[];
+  inputMap: Record<string, unknown>;
+};
+
+const VITAL_INPUT_KEY_TO_COLUMN: Record<string, keyof AssessmentVitalsRow> = {
+  systolic_bp: "systolic_bp",
+  sbp: "systolic_bp",
+  diastolic_bp: "diastolic_bp",
+  dbp: "diastolic_bp",
+  heart_rate: "heart_rate",
+  pulse: "heart_rate",
+  temperature_c: "temperature_c",
+  temperature: "temperature_c",
+  respiratory_rate: "respiratory_rate",
+  rr: "respiratory_rate",
+  spo2_percent: "spo2_percent",
+  spo2: "spo2_percent",
+  waist_cm: "waist_cm",
+  height_cm: "height_cm",
+  height: "height_cm",
+  weight_kg: "weight_kg",
+  weight: "weight_kg",
+  bmi: "bmi",
+};
+
+const VITAL_OBSERVATION_CODE_TO_COLUMN: Record<string, keyof AssessmentVitalsRow> = {
+  systolic_bp: "systolic_bp",
+  diastolic_bp: "diastolic_bp",
+  heart_rate: "heart_rate",
+  temperature_c: "temperature_c",
+  respiratory_rate: "respiratory_rate",
+  spo2_percent: "spo2_percent",
+  waist_cm: "waist_cm",
+  height_cm: "height_cm",
+  weight_kg: "weight_kg",
+  bmi: "bmi",
+};
+
+const PATIENT_INPUT_KEY_TO_FIELD: Record<string, keyof PatientRow> = {
+  gender: "gender",
+  sex: "gender",
+  date_of_birth: "date_of_birth",
+  dob: "date_of_birth",
+  occupation: "occupation",
+  patient_name: "full_name",
+  full_name: "full_name",
+};
+
+function normalizeKey(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function getErrorMessage(error: unknown) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "KhÃƒÂ´ng resolve Ã„â€˜Ã†Â°Ã¡Â»Â£c calculator inputs.";
+}
+
+function parseDefaultValue(raw: string | null | undefined, dataType: string) {
+  const value = raw?.trim();
+  if (!value) return null;
+
+  const type = normalizeKey(dataType);
+
+  if (type === "number" || type === "numeric" || type === "integer") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    return null;
+  }
+
+  if (type === "json") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
+
+function coerceValueToInputType(value: unknown, dataType: string): unknown {
+  if (value === null || value === undefined || value === "") return null;
+
+  const type = normalizeKey(dataType);
+
+  if (type === "number" || type === "numeric" || type === "integer") {
+    const n =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+        ? Number(value)
+        : NaN;
+
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+      const normalized = normalizeKey(value);
+      if (["true", "1", "yes", "y", "co", "cÃƒÂ³"].includes(normalized)) return true;
+      if (["false", "0", "no", "n", "khong", "khÃƒÂ´ng"].includes(normalized)) return false;
+    }
+    return null;
+  }
+
+  if (type === "json") return value;
+
+  return String(value);
+}
+
+function getObservationValue(row: AssessmentObservationRow | null): unknown {
+  if (!row) return null;
+
+  const type = normalizeKey(row.value_type);
+
+  if (type === "numeric" || type === "number" || type === "integer") {
+    return row.value_numeric;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    return row.value_boolean;
+  }
+
+  if (type === "date") {
+    return row.value_date;
+  }
+
+  if (type === "json") {
+    return row.value_json;
+  }
+
+  if (row.value_numeric !== null && row.value_numeric !== undefined) return row.value_numeric;
+  if (row.value_boolean !== null && row.value_boolean !== undefined) return row.value_boolean;
+  if (row.value_date) return row.value_date;
+  if (row.value_json !== null && row.value_json !== undefined) return row.value_json;
+
+  return row.value_text;
+}
+
+function calculateAgeFromDob(dateOfBirth: string | null | undefined) {
+  if (!dateOfBirth) return null;
+
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function getPatientValue(
+  patient: PatientRow | null,
+  inputKey: string
+): { value: unknown; source: "patient" | "computed_patient" } | null {
+  if (!patient) return null;
+
+  const normalized = normalizeKey(inputKey);
+
+  if (normalized === "age" || normalized === "age_years") {
+    return {
+      value: calculateAgeFromDob(patient.date_of_birth),
+      source: "computed_patient",
+    };
+  }
+
+  const field = PATIENT_INPUT_KEY_TO_FIELD[normalized];
+  if (!field) return null;
+
+  return {
+    value: patient[field] ?? null,
+    source: "patient",
+  };
+}
+
+function getVitalColumnFromDefinition(
+  def: CalculatorInputDefinitionRow
+): keyof AssessmentVitalsRow | null {
+  const byInputKey = VITAL_INPUT_KEY_TO_COLUMN[normalizeKey(def.input_key)];
+  if (byInputKey) return byInputKey;
+
+  const observationCode = normalizeKey(def.observation_code);
+  if (observationCode) {
+    const byObservationCode = VITAL_OBSERVATION_CODE_TO_COLUMN[observationCode];
+    if (byObservationCode) return byObservationCode;
+  }
+
+  return null;
+}
+
+function getVitalValue(
+  vitals: AssessmentVitalsRow | null,
+  column: keyof AssessmentVitalsRow | null
+): unknown {
+  if (!vitals || !column) return null;
+  if (column === "assessment_id") return null;
+  return vitals[column] ?? null;
+}
+
+function buildObservationMap(rows: AssessmentObservationRow[]) {
+  const map = new Map<string, AssessmentObservationRow>();
+  for (const row of rows) {
+    const code = normalizeKey(row.observation_code);
+    if (!code) continue;
+    if (!map.has(code)) {
+      map.set(code, row);
+    }
+  }
+  return map;
+}
+function getLabValue(row: AssessmentLabResultRow | null): unknown {
+  if (!row) return null;
+
+  if (typeof row.value_numeric === "number" && Number.isFinite(row.value_numeric)) {
+    return row.value_numeric;
+  }
+
+  if (typeof row.value_boolean === "boolean") {
+    return row.value_boolean;
+  }
+
+  if (row.value_text !== null && row.value_text !== undefined && row.value_text !== "") {
+    return row.value_text;
+  }
+
+  if (
+    row.raw_result_text !== null &&
+    row.raw_result_text !== undefined &&
+    row.raw_result_text !== ""
+  ) {
+    return row.raw_result_text;
+  }
+
+  return null;
+}
+
+function buildLabMap(rows: AssessmentLabResultRow[]) {
+  const map = new Map<string, AssessmentLabResultRow>();
+
+  for (const row of rows) {
+    const keys = [
+      normalizeKey(row.lab_code),
+      normalizeKey(row.canonical_code),
+    ].filter(Boolean);
+
+    for (const key of keys) {
+      if (!map.has(key)) {
+        map.set(key, row);
+      }
+    }
+  }
+
+  return map;
+}
+
+export async function resolveCalculatorInputs(
+  assessmentId: string,
+  calculatorCode: string
+): Promise<ResolveCalculatorInputsResult> {
+  if (!assessmentId?.trim()) {
+    throw new Error("ThiÃ¡ÂºÂ¿u assessmentId.");
+  }
+
+  if (!calculatorCode?.trim()) {
+    throw new Error("ThiÃ¡ÂºÂ¿u calculatorCode.");
+  }
+
+  try {
+    const { data: assessment, error: assessmentError } = await supabase
+      .from("case_assessments")
+      .select("id, case_id, patient_id, assessment_no, assessment_date, assessment_type")
+      .eq("id", assessmentId)
+      .single();
+
+    if (assessmentError) throw assessmentError;
+    if (!assessment) throw new Error("KhÃƒÂ´ng tÃƒÂ¬m thÃ¡ÂºÂ¥y assessment.");
+
+    const assessmentRow = assessment as CaseAssessmentRow;
+
+    const { data: calculatorDef, error: calculatorError } = await supabase
+      .from("calculator_definitions")
+      .select("id, code, name, output_type")
+      .eq("code", calculatorCode)
+      .single();
+
+    if (calculatorError) throw calculatorError;
+    if (!calculatorDef) throw new Error("KhÃƒÂ´ng tÃƒÂ¬m thÃ¡ÂºÂ¥y calculator.");
+
+    const calculator = calculatorDef as CalculatorDefinitionRow;
+
+    const { data: inputDefs, error: inputDefError } = await supabase
+      .from("calculator_input_definitions")
+      .select(
+        "id, calculator_id, input_key, input_label, observation_code, data_type, unit, is_required, sort_order, default_value, config_json"
+      )
+      .eq("calculator_id", calculator.id)
+      .order("sort_order", { ascending: true });
+
+    if (inputDefError) throw inputDefError;
+
+    const inputDefinitionRows =
+      (inputDefs ?? []) as CalculatorInputDefinitionRow[];
+
+    const { data: patientData, error: patientError } = await supabase
+      .from("patients")
+      .select("id, full_name, date_of_birth, gender, occupation")
+      .eq("id", assessmentRow.patient_id)
+      .maybeSingle();
+
+    if (patientError) throw patientError;
+    const patientRow = (patientData as PatientRow | null) ?? null;
+
+    const { data: vitalsData, error: vitalsError } = await supabase
+      .from("assessment_vitals")
+      .select(
+        "assessment_id, systolic_bp, diastolic_bp, heart_rate, temperature_c, respiratory_rate, spo2_percent, waist_cm, height_cm, weight_kg, bmi"
+      )
+      .eq("assessment_id", assessmentId)
+      .maybeSingle();
+
+    if (vitalsError) throw vitalsError;
+    const vitalsRow = (vitalsData as AssessmentVitalsRow | null) ?? null;
+
+    const { data: labsData, error: labsError } = await supabase
+      .from("assessment_lab_results")
+      .select(
+        "id, assessment_id, lab_code, canonical_code, lab_name, value_type, value_numeric, value_text, value_boolean, raw_result_text, unit, measured_at"
+      )
+      .eq("assessment_id", assessmentId)
+      .order("measured_at", { ascending: false });
+
+    if (labsError) throw labsError;
+    const labRows = (labsData ?? []) as AssessmentLabResultRow[];
+    const latestLabByCode = buildLabMap(labRows);
+
+    const observationCodes = Array.from(
+      new Set(
+        inputDefinitionRows
+          .map((row) => normalizeKey(row.observation_code))
+          .filter(Boolean)
+      )
+    );
+
+    let observationRows: AssessmentObservationRow[] = [];
+    if (observationCodes.length > 0) {
+      const { data: observations, error: observationError } = await supabase
+        .from("assessment_observations")
+        .select(
+          "id, assessment_id, observation_code, observation_label, value_type, value_text, value_numeric, value_boolean, value_date, value_json, unit, observed_at"
+        )
+        .eq("assessment_id", assessmentId)
+        .in("observation_code", observationCodes)
+        .order("observed_at", { ascending: false });
+
+      if (observationError) throw observationError;
+      observationRows = (observations ?? []) as AssessmentObservationRow[];
+    }
+
+    const latestObservationByCode = buildObservationMap(observationRows);
+
+    const resolvedInputs: ResolvedCalculatorInput[] = inputDefinitionRows.map((def) => {
+      const patientResolved = getPatientValue(patientRow, def.input_key);
+      if (
+        patientResolved &&
+        patientResolved.value !== null &&
+        patientResolved.value !== undefined &&
+        patientResolved.value !== ""
+      ) {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: coerceValueToInputType(patientResolved.value, def.data_type),
+          unit: def.unit,
+          source: patientResolved.source,
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      const vitalColumn = getVitalColumnFromDefinition(def);
+      const vitalValue = getVitalValue(vitalsRow, vitalColumn);
+      if (vitalValue !== null && vitalValue !== undefined && vitalValue !== "") {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: coerceValueToInputType(vitalValue, def.data_type),
+          unit: def.unit,
+          source: "assessment_vitals",
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      const labCode =
+        normalizeKey(def.observation_code) || normalizeKey(def.input_key);
+      if (labCode) {
+        const labRow = latestLabByCode.get(labCode) ?? null;
+        const labValue = getLabValue(labRow);
+
+        if (labValue !== null && labValue !== undefined && labValue !== "") {
+          return {
+            input_key: def.input_key,
+            input_label: def.input_label,
+            input_type: def.data_type,
+            observation_code: def.observation_code,
+            value: coerceValueToInputType(labValue, def.data_type),
+            unit: def.unit || labRow?.unit || null,
+            source: "assessment_lab_results",
+            source_observation_id: null,
+            is_required: Boolean(def.is_required),
+          };
+        }
+      }
+
+      const observationCode = normalizeKey(def.observation_code);
+      if (observationCode) {
+        const observationRow = latestObservationByCode.get(observationCode) ?? null;
+        const observationValue = getObservationValue(observationRow);
+
+        if (
+          observationValue !== null &&
+          observationValue !== undefined &&
+          observationValue !== ""
+        ) {
+          return {
+            input_key: def.input_key,
+            input_label: def.input_label,
+            input_type: def.data_type,
+            observation_code: def.observation_code,
+            value: coerceValueToInputType(observationValue, def.data_type),
+            unit: def.unit || observationRow?.unit || null,
+            source: "assessment_observations",
+            source_observation_id: observationRow?.id ?? null,
+            is_required: Boolean(def.is_required),
+          };
+        }
+      }
+
+      const defaultValue = parseDefaultValue(def.default_value, def.data_type);
+      if (defaultValue !== null && defaultValue !== undefined && defaultValue !== "") {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: defaultValue,
+          unit: def.unit,
+          source: "default",
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      return {
+        input_key: def.input_key,
+        input_label: def.input_label,
+        input_type: def.data_type,
+        observation_code: def.observation_code,
+        value: null,
+        unit: def.unit,
+        source: "empty",
+        source_observation_id: null,
+        is_required: Boolean(def.is_required),
+      };
+    });
+
+    const inputMap = resolvedInputs.reduce<Record<string, unknown>>((acc, item) => {
+      acc[item.input_key] = item.value;
+      return acc;
+    }, {});
+
+    return {
+      assessment: assessmentRow,
+      patient: patientRow,
+      vitals: vitalsRow,
+      labs: labRows,
+      calculator,
+      inputDefinitions: inputDefinitionRows,
+      resolvedInputs,
+      inputMap,
+    };
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+
+

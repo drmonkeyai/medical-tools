@@ -1,0 +1,419 @@
+﻿
+========================================================================================================================
+FILE: src\features\cases\types\caseDetail.ts
+========================================================================================================================
+
+import type {
+  AssessmentLabReport,
+  AssessmentLabResult,
+} from "../../../modules/cases/labs/types";
+
+export type CaseDetailTabKey =
+  | "overview"
+  | "history"
+  | "ice"
+  | "risk"
+  | "biopsychosocial"
+  | "labs"
+  | "calculator"
+  | "monitoring"
+  | "management"
+  | "treatment"
+  | "immunization";
+
+export type CaseDetailLabResult = AssessmentLabResult;
+export type CaseDetailLabReport = AssessmentLabReport;
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\calculator-runs\types.ts
+========================================================================================================================
+
+export type CalculatorRunRow = {
+  id: string;
+  calculator_id: string;
+  assessment_id: string | null;
+  patient_id: string;
+  case_id: string | null;
+  run_at: string;
+  result_label?: string | null;
+  result_value?: number | null;
+  result_text?: string | null;
+  risk_level?: string | null;
+  interpretation?: string | null;
+  result_json?: unknown | null;
+};
+
+export type CalculatorDefinitionRow = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export type CalculatorRunInputRow = {
+  id: string;
+  calculator_run_id: string;
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  input_value_text?: string | null;
+  input_value_numeric?: number | null;
+  input_value_boolean?: boolean | null;
+  input_value_date?: string | null;
+  input_value_json?: unknown | null;
+  unit?: string | null;
+  source_observation_id?: string | null;
+  created_at?: string | null;
+};
+
+export type CalculatorRunInputViewModel = {
+  id: string;
+  key: string;
+  label: string;
+  type: string;
+  displayValue: string;
+  unit?: string | null;
+};
+
+export type CalculatorRunViewModel = {
+  id: string;
+  calculatorName: string;
+  calculatorCode: string;
+  runAt: string;
+  resultLabel?: string | null;
+  resultValue?: number | null;
+  resultText?: string | null;
+  riskLevel?: string | null;
+  interpretation?: string | null;
+  inputs: CalculatorRunInputViewModel[];
+};
+
+export type CalculatorRunsSectionData = {
+  runs: CalculatorRunViewModel[];
+};
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\calculator-runs\mapper.ts
+========================================================================================================================
+
+import type {
+  CalculatorDefinitionRow,
+  CalculatorRunInputRow,
+  CalculatorRunInputViewModel,
+  CalculatorRunRow,
+  CalculatorRunsSectionData,
+} from "./types";
+
+function toDisplayValue(row: CalculatorRunInputRow): string {
+  if (row.input_value_numeric !== null && row.input_value_numeric !== undefined) {
+    return String(row.input_value_numeric);
+  }
+
+  if (row.input_value_text !== null && row.input_value_text !== undefined) {
+    return row.input_value_text;
+  }
+
+  if (row.input_value_boolean !== null && row.input_value_boolean !== undefined) {
+    return row.input_value_boolean ? "CÃ³" : "KhÃ´ng";
+  }
+
+  if (row.input_value_date !== null && row.input_value_date !== undefined) {
+    return row.input_value_date;
+  }
+
+  if (row.input_value_json !== null && row.input_value_json !== undefined) {
+    try {
+      return JSON.stringify(row.input_value_json);
+    } catch {
+      return String(row.input_value_json);
+    }
+  }
+
+  return "";
+}
+
+export function mapCalculatorRunsSection(args: {
+  runs: CalculatorRunRow[];
+  definitions: CalculatorDefinitionRow[];
+  runInputs: CalculatorRunInputRow[];
+}): CalculatorRunsSectionData {
+  const definitionById = new Map<string, CalculatorDefinitionRow>();
+  for (const def of args.definitions) {
+    definitionById.set(def.id, def);
+  }
+
+  const inputsByRunId = new Map<string, CalculatorRunInputViewModel[]>();
+  for (const input of args.runInputs) {
+    const list = inputsByRunId.get(input.calculator_run_id) ?? [];
+    list.push({
+      id: input.id,
+      key: input.input_key,
+      label: input.input_label,
+      type: input.input_type,
+      displayValue: toDisplayValue(input),
+      unit: input.unit ?? null,
+    });
+    inputsByRunId.set(input.calculator_run_id, list);
+  }
+
+  return {
+    runs: args.runs.map((run) => {
+      const def = definitionById.get(run.calculator_id);
+
+      return {
+        id: run.id,
+        calculatorName: def?.name ?? def?.code ?? "Calculator",
+        calculatorCode: def?.code ?? "",
+        runAt: run.run_at,
+        resultLabel: run.result_label ?? null,
+        resultValue: run.result_value ?? null,
+        resultText: run.result_text ?? null,
+        riskLevel: run.risk_level ?? null,
+        interpretation: run.interpretation ?? null,
+        inputs: inputsByRunId.get(run.id) ?? [],
+      };
+    }),
+  };
+}
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\clinical-note\types.ts
+========================================================================================================================
+
+export type AssessmentNoteRow = {
+  id: string;
+  assessment_id: string;
+
+  history_of_present_illness: string | null;
+  past_medical_history: string | null;
+  past_surgical_history: string | null;
+  medication_history: string | null;
+  allergy_history: string | null;
+  family_history: string | null;
+  social_history: string | null;
+  obstetric_history: string | null;
+  substance_use_history: string | null;
+  sleep_history: string | null;
+  diet_history: string | null;
+  exercise_history: string | null;
+
+  ideas: string | null;
+  concerns: string | null;
+  expectations: string | null;
+
+  biological_factors: string | null;
+  psychological_factors: string | null;
+  social_factors: string | null;
+  functional_limitations: string | null;
+  participation_restrictions: string | null;
+  environmental_factors: string | null;
+  personal_factors: string | null;
+  protective_factors: string | null;
+  barriers_to_recovery: string | null;
+
+  general_appearance: string | null;
+  mental_status: string | null;
+  head_neck_exam: string | null;
+  cardiovascular_exam: string | null;
+  respiratory_exam: string | null;
+  abdominal_exam: string | null;
+  musculoskeletal_exam: string | null;
+  neurological_exam: string | null;
+  skin_exam: string | null;
+  other_exam: string | null;
+
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type ClinicalNoteField = {
+  key: string;
+  label: string;
+  content: string;
+  isEmpty: boolean;
+};
+
+export type ClinicalNoteGroupKey =
+  | "history"
+  | "ice"
+  | "bio_psycho_social"
+  | "physical_exam";
+
+export type ClinicalNoteGroup = {
+  key: ClinicalNoteGroupKey;
+  title: string;
+  fields: ClinicalNoteField[];
+  hasAnyContent: boolean;
+};
+
+export type ClinicalNoteSectionData = {
+  groups: ClinicalNoteGroup[];
+  hasAnyContent: boolean;
+};
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\observations\types.ts
+========================================================================================================================
+
+export type AssessmentObservationRow = {
+  id: string;
+  assessment_id: string;
+  observation_code: string;
+  observation_label: string;
+  value_type: string;
+  value_text?: string | null;
+  value_numeric?: number | null;
+  value_boolean?: boolean | null;
+  value_date?: string | null;
+  value_json?: unknown;
+  unit?: string | null;
+  normal_flag?: string | null;
+  note?: string | null;
+  observed_at?: string | null;
+};
+
+export type ObservationItemViewModel = {
+  id: string;
+  code: string;
+  label: string;
+  valueType: string;
+  displayValue: string;
+  unit?: string | null;
+  normalFlag?: string | null;
+  note?: string | null;
+  observedAt?: string | null;
+};
+
+export type ObservationsSectionData = {
+  items: ObservationItemViewModel[];
+};
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\plan\types.ts
+========================================================================================================================
+
+export type AssessmentPlanItemRow = {
+  id: string;
+  assessment_id: string;
+  plan_type: string;
+  description: string;
+  due_date?: string | null;
+  is_completed?: boolean | null;
+  completed_at?: string | null;
+  created_at?: string | null;
+};
+
+export type PlanItemViewModel = {
+  id: string;
+  type: string;
+  description: string;
+  dueDate?: string | null;
+  isCompleted: boolean;
+  completedAt?: string | null;
+};
+
+export type PlanSectionData = {
+  items: PlanItemViewModel[];
+};
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\treatment\types.ts
+========================================================================================================================
+
+export type TreatmentType =
+  | "medication"
+  | "exercise"
+  | "procedure"
+  | "education"
+  | "lifestyle"
+  | "referral";
+
+export type TreatmentStatus =
+  | "planned"
+  | "ongoing"
+  | "completed"
+  | "stopped";
+
+export type AssessmentTreatmentRow = {
+  id: string;
+  assessment_id: string;
+  treatment_type: TreatmentType;
+  treatment_name: string;
+  description: string | null;
+  dose_or_frequency: string | null;
+  duration: string | null;
+  instructions: string | null;
+  status: TreatmentStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TreatmentItemView = {
+  id: string;
+  type: TreatmentType;
+  name: string;
+  description?: string;
+  doseOrFrequency?: string;
+  duration?: string;
+  instructions?: string;
+  status: TreatmentStatus;
+};
+
+export type TreatmentSectionData = {
+  medications: TreatmentItemView[];
+  exercises: TreatmentItemView[];
+  procedures: TreatmentItemView[];
+  educations: TreatmentItemView[];
+  lifestyles: TreatmentItemView[];
+  referrals: TreatmentItemView[];
+  hasData: boolean;
+};
+
+
+
+========================================================================================================================
+FILE: src\modules\cases\diagnoses\types.ts
+========================================================================================================================
+
+export type AssessmentDiagnosisRow = {
+  id: string;
+  assessment_id: string;
+  diagnosis_type: "primary" | "secondary" | "differential" | "working";
+  diagnosis_name: string;
+  icd10_code: string | null;
+  is_active: boolean;
+  note: string | null;
+  created_at: string;
+};
+
+export type DiagnosisItem = {
+  id: string;
+  diagnosisName: string;
+  diagnosisType: "primary" | "secondary" | "differential" | "working";
+  diagnosisTypeLabel: string;
+  icd10Code: string;
+  note: string;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type DiagnosesSectionData = {
+  items: DiagnosisItem[];
+  total: number;
+  activeCount: number;
+  hasAnyContent: boolean;
+};
+
+
+

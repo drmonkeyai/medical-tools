@@ -1,0 +1,36 @@
+﻿import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import type { AssessmentLabReport, AssessmentLabResult } from "@/modules/cases/labs/types";
+
+export function useAssessmentLabs(assessmentId?: string | null) {
+  return useQuery({
+    queryKey: ["assessment-labs", assessmentId],
+    enabled: Boolean(assessmentId),
+    queryFn: async () => {
+      const [resultsRes, reportsRes] = await Promise.all([
+        supabase
+          .from("assessment_lab_results")
+          .select("*")
+          .eq("assessment_id", assessmentId)
+          .order("section", { ascending: true })
+          .order("group_name", { ascending: true })
+          .order("lab_name", { ascending: true }),
+
+        supabase
+          .from("assessment_lab_reports")
+          .select("*")
+          .eq("assessment_id", assessmentId)
+          .order("performed_at", { ascending: false })
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (resultsRes.error) throw resultsRes.error;
+      if (reportsRes.error) throw reportsRes.error;
+
+      return {
+        results: (resultsRes.data ?? []) as AssessmentLabResult[],
+        reports: (reportsRes.data ?? []) as AssessmentLabReport[],
+      };
+    },
+  });
+}

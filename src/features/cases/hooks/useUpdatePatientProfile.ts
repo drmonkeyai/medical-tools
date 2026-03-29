@@ -94,7 +94,7 @@ export function useUpdatePatientProfile() {
         const { error: caseError } = await supabase
           .from("cases")
           .update({
-            title: `Ca bệnh - ${fullName}`,
+            title: fullName,
           })
           .eq("id", payload.caseId.trim());
 

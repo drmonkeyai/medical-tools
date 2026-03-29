@@ -1,9 +1,8 @@
-import type {
+export type CaseDetailTabKey =import type {
   AssessmentLabReport,
   AssessmentLabResult,
 } from "../../../modules/cases/labs/types";
 
-export type CaseDetailTabKey =
   | "overview"
   | "history"
   | "ice"

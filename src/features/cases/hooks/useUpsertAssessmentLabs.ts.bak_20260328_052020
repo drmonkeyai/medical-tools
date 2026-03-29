@@ -1,0 +1,32 @@
+﻿import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import type { UpsertAssessmentLabResultInput } from "@/modules/cases/labs/types";
+
+export function useUpsertAssessmentLabs() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (rows: UpsertAssessmentLabResultInput[]) => {
+      if (!rows.length) return [];
+
+      const payload = rows.map((row) => ({
+        ...row,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { data, error } = await supabase
+        .from("assessment_lab_results")
+        .upsert(payload, { onConflict: "id" })
+        .select("*");
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, rows) => {
+      const assessmentId = rows[0]?.assessment_id;
+      if (assessmentId) {
+        queryClient.invalidateQueries({ queryKey: ["assessment-labs", assessmentId] });
+      }
+    },
+  });
+}

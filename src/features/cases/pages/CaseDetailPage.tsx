@@ -52,7 +52,7 @@ export default function CaseDetailPage() {
     treatment,
     plan,
     redFlags,
-    observations,
+    labs,
     calculatorRuns,
     refreshClinicalNote,
   } = useCaseDetail(caseId, assessmentId);
@@ -86,14 +86,9 @@ export default function CaseDetailPage() {
     const treatmentItems = toArray(
       (treatment as Record<string, unknown> | null)?.items
     );
-    const planItems = toArray(
-      (plan as Record<string, unknown> | null)?.items
-    );
+    const planItems = toArray((plan as Record<string, unknown> | null)?.items);
     const redFlagItems = toArray(
       (redFlags as Record<string, unknown> | null)?.items
-    );
-    const observationItems = toArray(
-      (observations as Record<string, unknown> | null)?.items
     );
     const calculatorRunItems = toArray(
       (calculatorRuns as Record<string, unknown> | null)?.runs
@@ -101,12 +96,12 @@ export default function CaseDetailPage() {
 
     return {
       risk: redFlagItems.length,
-      labs: observationItems.length,
+      labs: Array.isArray(labs) ? labs.length : 0,
       calculator: calculatorRunItems.length,
       management: planItems.length,
       treatment: treatmentItems.length,
     } as Partial<Record<CaseDetailTabKey, number>>;
-  }, [treatment, plan, redFlags, observations, calculatorRuns]);
+  }, [treatment, plan, redFlags, labs, calculatorRuns]);
 
   const monitoringUrl = useMemo(() => {
     if (!monitoringLink?.token || typeof window === "undefined") {
@@ -388,9 +383,7 @@ export default function CaseDetailPage() {
                 redFlags={
                   (redFlags as Record<string, unknown> | null) ?? null
                 }
-                observations={
-                  (observations as Record<string, unknown> | null) ?? null
-                }
+                labs={labs}
                 calculatorRuns={
                   (calculatorRuns as Record<string, unknown> | null) ?? null
                 }

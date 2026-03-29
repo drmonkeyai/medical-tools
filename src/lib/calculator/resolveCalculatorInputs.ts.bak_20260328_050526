@@ -169,7 +169,7 @@ function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
 
-  return "KhÃ´ng resolve Ä‘Æ°á»£c calculator inputs.";
+  return "Không resolve được calculator inputs.";
 }
 
 function parseDefaultValue(raw: string | null | undefined, dataType: string) {
@@ -220,8 +220,8 @@ function coerceValueToInputType(value: unknown, dataType: string): unknown {
     if (typeof value === "boolean") return value;
     if (typeof value === "string") {
       const normalized = normalizeKey(value);
-      if (["true", "1", "yes", "y", "co", "cÃ³"].includes(normalized)) return true;
-      if (["false", "0", "no", "n", "khong", "khÃ´ng"].includes(normalized)) return false;
+      if (["true", "1", "yes", "y", "co", "có"].includes(normalized)) return true;
+      if (["false", "0", "no", "n", "khong", "không"].includes(normalized)) return false;
     }
     return null;
   }
@@ -371,6 +371,17 @@ function buildLabMap(rows: AssessmentLabResultRow[]) {
       normalizeKey(row.canonical_code),
     ].filter(Boolean);
 
+    foreach ($key in $keys) {
+      # PowerShell marker should not exist in TS output
+    }
+  }
+
+  for (const row of rows) {
+    const keys = [
+      normalizeKey(row.lab_code),
+      normalizeKey(row.canonical_code),
+    ].filter(Boolean);
+
     for (const key of keys) {
       if (!map.has(key)) {
         map.set(key, row);
@@ -386,11 +397,11 @@ export async function resolveCalculatorInputs(
   calculatorCode: string
 ): Promise<ResolveCalculatorInputsResult> {
   if (!assessmentId?.trim()) {
-    throw new Error("Thiáº¿u assessmentId.");
+    throw new Error("Thiếu assessmentId.");
   }
 
   if (!calculatorCode?.trim()) {
-    throw new Error("Thiáº¿u calculatorCode.");
+    throw new Error("Thiếu calculatorCode.");
   }
 
   try {
@@ -401,7 +412,7 @@ export async function resolveCalculatorInputs(
       .single();
 
     if (assessmentError) throw assessmentError;
-    if (!assessment) throw new Error("KhÃ´ng tÃ¬m tháº¥y assessment.");
+    if (!assessment) throw new Error("Không tìm thấy assessment.");
 
     const assessmentRow = assessment as CaseAssessmentRow;
 
@@ -412,7 +423,7 @@ export async function resolveCalculatorInputs(
       .single();
 
     if (calculatorError) throw calculatorError;
-    if (!calculatorDef) throw new Error("KhÃ´ng tÃ¬m tháº¥y calculator.");
+    if (!calculatorDef) throw new Error("Không tìm thấy calculator.");
 
     const calculator = calculatorDef as CalculatorDefinitionRow;
 

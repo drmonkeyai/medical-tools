@@ -1,15 +1,12 @@
 import type { CSSProperties } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useCases } from "../../context/CasesContext";
 import { useAuth } from "../../context/AuthContext";
-import CaseTabs from "../case/CaseTabs";
 
 type TopbarProps = {
   onToggleSidebar?: () => void;
 };
 
 export default function Topbar({ onToggleSidebar }: TopbarProps) {
-  const { cases, openNewCaseModal } = useCases();
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,19 +20,12 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
     }
   }
 
-  function handleCreateCaseClick() {
-    if (!isAuthenticated) {
-      alert("Bác sĩ cần đăng nhập để sử dụng tính năng tạo ca.");
-      return;
-    }
-    openNewCaseModal();
-  }
-
-  const displayName =
+  const doctorName =
     user?.displayName?.trim() ||
     user?.username?.trim() ||
-    user?.email?.trim() ||
-    "Administrator";
+    "";
+
+  const displayName = doctorName ? `BS ${doctorName}` : "BS";
 
   const simpleBtnStyle: CSSProperties = {
     height: 38,
@@ -81,48 +71,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
         ☰
       </button>
 
-      <button
-        className="tb__btn"
-        type="button"
-        onClick={handleCreateCaseClick}
-        style={{
-          ...simpleBtnStyle,
-          background: "#2563eb",
-          color: "#fff",
-          border: "1px solid #2563eb",
-          flex: "0 0 auto",
-        }}
-      >
-        + Tạo ca mới
-      </button>
-
-      <div
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: "flex",
-          alignItems: "center",
-          overflow: "hidden",
-        }}
-      >
-        {cases.length ? (
-          <div style={{ minWidth: 0, width: "100%" }}>
-            <CaseTabs />
-          </div>
-        ) : (
-          <div
-            style={{
-              color: "var(--muted)",
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            Chưa chọn ca • bấm <b>+ Tạo ca mới</b>
-          </div>
-        )}
-      </div>
+      <div style={{ flex: 1 }} />
 
       <div
         className="tb__right"
@@ -151,7 +100,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
                 border: "1px solid #2563eb",
               }}
             >
-              Ca của tôi
+              Quản lý bệnh nhân
             </Link>
 
             <div
@@ -167,7 +116,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
                 boxShadow: "none",
                 padding: 0,
               }}
-              title={user?.email || ""}
+              title={displayName}
             >
               <span
                 style={{
@@ -187,7 +136,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
 
               <span
                 style={{
-                  maxWidth: 180,
+                  maxWidth: 220,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",

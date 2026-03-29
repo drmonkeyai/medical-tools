@@ -106,7 +106,7 @@ export function useCreateCase() {
           {
             case_code: caseCode,
             patient_id: createdPatient.id,
-            title: `Ca bệnh - ${fullName}`,
+            title: fullName,
             primary_problem: null,
             primary_diagnosis: null,
             red_flag: false,

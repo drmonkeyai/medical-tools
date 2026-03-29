@@ -1,0 +1,138 @@
+﻿import { useMemo, useState } from "react";
+import { LAB_CATALOG } from "./catalog";
+import { groupLabsBySection } from "./catalog";
+import LabCategorySection from "./LabCategorySection";
+import LabReportsSection from "./LabReportsSection";
+import UsePreviousLabResultDialog from "./UsePreviousLabResultDialog";
+import type { AssessmentLabResult, UpsertAssessmentLabResultInput } from "./types";
+import { useAssessmentLabs } from "@/features/cases/hooks/useAssessmentLabs";
+import { useUpsertAssessmentLabs } from "@/features/cases/hooks/useUpsertAssessmentLabs";
+
+interface Props {
+  assessmentId: string;
+}
+
+export default function LabsSection({ assessmentId }: Props) {
+  const { data, isLoading, error } = useAssessmentLabs(assessmentId);
+  const upsertMutation = useUpsertAssessmentLabs();
+
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [draftDates, setDraftDates] = useState<Record<string, string>>({});
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+
+  const resultMap = useMemo(() => {
+    const map = new Map<string, AssessmentLabResult>();
+    for (const row of data?.results ?? []) {
+      map.set(row.lab_code, row);
+    }
+    return map;
+  }, [data?.results]);
+
+  const groupedCatalog = useMemo(() => groupLabsBySection(LAB_CATALOG), []);
+
+  const handleSave = async () => {
+    const payload: UpsertAssessmentLabResultInput[] = LAB_CATALOG
+      .filter((item) => drafts[item.code] !== undefined || draftDates[item.code] !== undefined)
+      .map((item) => {
+        const existing = resultMap.get(item.code);
+        const draftValue = drafts[item.code];
+        const measuredAt = draftDates[item.code] ?? existing?.measured_at ?? null;
+
+        return {
+          id: existing?.id,
+          assessment_id: assessmentId,
+          lab_code: item.code,
+          canonical_code: item.canonicalCode ?? null,
+          lab_name: item.name,
+          section: item.section,
+          group_name: item.groupName ?? null,
+          value_type: item.valueType,
+          value_numeric:
+            item.valueType === "numeric"
+              ? draftValue === "" || draftValue == null
+                ? null
+                : Number(draftValue)
+              : null,
+          value_text: item.valueType === "text" ? draftValue || null : null,
+          value_boolean:
+            item.valueType === "boolean"
+              ? draftValue === "true"
+                ? true
+                : draftValue === "false"
+                  ? false
+                  : null
+              : null,
+          raw_result_text: item.valueType !== "numeric" ? draftValue || null : null,
+          unit: item.canonicalUnit ?? null,
+          measured_at: measuredAt,
+          source_type: existing?.source_type ?? "manual",
+        };
+      });
+
+    if (!payload.length) return;
+    await upsertMutation.mutateAsync(payload);
+  };
+
+  if (isLoading) return <div>Đang tải cận lâm sàng...</div>;
+  if (error) return <div>Không tải được dữ liệu cận lâm sàng.</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border bg-white p-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold">Cận lâm sàng</h3>
+            <p className="text-sm text-slate-500">
+              Nhập xét nghiệm có cấu trúc để dùng cho theo dõi và công cụ đánh giá.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setHistoryDialogOpen(true)}
+              className="rounded-xl border px-4 py-2 text-sm font-medium"
+            >
+              Lấy từ lần trước
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={upsertMutation.isPending}
+              className="rounded-xl border px-4 py-2 text-sm font-medium"
+            >
+              {upsertMutation.isPending ? "Đang lưu..." : "Lưu cận lâm sàng"}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {Object.entries(groupedCatalog).map(([section, items]) => (
+            <LabCategorySection
+              key={section}
+              title={section}
+              items={items}
+              resultMap={resultMap}
+              drafts={drafts}
+              draftDates={draftDates}
+              onChangeValue={(code, value) =>
+                setDrafts((prev) => ({ ...prev, [code]: value }))
+              }
+              onChangeDate={(code, value) =>
+                setDraftDates((prev) => ({ ...prev, [code]: value }))
+              }
+            />
+          ))}
+        </div>
+      </div>
+
+      <LabReportsSection reports={data?.reports ?? []} />
+
+      <UsePreviousLabResultDialog
+        open={historyDialogOpen}
+        onClose={() => setHistoryDialogOpen(false)}
+      />
+    </div>
+  );
+}

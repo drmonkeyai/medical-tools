@@ -7,9 +7,7 @@ import HistoryTab from "../../../modules/cases/history/HistoryTab";
 import ICETab from "../../../modules/cases/ice/ICETab";
 import BioPsychoSocialTab from "../../../modules/cases/biopsychosocial/BioPsychoSocialTab";
 import AssessmentToolsSection from "../../../modules/cases/assessment-tools/AssessmentToolsSection";
-import LabsSection from "../../../modules/cases/labs/LabsSection";
 import type { CalculatorRunsSectionData } from "../../../modules/cases/calculator-runs/types";
-import type { AssessmentLabResult } from "../../../modules/cases/labs/types";
 
 type GenericItem = Record<string, unknown>;
 
@@ -22,7 +20,7 @@ type Props = {
   treatment: Record<string, unknown> | null;
   plan: Record<string, unknown> | null;
   redFlags: Record<string, unknown> | null;
-  labs?: AssessmentLabResult[] | null;
+  observations: Record<string, unknown> | null;
   calculatorRuns: Record<string, unknown> | null;
   clinicalNoteEditRef: RefObject<ClinicalNoteEditSectionRef | null>;
   onClinicalNoteChanged?: () => Promise<void> | void;
@@ -50,6 +48,13 @@ function formatDateOnly(value?: string | null) {
   return d.toLocaleDateString("vi-VN");
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("vi-VN");
+}
+
 function getText(data: Record<string, unknown> | null, ...keys: string[]) {
   if (!data) return "";
 
@@ -63,20 +68,64 @@ function getText(data: Record<string, unknown> | null, ...keys: string[]) {
   return "";
 }
 
-function formatLabDisplay(item: AssessmentLabResult) {
-  const rawValue =
-    item.value_numeric !== null && item.value_numeric !== undefined
-      ? String(item.value_numeric)
-      : item.value_text?.trim() ||
-        item.raw_result_text?.trim() ||
-        (typeof item.value_boolean === "boolean"
-          ? item.value_boolean
-            ? "Dương tính"
-            : "Âm tính"
-          : "");
+function formatObservationLabel(item: GenericItem) {
+  return firstNonEmpty(
+    typeof item.label === "string" ? item.label : "",
+    typeof item.observationLabel === "string" ? item.observationLabel : "",
+    typeof item.observation_label === "string" ? item.observation_label : "",
+    typeof item.name === "string" ? item.name : "",
+    typeof item.displayName === "string" ? item.displayName : "",
+    typeof item.observationCode === "string" ? item.observationCode : "",
+    typeof item.observation_code === "string" ? item.observation_code : "",
+    typeof item.code === "string" ? item.code : "",
+    "Observation"
+  );
+}
 
-  const unit = item.unit?.trim() || "";
-  return rawValue ? joinNonEmpty([rawValue, unit], " ") : "—";
+function formatObservationValue(item: GenericItem) {
+  const unit = firstNonEmpty(
+    typeof item.unit === "string" ? item.unit : "",
+    typeof item.displayUnit === "string" ? item.displayUnit : ""
+  );
+
+  const textValue = firstNonEmpty(
+    typeof item.displayValue === "string" ? item.displayValue : "",
+    typeof item.valueText === "string" ? item.valueText : "",
+    typeof item.value_text === "string" ? item.value_text : "",
+    typeof item.resultText === "string" ? item.resultText : "",
+    typeof item.result_text === "string" ? item.result_text : "",
+    typeof item.value === "string" ? item.value : ""
+  );
+
+  if (textValue) {
+    return joinNonEmpty([textValue, unit], " ");
+  }
+
+  const numericCandidate = [
+    item.valueNumeric,
+    item.value_numeric,
+    item.resultValue,
+    item.result_value,
+    item.numeric_value,
+    item.valueNumber,
+  ].find((value) => typeof value === "number" && Number.isFinite(value));
+
+  if (typeof numericCandidate === "number") {
+    return joinNonEmpty([String(numericCandidate), unit], " ");
+  }
+
+  const booleanCandidate = [
+    item.valueBoolean,
+    item.value_boolean,
+    item.resultBoolean,
+    item.result_boolean,
+  ].find((value) => typeof value === "boolean");
+
+  if (typeof booleanCandidate === "boolean") {
+    return booleanCandidate ? "Có" : "Không";
+  }
+
+  return "—";
 }
 
 function Card({
@@ -226,7 +275,7 @@ export default function ActiveTabSection({
   treatment,
   plan,
   redFlags,
-  labs,
+  observations,
   calculatorRuns,
   clinicalNoteEditRef,
   onClinicalNoteChanged,
@@ -235,7 +284,7 @@ export default function ActiveTabSection({
   const treatmentItems = toArray<GenericItem>(treatment?.items);
   const planItems = toArray<GenericItem>(plan?.items);
   const redFlagItems = toArray<GenericItem>(redFlags?.items);
-  const labItems = Array.isArray(labs) ? labs : [];
+  const observationItems = toArray<GenericItem>(observations?.items);
   const calculatorRunItems = toArray<CalculatorRunsSectionData["runs"][number]>(
     calculatorRuns?.runs
   );
@@ -294,9 +343,12 @@ export default function ActiveTabSection({
       },
       {
         label: "Cận lâm sàng",
-        value: labItems
+        value: observationItems
           .slice(0, 6)
-          .map((item) => `${item.lab_name}: ${formatLabDisplay(item)}`)
+          .map(
+            (item) =>
+              `${formatObservationLabel(item)}: ${formatObservationValue(item)}`
+          )
           .join(" • "),
       },
       {
@@ -397,15 +449,65 @@ export default function ActiveTabSection({
   }
 
   if (activeTab === "labs") {
-    if (!assessmentId) {
-      return (
-        <Card title="Cận lâm sàng">
-          <EmptyState text="Chưa có assessment để nhập cận lâm sàng." />
-        </Card>
-      );
-    }
+    return (
+      <Card title="Cận lâm sàng / Observations">
+        {observationItems.length === 0 ? (
+          <EmptyState text="Chưa có observations." />
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {observationItems.map((item, index) => (
+              <div
+                key={String(item.id ?? index)}
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: 14,
+                  background: "#ffffff",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 800,
+                    marginBottom: 6,
+                    color: "#0f172a",
+                  }}
+                >
+                  {formatObservationLabel(item)}
+                </div>
 
-    return <LabsSection assessmentId={assessmentId} />;
+                <div
+                  style={{
+                    color: "#0f172a",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {formatObservationValue(item)}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: "#64748b",
+                  }}
+                >
+                  {formatDateTime(
+                    firstNonEmpty(
+                      typeof item.observedAt === "string"
+                        ? item.observedAt
+                        : "",
+                      typeof item.observed_at === "string"
+                        ? item.observed_at
+                        : ""
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    );
   }
 
   if (activeTab === "calculator") {

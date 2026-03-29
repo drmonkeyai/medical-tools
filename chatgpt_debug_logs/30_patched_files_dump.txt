@@ -1,0 +1,1919 @@
+﻿
+
+
+==================== FILE: src\features\cases\types\caseDetail.ts ====================
+
+export type CaseDetailTabKey =import type {
+  AssessmentLabReport,
+  AssessmentLabResult,
+} from "../../../modules/cases/labs/types";
+
+  | "overview"
+  | "history"
+  | "ice"
+  | "risk"
+  | "biopsychosocial"
+  | "labs"
+  | "calculator"
+  | "monitoring"
+  | "management"
+  | "treatment"
+  | "immunization";
+
+export type CaseDetailLabResult = AssessmentLabResult;
+export type CaseDetailLabReport = AssessmentLabReport;
+
+
+
+==================== FILE: src\features\cases\hooks\useCaseDetail.ts ====================
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../../../lib/supabase";
+
+import { mapAssessmentToClinicalNote } from "../../../modules/cases/clinical-note/mapper";
+import type {
+  AssessmentNoteRow,
+  ClinicalNoteSectionData,
+} from "../../../modules/cases/clinical-note/types";
+
+import { mapAssessmentToDiagnoses } from "../../../modules/cases/diagnoses/mapper";
+import type {
+  AssessmentDiagnosisRow,
+  DiagnosesSectionData,
+} from "../../../modules/cases/diagnoses/types";
+
+import { mapAssessmentToTreatment } from "../../../modules/cases/treatment/mapper";
+import type {
+  AssessmentTreatmentRow,
+  TreatmentSectionData,
+} from "../../../modules/cases/treatment/types";
+
+import { mapAssessmentToPlan } from "../../../modules/cases/plan/mapper";
+import type {
+  AssessmentPlanItemRow,
+  PlanSectionData,
+} from "../../../modules/cases/plan/types";
+
+import { mapAssessmentToRedFlags } from "../../../modules/cases/red-flags/mapper";
+import type {
+  AssessmentRedFlagRow,
+  RedFlagsSectionData,
+} from "../../../modules/cases/red-flags/types";
+
+import { mapAssessmentToObservations } from "../../../modules/cases/observations/mapper";
+import type {
+  AssessmentObservationRow,
+  ObservationsSectionData,
+} from "../../../modules/cases/observations/types";
+
+import { mapCalculatorRunsSection } from "../../../modules/cases/calculator-runs/mapper";
+import type {
+  CalculatorDefinitionRow,
+  CalculatorRunInputRow,
+  CalculatorRunRow,
+  CalculatorRunsSectionData,
+} from "../../../modules/cases/calculator-runs/types";
+import type {
+  AssessmentLabReport,
+  AssessmentLabResult,
+} from "../../../modules/cases/labs/types";
+
+export type CaseDetailPatient = {
+  id: string;
+  patient_code: string | null;
+  full_name: string;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  occupation?: string | null;
+};
+
+export type CaseDetailCaseItem = {
+  id: string;
+  patient_id: string;
+  case_code?: string | null;
+  title?: string | null;
+  primary_problem?: string | null;
+  primary_diagnosis?: string | null;
+  red_flag?: boolean | null;
+};
+
+export type CaseDetailAssessment = {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no: number | null;
+  assessment_date?: string | null;
+  chief_complaint?: string | null;
+  is_red_flag_present?: boolean | null;
+  status?: string | null;
+};
+
+export type CaseDetailVitals = {
+  assessment_id: string;
+  systolic_bp?: number | null;
+  diastolic_bp?: number | null;
+  heart_rate?: number | null;
+  temperature_c?: number | null;
+  respiratory_rate?: number | null;
+  spo2_percent?: number | null;
+  waist_cm?: number | null;
+  height_cm?: number | null;
+  weight_kg?: number | null;
+  bmi?: number | null;
+};
+
+type UseCaseDetailState = {
+  loading: boolean;
+  sectionLoading: boolean;
+  error: string | null;
+  caseItem: CaseDetailCaseItem | null;
+  patient: CaseDetailPatient | null;
+  assessments: CaseDetailAssessment[];
+  selectedAssessment: CaseDetailAssessment | null;
+  vitals: CaseDetailVitals | null;
+  clinicalNote: ClinicalNoteSectionData;
+  diagnoses: DiagnosesSectionData;
+  treatment: TreatmentSectionData;
+  plan: PlanSectionData;
+  redFlags: RedFlagsSectionData;
+  observations: ObservationsSectionData;
+  labs: AssessmentLabResult[];
+  labReports: AssessmentLabReport[];
+  calculatorRuns: CalculatorRunsSectionData;
+};
+
+type SectionReloadState = {
+  vitals: number;
+  clinicalNote: number;
+  diagnoses: number;
+  treatment: number;
+  plan: number;
+  redFlags: number;
+  observations: number;
+  labs: number;
+  calculatorRuns: number;
+};
+
+const emptyClinicalNote = mapAssessmentToClinicalNote(null);
+const emptyDiagnoses = mapAssessmentToDiagnoses([]);
+const emptyTreatment = mapAssessmentToTreatment([]);
+const emptyPlan = mapAssessmentToPlan([]);
+const emptyRedFlags = mapAssessmentToRedFlags([]);
+const emptyObservations = mapAssessmentToObservations([]);
+const emptyLabs: AssessmentLabResult[] = [];
+const emptyLabReports: AssessmentLabReport[] = [];
+const emptyCalculatorRuns = mapCalculatorRunsSection({
+  runs: [],
+  definitions: [],
+  runInputs: [],
+});
+
+const initialState: UseCaseDetailState = {
+  loading: true,
+  sectionLoading: false,
+  error: null,
+  caseItem: null,
+  patient: null,
+  assessments: [],
+  selectedAssessment: null,
+  vitals: null,
+  clinicalNote: emptyClinicalNote,
+  diagnoses: emptyDiagnoses,
+  treatment: emptyTreatment,
+  plan: emptyPlan,
+  redFlags: emptyRedFlags,
+  observations: emptyObservations,
+  labs: emptyLabs,
+  labReports: emptyLabReports,
+  calculatorRuns: emptyCalculatorRuns,
+};
+
+const initialSectionReloadState: SectionReloadState = {
+  vitals: 0,
+  clinicalNote: 0,
+  diagnoses: 0,
+  treatment: 0,
+  plan: 0,
+  redFlags: 0,
+  observations: 0,
+  labs: 0,
+  calculatorRuns: 0,
+};
+
+function getErrorMessage(error: unknown) {
+  console.error("useCaseDetail error:", error);
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "KhÃ´ng táº£i Ä‘Æ°á»£c dá»¯ liá»‡u ca bá»‡nh.";
+}
+
+function bumpSectionKey(
+  setSectionReloadKeys: React.Dispatch<React.SetStateAction<SectionReloadState>>,
+  key: keyof SectionReloadState
+) {
+  setSectionReloadKeys((prev) => ({
+    ...prev,
+    [key]: prev[key] + 1,
+  }));
+}
+
+export function useCaseDetail(caseId?: string, assessmentId?: string) {
+  const [state, setState] = useState<UseCaseDetailState>(initialState);
+  const [shellReloadKey, setShellReloadKey] = useState(0);
+  const [sectionReloadKeys, setSectionReloadKeys] =
+    useState<SectionReloadState>(initialSectionReloadState);
+
+  const refresh = useCallback(() => {
+    setSectionReloadKeys((prev) => ({
+      vitals: prev.vitals + 1,
+      clinicalNote: prev.clinicalNote + 1,
+      diagnoses: prev.diagnoses + 1,
+      treatment: prev.treatment + 1,
+      plan: prev.plan + 1,
+      redFlags: prev.redFlags + 1,
+      observations: prev.observations + 1,
+      labs: prev.labs + 1,
+      calculatorRuns: prev.calculatorRuns + 1,
+    }));
+  }, []);
+
+  const refreshShell = useCallback(() => {
+    setShellReloadKey((prev) => prev + 1);
+  }, []);
+
+  const refreshVitals = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "vitals");
+  }, []);
+
+  const refreshClinicalNote = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "clinicalNote");
+  }, []);
+
+  const refreshDiagnoses = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "diagnoses");
+  }, []);
+
+  const refreshTreatment = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "treatment");
+  }, []);
+
+  const refreshPlan = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "plan");
+  }, []);
+
+  const refreshRedFlags = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "redFlags");
+  }, []);
+
+  const refreshObservations = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "observations");
+  }, []);
+  const refreshLabs = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "labs");
+  }, []);
+
+  const refreshCalculatorRuns = useCallback(() => {
+    bumpSectionKey(setSectionReloadKeys, "calculatorRuns");
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadShell() {
+      if (!caseId) {
+        setState({
+          ...initialState,
+          loading: false,
+          error: "Thiáº¿u caseId.",
+        });
+        return;
+      }
+
+      try {
+        setState((prev) => ({
+          ...prev,
+          loading: true,
+          error: null,
+        }));
+
+        const { data: caseData, error: caseError } = await supabase
+          .from("cases")
+          .select(
+            "id, patient_id, case_code, title, primary_problem, primary_diagnosis, red_flag"
+          )
+          .eq("id", caseId)
+          .maybeSingle();
+
+        if (caseError) throw caseError;
+        if (!caseData) {
+          throw new Error(`KhÃ´ng tÃ¬m tháº¥y ca bá»‡nh vá»›i id: ${caseId}`);
+        }
+
+        const { data: patientData, error: patientError } = await supabase
+          .from("patients")
+          .select("id, patient_code, full_name, date_of_birth, gender, occupation")
+          .eq("id", caseData.patient_id)
+          .maybeSingle();
+
+        if (patientError) throw patientError;
+        if (!patientData) {
+          throw new Error(`KhÃ´ng tÃ¬m tháº¥y bá»‡nh nhÃ¢n cá»§a ca: ${caseData.id}`);
+        }
+
+        const { data: assessmentsData, error: assessmentsError } = await supabase
+          .from("case_assessments")
+          .select(
+            "id, case_id, patient_id, assessment_no, assessment_date, chief_complaint, is_red_flag_present, status"
+          )
+          .eq("case_id", caseId)
+          .order("assessment_date", { ascending: false });
+
+        if (assessmentsError) throw assessmentsError;
+
+        const nextAssessments = (assessmentsData ?? []) as CaseDetailAssessment[];
+        const nextSelectedAssessment =
+          nextAssessments.find((item) => item.id === assessmentId) ??
+          nextAssessments[0] ??
+          null;
+
+        if (cancelled) return;
+
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: null,
+          caseItem: caseData as CaseDetailCaseItem,
+          patient: patientData as CaseDetailPatient,
+          assessments: nextAssessments,
+          selectedAssessment: nextSelectedAssessment,
+        }));
+      } catch (error) {
+        console.error("useCaseDetail shell load failed:", error);
+
+        if (cancelled) return;
+
+        setState({
+          ...initialState,
+          loading: false,
+          error: getErrorMessage(error),
+        });
+      }
+    }
+
+    void loadShell();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, assessmentId, shellReloadKey]);
+
+  useEffect(() => {
+    setState((prev) => {
+      const nextSelectedAssessment =
+        prev.assessments.find((item) => item.id === assessmentId) ??
+        prev.assessments[0] ??
+        null;
+
+      return {
+        ...prev,
+        selectedAssessment: nextSelectedAssessment,
+        vitals: null,
+        clinicalNote: emptyClinicalNote,
+        diagnoses: emptyDiagnoses,
+        treatment: emptyTreatment,
+        plan: emptyPlan,
+        redFlags: emptyRedFlags,
+        observations: emptyObservations,
+        labs: emptyLabs,
+        labReports: emptyLabReports,
+        calculatorRuns: emptyCalculatorRuns,
+      };
+    });
+  }, [assessmentId]);
+
+  const selectedAssessmentId = state.selectedAssessment?.id;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSections() {
+      if (!selectedAssessmentId) {
+        setState((prev) => ({
+          ...prev,
+          sectionLoading: false,
+          vitals: null,
+          clinicalNote: emptyClinicalNote,
+          diagnoses: emptyDiagnoses,
+          treatment: emptyTreatment,
+          plan: emptyPlan,
+          redFlags: emptyRedFlags,
+          observations: emptyObservations,
+          labs: emptyLabs,
+          labReports: emptyLabReports,
+          calculatorRuns: emptyCalculatorRuns,
+        }));
+        return;
+      }
+
+      try {
+        setState((prev) => ({
+          ...prev,
+          sectionLoading: true,
+          error: null,
+        }));
+
+        const [
+          vitalsResult,
+          noteResult,
+          diagnosesResult,
+          treatmentsResult,
+          planResult,
+          redFlagsResult,
+          observationsResult,
+          labsResult,
+          labReportsResult,
+          calculatorRunsResult,
+        ] = await Promise.all([
+          supabase
+            .from("assessment_vitals")
+            .select(
+              "assessment_id, systolic_bp, diastolic_bp, heart_rate, temperature_c, respiratory_rate, spo2_percent, waist_cm, height_cm, weight_kg, bmi"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .maybeSingle(),
+          supabase
+            .from("assessment_notes")
+            .select("*")
+            .eq("assessment_id", selectedAssessmentId)
+            .maybeSingle(),
+          supabase
+            .from("assessment_diagnoses")
+            .select(
+              "id, assessment_id, diagnosis_type, diagnosis_name, icd10_code, is_active, note, created_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_treatments")
+            .select(
+              "id, assessment_id, treatment_type, treatment_name, description, dose_or_frequency, duration, instructions, status, created_at, updated_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_plan_items")
+            .select(
+              "id, assessment_id, plan_type, description, due_date, is_completed, completed_at, created_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("assessment_red_flags")
+            .select(
+              "id, assessment_id, flag_name, flag_code, is_present, severity, note"
+            )
+            .eq("assessment_id", selectedAssessmentId),
+          supabase
+            .from("assessment_observations")
+            .select(
+              "id, assessment_id, observation_code, observation_label, value_type, value_text, value_numeric, value_boolean, value_date, value_json, unit, normal_flag, note, observed_at"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("observed_at", { ascending: false }),
+          supabase
+            .from("assessment_lab_results")
+            .select("*")
+            .eq("assessment_id", selectedAssessmentId)
+            .order("section", { ascending: true })
+            .order("group_name", { ascending: true })
+            .order("lab_name", { ascending: true }),
+          supabase
+            .from("assessment_lab_reports")
+            .select("*")
+            .eq("assessment_id", selectedAssessmentId)
+            .order("performed_at", { ascending: false })
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("calculator_runs")
+            .select(
+              "id, calculator_id, assessment_id, patient_id, case_id, run_at, result_label, result_value, result_text, risk_level, interpretation, result_json"
+            )
+            .eq("assessment_id", selectedAssessmentId)
+            .order("run_at", { ascending: false }),
+        ]);
+
+        if (vitalsResult.error) throw vitalsResult.error;
+        if (noteResult.error) throw noteResult.error;
+        if (diagnosesResult.error) throw diagnosesResult.error;
+        if (treatmentsResult.error) throw treatmentsResult.error;
+        if (planResult.error) throw planResult.error;
+        if (redFlagsResult.error) throw redFlagsResult.error;
+        if (observationsResult.error) throw observationsResult.error;
+        if (labsResult.error) throw labsResult.error;
+        if (labReportsResult.error) throw labReportsResult.error;
+        if (calculatorRunsResult.error) throw calculatorRunsResult.error;
+
+        const runRows = (calculatorRunsResult.data ?? []) as CalculatorRunRow[];
+        const calculatorIds = Array.from(
+          new Set(runRows.map((row) => row.calculator_id))
+        );
+        const runIds = runRows.map((row) => row.id);
+
+        let definitionRows: CalculatorDefinitionRow[] = [];
+        if (calculatorIds.length > 0) {
+          const { data: defsData, error: defsError } = await supabase
+            .from("calculator_definitions")
+            .select("id, code, name")
+            .in("id", calculatorIds);
+
+          if (defsError) throw defsError;
+          definitionRows = (defsData ?? []) as CalculatorDefinitionRow[];
+        }
+
+        let runInputRows: CalculatorRunInputRow[] = [];
+        if (runIds.length > 0) {
+          const { data: inputsData, error: inputsError } = await supabase
+            .from("calculator_run_inputs")
+            .select(
+              "id, calculator_run_id, input_key, input_label, input_type, input_value_text, input_value_numeric, input_value_boolean, input_value_date, input_value_json, unit, source_observation_id, created_at"
+            )
+            .in("calculator_run_id", runIds)
+            .order("created_at", { ascending: true });
+
+          if (inputsError) throw inputsError;
+          runInputRows = (inputsData ?? []) as CalculatorRunInputRow[];
+        }
+
+        if (cancelled) return;
+
+        setState((prev) => ({
+          ...prev,
+          sectionLoading: false,
+          vitals: (vitalsResult.data as CaseDetailVitals | null) ?? null,
+          clinicalNote: mapAssessmentToClinicalNote(
+            (noteResult.data as AssessmentNoteRow | null) ?? null
+          ),
+          diagnoses: mapAssessmentToDiagnoses(
+            (diagnosesResult.data ?? []) as AssessmentDiagnosisRow[]
+          ),
+          treatment: mapAssessmentToTreatment(
+            (treatmentsResult.data ?? []) as AssessmentTreatmentRow[]
+          ),
+          plan: mapAssessmentToPlan(
+            (planResult.data ?? []) as AssessmentPlanItemRow[]
+          ),
+          redFlags: mapAssessmentToRedFlags(
+            (redFlagsResult.data ?? []) as AssessmentRedFlagRow[]
+          ),
+          observations: mapAssessmentToObservations(
+            (observationsResult.data ?? []) as AssessmentObservationRow[]
+          ),
+          labs: (labsResult.data ?? []) as AssessmentLabResult[],
+          labReports: (labReportsResult.data ?? []) as AssessmentLabReport[],
+          calculatorRuns: mapCalculatorRunsSection({
+            runs: runRows,
+            definitions: definitionRows,
+            runInputs: runInputRows,
+          }),
+        }));
+      } catch (error) {
+        console.error("useCaseDetail section load failed:", error);
+
+        if (cancelled) return;
+
+        setState((prev) => ({
+          ...prev,
+          sectionLoading: false,
+          error: getErrorMessage(error),
+        }));
+      }
+    }
+
+    void loadSections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedAssessmentId,
+    sectionReloadKeys.vitals,
+    sectionReloadKeys.clinicalNote,
+    sectionReloadKeys.diagnoses,
+    sectionReloadKeys.treatment,
+    sectionReloadKeys.plan,
+    sectionReloadKeys.redFlags,
+    sectionReloadKeys.observations,
+    sectionReloadKeys.labs,
+    sectionReloadKeys.calculatorRuns,
+  ]);
+
+  return useMemo(
+    () => ({
+      loading: state.loading,
+      sectionLoading: state.sectionLoading,
+      error: state.error,
+      caseItem: state.caseItem,
+      patient: state.patient,
+      assessments: state.assessments,
+      selectedAssessment: state.selectedAssessment,
+      vitals: state.vitals,
+      clinicalNote: state.clinicalNote,
+      diagnoses: state.diagnoses,
+      treatment: state.treatment,
+      plan: state.plan,
+      redFlags: state.redFlags,
+      observations: state.observations,
+      labs: state.labs,
+      labReports: state.labReports,
+      calculatorRuns: state.calculatorRuns,
+      refresh,
+      refreshShell,
+      refreshVitals,
+      refreshClinicalNote,
+      refreshDiagnoses,
+      refreshTreatment,
+      refreshPlan,
+      refreshRedFlags,
+      refreshObservations,
+      refreshLabs,
+      refreshCalculatorRuns,
+    }),
+    [
+      state,
+      refresh,
+      refreshShell,
+      refreshVitals,
+      refreshClinicalNote,
+      refreshDiagnoses,
+      refreshTreatment,
+      refreshPlan,
+      refreshRedFlags,
+      refreshObservations,
+      refreshLabs,
+      refreshCalculatorRuns,
+    ]
+  );
+}
+
+
+==================== FILE: src\features\cases\components\ActiveTabSection.tsx ====================
+
+import type { ReactNode, RefObject } from "react";
+import type { CaseDetailTabKey } from "../types/caseDetail";
+import ClinicalNoteEditSection, {
+  type ClinicalNoteEditSectionRef,
+} from "../../../modules/cases/clinical-note/ClinicalNoteEditSection";
+import HistoryTab from "../../../modules/cases/history/HistoryTab";
+import ICETab from "../../../modules/cases/ice/ICETab";
+import BioPsychoSocialTab from "../../../modules/cases/biopsychosocial/BioPsychoSocialTab";
+import AssessmentToolsSection from "../../../modules/cases/assessment-tools/AssessmentToolsSection";import LabsSection from "../../../modules/cases/labs/LabsSection";
+import type { CalculatorRunsSectionData } from "../../../modules/cases/calculator-runs/types";
+
+type GenericItem = Record<string, unknown>;
+
+type Props = {
+  activeTab: CaseDetailTabKey;
+  isEditing: boolean;
+  assessmentId?: string;
+  clinicalNote: Record<string, unknown> | null;
+  diagnoses: Record<string, unknown> | null;
+  treatment: Record<string, unknown> | null;
+  plan: Record<string, unknown> | null;
+  redFlags: Record<string, unknown> | null;
+  observations: Record<string, unknown> | null;
+  calculatorRuns: Record<string, unknown> | null;
+  clinicalNoteEditRef: RefObject<ClinicalNoteEditSectionRef | null>;
+  onClinicalNoteChanged?: () => Promise<void> | void;
+};
+
+function toArray<T = GenericItem>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  return values.map((item) => item?.trim()).find(Boolean) ?? "";
+}
+
+function joinNonEmpty(
+  values: Array<string | null | undefined>,
+  separator = " â€¢ "
+) {
+  return values.map((item) => item?.trim()).filter(Boolean).join(separator);
+}
+
+function formatDateOnly(value?: string | null) {
+  if (!value) return "â€”";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("vi-VN");
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "â€”";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("vi-VN");
+}
+
+function getText(data: Record<string, unknown> | null, ...keys: string[]) {
+  if (!data) return "";
+
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function formatObservationLabel(item: GenericItem) {
+  return firstNonEmpty(
+    typeof item.label === "string" ? item.label : "",
+    typeof item.observationLabel === "string" ? item.observationLabel : "",
+    typeof item.observation_label === "string" ? item.observation_label : "",
+    typeof item.name === "string" ? item.name : "",
+    typeof item.displayName === "string" ? item.displayName : "",
+    typeof item.observationCode === "string" ? item.observationCode : "",
+    typeof item.observation_code === "string" ? item.observation_code : "",
+    typeof item.code === "string" ? item.code : "",
+    "Observation"
+  );
+}
+
+function formatObservationValue(item: GenericItem) {
+  const unit = firstNonEmpty(
+    typeof item.unit === "string" ? item.unit : "",
+    typeof item.displayUnit === "string" ? item.displayUnit : ""
+  );
+
+  const textValue = firstNonEmpty(
+    typeof item.displayValue === "string" ? item.displayValue : "",
+    typeof item.valueText === "string" ? item.valueText : "",
+    typeof item.value_text === "string" ? item.value_text : "",
+    typeof item.resultText === "string" ? item.resultText : "",
+    typeof item.result_text === "string" ? item.result_text : "",
+    typeof item.value === "string" ? item.value : ""
+  );
+
+  if (textValue) {
+    return joinNonEmpty([textValue, unit], " ");
+  }
+
+  const numericCandidate = [
+    item.valueNumeric,
+    item.value_numeric,
+    item.resultValue,
+    item.result_value,
+    item.numeric_value,
+    item.valueNumber,
+  ].find((value) => typeof value === "number" && Number.isFinite(value));
+
+  if (typeof numericCandidate === "number") {
+    return joinNonEmpty([String(numericCandidate), unit], " ");
+  }
+
+  const booleanCandidate = [
+    item.valueBoolean,
+    item.value_boolean,
+    item.resultBoolean,
+    item.result_boolean,
+  ].find((value) => typeof value === "boolean");
+
+  if (typeof booleanCandidate === "boolean") {
+    return booleanCandidate ? "CÃ³" : "KhÃ´ng";
+  }
+
+  return "â€”";
+}
+
+function Card({
+  title,
+  children,
+}: {
+  title: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      style={{
+        background: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 18,
+        padding: 18,
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          color: "#0f172a",
+        }}
+      >
+        {title}
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        border: "1px dashed #cbd5e1",
+        borderRadius: 14,
+        padding: 18,
+        color: "#64748b",
+        background: "#f8fafc",
+        fontSize: 14,
+      }}
+    >
+      {text}
+    </div>
+  );
+}
+
+function SummaryGrid({
+  items,
+}: {
+  items: Array<{ label: string; value: string }>;
+}) {
+  const normalizedItems = items.map((item) => ({
+    ...item,
+    value: item.value?.trim() || "ChÆ°a cÃ³ dá»¯ liá»‡u.",
+  }));
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 12,
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+      }}
+    >
+      {normalizedItems.map((item) => (
+        <div
+          key={item.label}
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 14,
+            padding: 14,
+            background: "#ffffff",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#64748b",
+              marginBottom: 8,
+            }}
+          >
+            {item.label}
+          </div>
+
+          <div
+            style={{
+              fontSize: 15,
+              lineHeight: 1.55,
+              color: item.value === "ChÆ°a cÃ³ dá»¯ liá»‡u." ? "#64748b" : "#0f172a",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {item.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SimpleList({
+  items,
+  emptyText,
+}: {
+  items: string[];
+  emptyText: string;
+}) {
+  if (items.length === 0) {
+    return <EmptyState text={emptyText} />;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {items.map((item, index) => (
+        <div
+          key={`${index}-${item}`}
+          style={{
+            border: "1px solid #e2e8f0",
+            borderRadius: 12,
+            padding: 14,
+            background: "#ffffff",
+            color: "#0f172a",
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {item}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function ActiveTabSection({
+  activeTab,
+  isEditing,
+  assessmentId,
+  clinicalNote,
+  diagnoses,
+  treatment,
+  plan,
+  redFlags,
+  observations,
+  calculatorRuns,
+  clinicalNoteEditRef,
+  onClinicalNoteChanged,
+}: Props) {
+  const diagnosisItems = toArray<GenericItem>(diagnoses?.items);
+  const treatmentItems = toArray<GenericItem>(treatment?.items);
+  const planItems = toArray<GenericItem>(plan?.items);
+  const redFlagItems = toArray<GenericItem>(redFlags?.items);
+  const observationItems = toArray<GenericItem>(observations?.items);
+  const calculatorRunItems = toArray<CalculatorRunsSectionData["runs"][number]>(
+    calculatorRuns?.runs
+  );
+
+  const calculatorRunsData: CalculatorRunsSectionData = {
+    runs: calculatorRunItems,
+  };
+
+  if (activeTab === "overview") {
+    const overviewItems = [
+      {
+        label: "Bá»‡nh sá»­",
+        value: joinNonEmpty([
+          getText(
+            clinicalNote,
+            "historyOfPresentIllness",
+            "history_of_present_illness"
+          ),
+          getText(clinicalNote, "pastMedicalHistory", "past_medical_history"),
+        ]),
+      },
+      {
+        label: "ICE",
+        value: joinNonEmpty([
+          getText(clinicalNote, "ideas", "ice_ideas"),
+          getText(clinicalNote, "concerns", "ice_concerns"),
+          getText(clinicalNote, "expectations", "ice_expectations"),
+        ]),
+      },
+      {
+        label: "BioPsychoSocial",
+        value: joinNonEmpty([
+          getText(clinicalNote, "biologicalFactors", "biological_factors"),
+          getText(
+            clinicalNote,
+            "psychologicalFactors",
+            "psychological_factors"
+          ),
+          getText(clinicalNote, "socialFactors", "social_factors"),
+        ]),
+      },
+      {
+        label: "Cháº©n Ä‘oÃ¡n",
+        value: diagnosisItems
+          .map((item) =>
+            firstNonEmpty(
+              typeof item.diagnosisName === "string" ? item.diagnosisName : "",
+              typeof item.diagnosis_name === "string"
+                ? item.diagnosis_name
+                : "",
+              typeof item.name === "string" ? item.name : ""
+            )
+          )
+          .filter(Boolean)
+          .join(" â€¢ "),
+      },
+      {
+        label: "Cáº­n lÃ¢m sÃ ng",
+        value: observationItems
+          .slice(0, 6)
+          .map(
+            (item) =>
+              `${formatObservationLabel(item)}: ${formatObservationValue(item)}`
+          )
+          .join(" â€¢ "),
+      },
+      {
+        label: "Káº¿ hoáº¡ch quáº£n lÃ½",
+        value: planItems
+          .map((item) =>
+            joinNonEmpty(
+              [
+                typeof item.type === "string" ? item.type : "",
+                typeof item.description === "string" ? item.description : "",
+              ],
+              " â€” "
+            )
+          )
+          .filter(Boolean)
+          .join(" â€¢ "),
+      },
+    ];
+
+    return (
+      <Card title="Tá»•ng quan">
+        <SummaryGrid items={overviewItems} />
+      </Card>
+    );
+  }
+
+  if (activeTab === "history") {
+    return (
+      <Card title="Tiá»n sá»­ / Bá»‡nh sá»­">
+        {isEditing ? (
+          <ClinicalNoteEditSection
+            ref={clinicalNoteEditRef}
+            assessmentId={assessmentId}
+            data={clinicalNote}
+            mode="history"
+            onChanged={onClinicalNoteChanged}
+          />
+        ) : (
+          <HistoryTab data={clinicalNote} />
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "ice") {
+    return (
+      <Card title="ICE">
+        {isEditing ? (
+          <ClinicalNoteEditSection
+            ref={clinicalNoteEditRef}
+            assessmentId={assessmentId}
+            data={clinicalNote}
+            mode="ice"
+            onChanged={onClinicalNoteChanged}
+          />
+        ) : (
+          <ICETab data={clinicalNote} />
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "risk") {
+    return (
+      <Card title="Yáº¿u tá»‘ nguy cÆ¡ / Red flags">
+        <SimpleList
+          items={redFlagItems
+            .map((item) =>
+              joinNonEmpty([
+                typeof item.name === "string" ? item.name : "",
+                typeof item.severity === "string" ? item.severity : "",
+                typeof item.note === "string" ? item.note : "",
+              ])
+            )
+            .filter(Boolean)}
+          emptyText="ChÆ°a cÃ³ red flags."
+        />
+      </Card>
+    );
+  }
+
+  if (activeTab === "biopsychosocial") {
+    return (
+      <Card title="BioPsychoSocial">
+        {isEditing ? (
+          <ClinicalNoteEditSection
+            ref={clinicalNoteEditRef}
+            assessmentId={assessmentId}
+            data={clinicalNote}
+            mode="biopsychosocial"
+            onChanged={onClinicalNoteChanged}
+          />
+        ) : (
+          <BioPsychoSocialTab data={clinicalNote} />
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "labs") {
+    return (
+      <Card title="Cáº­n lÃ¢m sÃ ng / Observations">
+        {observationItems.length === 0 ? (
+          <EmptyState text="ChÆ°a cÃ³ observations." />
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {observationItems.map((item, index) => (
+              <div
+                key={String(item.id ?? index)}
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: 14,
+                  background: "#ffffff",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 800,
+                    marginBottom: 6,
+                    color: "#0f172a",
+                  }}
+                >
+                  {formatObservationLabel(item)}
+                </div>
+
+                <div
+                  style={{
+                    color: "#0f172a",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {formatObservationValue(item)}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12,
+                    color: "#64748b",
+                  }}
+                >
+                  {formatDateTime(
+                    firstNonEmpty(
+                      typeof item.observedAt === "string"
+                        ? item.observedAt
+                        : "",
+                      typeof item.observed_at === "string"
+                        ? item.observed_at
+                        : ""
+                    )
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  if (activeTab === "calculator") {
+    return (
+      <Card
+        title={
+          calculatorRunItems.length > 0
+            ? `CÃ´ng cá»¥ Ä‘Ã¡nh giÃ¡ (${calculatorRunItems.length})`
+            : "CÃ´ng cá»¥ Ä‘Ã¡nh giÃ¡"
+        }
+      >
+        <AssessmentToolsSection
+          data={calculatorRunsData}
+          assessmentId={assessmentId}
+        />
+      </Card>
+    );
+  }
+
+  if (activeTab === "management") {
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        <Card title="Káº¿ hoáº¡ch quáº£n lÃ½">
+          <SimpleList
+            items={planItems
+              .map((item) =>
+                joinNonEmpty([
+                  typeof item.type === "string" ? item.type : "",
+                  typeof item.description === "string" ? item.description : "",
+                  typeof item.dueDate === "string"
+                    ? `Háº¹n: ${formatDateOnly(item.dueDate)}`
+                    : "",
+                  item.isCompleted === true || item.is_completed === true
+                    ? "ÄÃ£ hoÃ n táº¥t"
+                    : "",
+                ])
+              )
+              .filter(Boolean)}
+            emptyText="ChÆ°a cÃ³ káº¿ hoáº¡ch quáº£n lÃ½."
+          />
+        </Card>
+
+        <Card title="Red flags">
+          <SimpleList
+            items={redFlagItems
+              .map((item) =>
+                joinNonEmpty([
+                  typeof item.name === "string" ? item.name : "",
+                  typeof item.severity === "string" ? item.severity : "",
+                  typeof item.note === "string" ? item.note : "",
+                ])
+              )
+              .filter(Boolean)}
+            emptyText="ChÆ°a cÃ³ red flags."
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  if (activeTab === "treatment") {
+    return (
+      <Card title="Äiá»u trá»‹ cá»¥ thá»ƒ">
+        <SimpleList
+          items={treatmentItems
+            .map((item) =>
+              joinNonEmpty(
+                [
+                  firstNonEmpty(
+                    typeof item.name === "string" ? item.name : "",
+                    typeof item.treatmentName === "string"
+                      ? item.treatmentName
+                      : "",
+                    typeof item.treatment_name === "string"
+                      ? item.treatment_name
+                      : ""
+                  ),
+                  typeof item.description === "string"
+                    ? item.description
+                    : "",
+                  typeof item.instructions === "string"
+                    ? item.instructions
+                    : "",
+                ],
+                " â€” "
+              )
+            )
+            .filter(Boolean)}
+          emptyText="ChÆ°a cÃ³ Ä‘iá»u trá»‹."
+        />
+      </Card>
+    );
+  }
+
+  if (activeTab === "immunization") {
+    return (
+      <Card title="TiÃªm chá»§ng">
+        <EmptyState text="Tab tiÃªm chá»§ng Ä‘ang chá» ná»‘i DB tháº­t." />
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Tab chÆ°a há»— trá»£">
+      <EmptyState text="Tab hiá»‡n táº¡i chÆ°a Ä‘Æ°á»£c cáº¥u hÃ¬nh Ä‘Ãºng." />
+    </Card>
+  );
+}
+
+
+==================== FILE: src\lib\calculator\resolveCalculatorInputs.ts ====================
+
+import { supabase } from "../supabase";
+
+export type CalculatorDefinitionRow = {
+  id: string;
+  code: string;
+  name: string;
+  output_type?: string | null;
+};
+
+export type CalculatorInputDefinitionRow = {
+  id: string;
+  calculator_id: string;
+  input_key: string;
+  input_label: string;
+  observation_code: string | null;
+  data_type: string;
+  unit: string | null;
+  is_required: boolean | null;
+  sort_order: number | null;
+  default_value: string | null;
+  config_json?: Record<string, unknown> | null;
+};
+
+export type CaseAssessmentRow = {
+  id: string;
+  case_id: string;
+  patient_id: string;
+  assessment_no?: number | null;
+  assessment_date?: string | null;
+  assessment_type?: string | null;
+};
+
+export type PatientRow = {
+  id: string;
+  full_name: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  occupation: string | null;
+};
+
+export type AssessmentVitalsRow = {
+  assessment_id: string;
+  systolic_bp: number | null;
+  diastolic_bp: number | null;
+  heart_rate: number | null;
+  temperature_c: number | null;
+  respiratory_rate: number | null;
+  spo2_percent: number | null;
+  waist_cm: number | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  bmi: number | null;
+};
+
+export type AssessmentObservationRow = {
+  id: string;
+  assessment_id: string;
+  observation_code: string;
+  observation_label: string | null;
+  value_type: string | null;
+  value_text: string | null;
+  value_numeric: number | null;
+  value_boolean: boolean | null;
+  value_date: string | null;
+  value_json: unknown | null;
+  unit: string | null;
+  observed_at: string | null;
+};
+
+export type AssessmentLabResultRow = {
+  id: string;
+  assessment_id: string;
+  lab_code: string;
+  canonical_code: string | null;
+  lab_name: string | null;
+  value_type: string | null;
+  value_numeric: number | null;
+  value_text: string | null;
+  value_boolean: boolean | null;
+  raw_result_text: string | null;
+  unit: string | null;
+  measured_at: string | null;
+};
+
+export type ResolvedCalculatorInput = {
+  input_key: string;
+  input_label: string;
+  input_type: string;
+  observation_code: string | null;
+  value: unknown;
+  unit: string | null;
+  source:
+    | "patient"
+    | "computed_patient"
+    | "assessment_vitals"
+    | "assessment_lab_results"
+    | "assessment_observations"
+    | "default"
+    | "empty";
+  source_observation_id: string | null;
+  is_required: boolean;
+};
+
+export type ResolveCalculatorInputsResult = {
+  assessment: CaseAssessmentRow;
+  patient: PatientRow | null;
+  vitals: AssessmentVitalsRow | null;
+  labs: AssessmentLabResultRow[];
+  calculator: CalculatorDefinitionRow;
+  inputDefinitions: CalculatorInputDefinitionRow[];
+  resolvedInputs: ResolvedCalculatorInput[];
+  inputMap: Record<string, unknown>;
+};
+
+const VITAL_INPUT_KEY_TO_COLUMN: Record<string, keyof AssessmentVitalsRow> = {
+  systolic_bp: "systolic_bp",
+  sbp: "systolic_bp",
+  diastolic_bp: "diastolic_bp",
+  dbp: "diastolic_bp",
+  heart_rate: "heart_rate",
+  pulse: "heart_rate",
+  temperature_c: "temperature_c",
+  temperature: "temperature_c",
+  respiratory_rate: "respiratory_rate",
+  rr: "respiratory_rate",
+  spo2_percent: "spo2_percent",
+  spo2: "spo2_percent",
+  waist_cm: "waist_cm",
+  height_cm: "height_cm",
+  height: "height_cm",
+  weight_kg: "weight_kg",
+  weight: "weight_kg",
+  bmi: "bmi",
+};
+
+const VITAL_OBSERVATION_CODE_TO_COLUMN: Record<string, keyof AssessmentVitalsRow> = {
+  systolic_bp: "systolic_bp",
+  diastolic_bp: "diastolic_bp",
+  heart_rate: "heart_rate",
+  temperature_c: "temperature_c",
+  respiratory_rate: "respiratory_rate",
+  spo2_percent: "spo2_percent",
+  waist_cm: "waist_cm",
+  height_cm: "height_cm",
+  weight_kg: "weight_kg",
+  bmi: "bmi",
+};
+
+const PATIENT_INPUT_KEY_TO_FIELD: Record<string, keyof PatientRow> = {
+  gender: "gender",
+  sex: "gender",
+  date_of_birth: "date_of_birth",
+  dob: "date_of_birth",
+  occupation: "occupation",
+  patient_name: "full_name",
+  full_name: "full_name",
+};
+
+function normalizeKey(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function getErrorMessage(error: unknown) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+
+  return "KhÃ´ng resolve Ä‘Æ°á»£c calculator inputs.";
+}
+
+function parseDefaultValue(raw: string | null | undefined, dataType: string) {
+  const value = raw?.trim();
+  if (!value) return null;
+
+  const type = normalizeKey(dataType);
+
+  if (type === "number" || type === "numeric" || type === "integer") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    if (value === "true" || value === "1") return true;
+    if (value === "false" || value === "0") return false;
+    return null;
+  }
+
+  if (type === "json") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
+
+function coerceValueToInputType(value: unknown, dataType: string): unknown {
+  if (value === null || value === undefined || value === "") return null;
+
+  const type = normalizeKey(dataType);
+
+  if (type === "number" || type === "numeric" || type === "integer") {
+    const n =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+        ? Number(value)
+        : NaN;
+
+    return Number.isFinite(n) ? n : null;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+      const normalized = normalizeKey(value);
+      if (["true", "1", "yes", "y", "co", "cÃ³"].includes(normalized)) return true;
+      if (["false", "0", "no", "n", "khong", "khÃ´ng"].includes(normalized)) return false;
+    }
+    return null;
+  }
+
+  if (type === "json") return value;
+
+  return String(value);
+}
+
+function getObservationValue(row: AssessmentObservationRow | null): unknown {
+  if (!row) return null;
+
+  const type = normalizeKey(row.value_type);
+
+  if (type === "numeric" || type === "number" || type === "integer") {
+    return row.value_numeric;
+  }
+
+  if (type === "boolean" || type === "bool") {
+    return row.value_boolean;
+  }
+
+  if (type === "date") {
+    return row.value_date;
+  }
+
+  if (type === "json") {
+    return row.value_json;
+  }
+
+  if (row.value_numeric !== null && row.value_numeric !== undefined) return row.value_numeric;
+  if (row.value_boolean !== null && row.value_boolean !== undefined) return row.value_boolean;
+  if (row.value_date) return row.value_date;
+  if (row.value_json !== null && row.value_json !== undefined) return row.value_json;
+
+  return row.value_text;
+}
+
+function calculateAgeFromDob(dateOfBirth: string | null | undefined) {
+  if (!dateOfBirth) return null;
+
+  const dob = new Date(dateOfBirth);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const now = new Date();
+  let age = now.getFullYear() - dob.getFullYear();
+  const monthDiff = now.getMonth() - dob.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function getPatientValue(
+  patient: PatientRow | null,
+  inputKey: string
+): { value: unknown; source: "patient" | "computed_patient" } | null {
+  if (!patient) return null;
+
+  const normalized = normalizeKey(inputKey);
+
+  if (normalized === "age" || normalized === "age_years") {
+    return {
+      value: calculateAgeFromDob(patient.date_of_birth),
+      source: "computed_patient",
+    };
+  }
+
+  const field = PATIENT_INPUT_KEY_TO_FIELD[normalized];
+  if (!field) return null;
+
+  return {
+    value: patient[field] ?? null,
+    source: "patient",
+  };
+}
+
+function getVitalColumnFromDefinition(
+  def: CalculatorInputDefinitionRow
+): keyof AssessmentVitalsRow | null {
+  const byInputKey = VITAL_INPUT_KEY_TO_COLUMN[normalizeKey(def.input_key)];
+  if (byInputKey) return byInputKey;
+
+  const observationCode = normalizeKey(def.observation_code);
+  if (observationCode) {
+    const byObservationCode = VITAL_OBSERVATION_CODE_TO_COLUMN[observationCode];
+    if (byObservationCode) return byObservationCode;
+  }
+
+  return null;
+}
+
+function getVitalValue(
+  vitals: AssessmentVitalsRow | null,
+  column: keyof AssessmentVitalsRow | null
+): unknown {
+  if (!vitals || !column) return null;
+  if (column === "assessment_id") return null;
+  return vitals[column] ?? null;
+}
+
+function buildObservationMap(rows: AssessmentObservationRow[]) {
+  const map = new Map<string, AssessmentObservationRow>();
+  for (const row of rows) {
+    const code = normalizeKey(row.observation_code);
+    if (!code) continue;
+    if (!map.has(code)) {
+      map.set(code, row);
+    }
+  }
+  return map;
+}
+function getLabValue(row: AssessmentLabResultRow | null): unknown {
+  if (!row) return null;
+
+  if (typeof row.value_numeric === "number" && Number.isFinite(row.value_numeric)) {
+    return row.value_numeric;
+  }
+
+  if (typeof row.value_boolean === "boolean") {
+    return row.value_boolean;
+  }
+
+  if (row.value_text !== null && row.value_text !== undefined && row.value_text !== "") {
+    return row.value_text;
+  }
+
+  if (
+    row.raw_result_text !== null &&
+    row.raw_result_text !== undefined &&
+    row.raw_result_text !== ""
+  ) {
+    return row.raw_result_text;
+  }
+
+  return null;
+}
+
+function buildLabMap(rows: AssessmentLabResultRow[]) {
+  const map = new Map<string, AssessmentLabResultRow>();
+
+  for (const row of rows) {
+    const keys = [
+      normalizeKey(row.lab_code),
+      normalizeKey(row.canonical_code),
+    ].filter(Boolean);
+
+    foreach ($key in $keys) {
+      # PowerShell marker should not exist in TS output
+    }
+  }
+
+  for (const row of rows) {
+    const keys = [
+      normalizeKey(row.lab_code),
+      normalizeKey(row.canonical_code),
+    ].filter(Boolean);
+
+    for (const key of keys) {
+      if (!map.has(key)) {
+        map.set(key, row);
+      }
+    }
+  }
+
+  return map;
+}
+
+export async function resolveCalculatorInputs(
+  assessmentId: string,
+  calculatorCode: string
+): Promise<ResolveCalculatorInputsResult> {
+  if (!assessmentId?.trim()) {
+    throw new Error("Thiáº¿u assessmentId.");
+  }
+
+  if (!calculatorCode?.trim()) {
+    throw new Error("Thiáº¿u calculatorCode.");
+  }
+
+  try {
+    const { data: assessment, error: assessmentError } = await supabase
+      .from("case_assessments")
+      .select("id, case_id, patient_id, assessment_no, assessment_date, assessment_type")
+      .eq("id", assessmentId)
+      .single();
+
+    if (assessmentError) throw assessmentError;
+    if (!assessment) throw new Error("KhÃ´ng tÃ¬m tháº¥y assessment.");
+
+    const assessmentRow = assessment as CaseAssessmentRow;
+
+    const { data: calculatorDef, error: calculatorError } = await supabase
+      .from("calculator_definitions")
+      .select("id, code, name, output_type")
+      .eq("code", calculatorCode)
+      .single();
+
+    if (calculatorError) throw calculatorError;
+    if (!calculatorDef) throw new Error("KhÃ´ng tÃ¬m tháº¥y calculator.");
+
+    const calculator = calculatorDef as CalculatorDefinitionRow;
+
+    const { data: inputDefs, error: inputDefError } = await supabase
+      .from("calculator_input_definitions")
+      .select(
+        "id, calculator_id, input_key, input_label, observation_code, data_type, unit, is_required, sort_order, default_value, config_json"
+      )
+      .eq("calculator_id", calculator.id)
+      .order("sort_order", { ascending: true });
+
+    if (inputDefError) throw inputDefError;
+
+    const inputDefinitionRows =
+      (inputDefs ?? []) as CalculatorInputDefinitionRow[];
+
+    const { data: patientData, error: patientError } = await supabase
+      .from("patients")
+      .select("id, full_name, date_of_birth, gender, occupation")
+      .eq("id", assessmentRow.patient_id)
+      .maybeSingle();
+
+    if (patientError) throw patientError;
+    const patientRow = (patientData as PatientRow | null) ?? null;
+
+    const { data: vitalsData, error: vitalsError } = await supabase
+      .from("assessment_vitals")
+      .select(
+        "assessment_id, systolic_bp, diastolic_bp, heart_rate, temperature_c, respiratory_rate, spo2_percent, waist_cm, height_cm, weight_kg, bmi"
+      )
+      .eq("assessment_id", assessmentId)
+      .maybeSingle();
+
+    if (vitalsError) throw vitalsError;
+    const vitalsRow = (vitalsData as AssessmentVitalsRow | null) ?? null;
+
+    const { data: labsData, error: labsError } = await supabase
+      .from("assessment_lab_results")
+      .select(
+        "id, assessment_id, lab_code, canonical_code, lab_name, value_type, value_numeric, value_text, value_boolean, raw_result_text, unit, measured_at"
+      )
+      .eq("assessment_id", assessmentId)
+      .order("measured_at", { ascending: false });
+
+    if (labsError) throw labsError;
+    const labRows = (labsData ?? []) as AssessmentLabResultRow[];
+    const latestLabByCode = buildLabMap(labRows);
+
+    const observationCodes = Array.from(
+      new Set(
+        inputDefinitionRows
+          .map((row) => normalizeKey(row.observation_code))
+          .filter(Boolean)
+      )
+    );
+
+    let observationRows: AssessmentObservationRow[] = [];
+    if (observationCodes.length > 0) {
+      const { data: observations, error: observationError } = await supabase
+        .from("assessment_observations")
+        .select(
+          "id, assessment_id, observation_code, observation_label, value_type, value_text, value_numeric, value_boolean, value_date, value_json, unit, observed_at"
+        )
+        .eq("assessment_id", assessmentId)
+        .in("observation_code", observationCodes)
+        .order("observed_at", { ascending: false });
+
+      if (observationError) throw observationError;
+      observationRows = (observations ?? []) as AssessmentObservationRow[];
+    }
+
+    const latestObservationByCode = buildObservationMap(observationRows);
+
+    const resolvedInputs: ResolvedCalculatorInput[] = inputDefinitionRows.map((def) => {
+      const patientResolved = getPatientValue(patientRow, def.input_key);
+      if (
+        patientResolved &&
+        patientResolved.value !== null &&
+        patientResolved.value !== undefined &&
+        patientResolved.value !== ""
+      ) {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: coerceValueToInputType(patientResolved.value, def.data_type),
+          unit: def.unit,
+          source: patientResolved.source,
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      const vitalColumn = getVitalColumnFromDefinition(def);
+      const vitalValue = getVitalValue(vitalsRow, vitalColumn);
+      if (vitalValue !== null && vitalValue !== undefined && vitalValue !== "") {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: coerceValueToInputType(vitalValue, def.data_type),
+          unit: def.unit,
+          source: "assessment_vitals",
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      const labCode =
+        normalizeKey(def.observation_code) || normalizeKey(def.input_key);
+      if (labCode) {
+        const labRow = latestLabByCode.get(labCode) ?? null;
+        const labValue = getLabValue(labRow);
+
+        if (labValue !== null && labValue !== undefined && labValue !== "") {
+          return {
+            input_key: def.input_key,
+            input_label: def.input_label,
+            input_type: def.data_type,
+            observation_code: def.observation_code,
+            value: coerceValueToInputType(labValue, def.data_type),
+            unit: def.unit || labRow?.unit || null,
+            source: "assessment_lab_results",
+            source_observation_id: null,
+            is_required: Boolean(def.is_required),
+          };
+        }
+      }
+
+      const observationCode = normalizeKey(def.observation_code);
+      if (observationCode) {
+        const observationRow = latestObservationByCode.get(observationCode) ?? null;
+        const observationValue = getObservationValue(observationRow);
+
+        if (
+          observationValue !== null &&
+          observationValue !== undefined &&
+          observationValue !== ""
+        ) {
+          return {
+            input_key: def.input_key,
+            input_label: def.input_label,
+            input_type: def.data_type,
+            observation_code: def.observation_code,
+            value: coerceValueToInputType(observationValue, def.data_type),
+            unit: def.unit || observationRow?.unit || null,
+            source: "assessment_observations",
+            source_observation_id: observationRow?.id ?? null,
+            is_required: Boolean(def.is_required),
+          };
+        }
+      }
+
+      const defaultValue = parseDefaultValue(def.default_value, def.data_type);
+      if (defaultValue !== null && defaultValue !== undefined && defaultValue !== "") {
+        return {
+          input_key: def.input_key,
+          input_label: def.input_label,
+          input_type: def.data_type,
+          observation_code: def.observation_code,
+          value: defaultValue,
+          unit: def.unit,
+          source: "default",
+          source_observation_id: null,
+          is_required: Boolean(def.is_required),
+        };
+      }
+
+      return {
+        input_key: def.input_key,
+        input_label: def.input_label,
+        input_type: def.data_type,
+        observation_code: def.observation_code,
+        value: null,
+        unit: def.unit,
+        source: "empty",
+        source_observation_id: null,
+        is_required: Boolean(def.is_required),
+      };
+    });
+
+    const inputMap = resolvedInputs.reduce<Record<string, unknown>>((acc, item) => {
+      acc[item.input_key] = item.value;
+      return acc;
+    }, {});
+
+    return {
+      assessment: assessmentRow,
+      patient: patientRow,
+      vitals: vitalsRow,
+      labs: labRows,
+      calculator,
+      inputDefinitions: inputDefinitionRows,
+      resolvedInputs,
+      inputMap,
+    };
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}

@@ -1,0 +1,176 @@
+﻿
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\calculators\who\whoCvdSea.ts ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\calculators\BMI.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\calculators\StopBang.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\calculators\WHOPenHearts.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\components\case\NewCaseModal.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\context\CasesContext.tsx ====================
+
+MATCHES: assessment_vitals, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\data\tools.ts ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\hooks\useCaseDetail.ts ====================
+
+MATCHES: assessment_vitals, systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\hooks\useDeleteAssessment.ts ====================
+
+MATCHES: assessment_vitals
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\hooks\useDeleteCase.ts ====================
+
+MATCHES: assessment_vitals
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\cases\hooks\useUpsertAssessmentVitals.ts ====================
+
+MATCHES: assessment_vitals, systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\patient-monitoring\components\PatientMonitoringDoctorSection.tsx ====================
+
+MATCHES: systolic_bp, diastolic_bp, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\features\patient-monitoring\lib\monitoringApi.ts ====================
+
+MATCHES: systolic_bp, diastolic_bp, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\lib\calculator\resolveCalculatorInputs.ts ====================
+
+MATCHES: assessment_vitals, systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\assessment-tools\catalog.ts ====================
+
+MATCHES: assessment_vitals, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\calculator-runs\CalculatorRunsSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\components\PatientSnapshotSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\diagnoses\DiagnosesEditSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\mappers\mapAssessmentToPatientSnapshot.ts ====================
+
+MATCHES: systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\observations\ObservationsSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\overview\OverviewTab.tsx ====================
+
+MATCHES: systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\patient-snapshot\PatientSnapshotSection.tsx ====================
+
+MATCHES: systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\plan\PlanSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\red-flags\RedFlagsSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\risk-factors\RiskFactorsTab.tsx ====================
+
+MATCHES: height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\treatment\TreatmentEditSection.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\types\patientSnapshot.ts ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\modules\cases\vitals\VitalsEditSection.tsx ====================
+
+MATCHES: systolic_bp, diastolic_bp, height_cm, weight_kg, bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\pages\public\PatientMonitoringPortalPage.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\pages\symptoms\sut-can-tang-can-khong-ro-nguyen-nhan.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\pages\Home.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\pages\Login.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\pages\ToolPlaceholder.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\pages\Tools.tsx ====================
+
+MATCHES: bmi
+
+
+==================== FILE: C:\Users\meoti\OneDrive\Documents\Python\web\medical-tools\src\utils\runCalculator.ts ====================
+
+MATCHES: height_cm, weight_kg, bmi
