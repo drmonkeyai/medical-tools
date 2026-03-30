@@ -36,7 +36,7 @@ export default function ICD10() {
         </div>
 
         <div style={{ color: "var(--muted)", marginBottom: 12, marginTop: 10 }}>
-          Nguồn: icd.kcb.vn • Chỉ mang tính tham khảo.
+          Nguồn: icd.kcb.vn 
         </div>
 
         {/* Card ảnh bấm được */}
