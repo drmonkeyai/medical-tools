@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
@@ -146,27 +146,6 @@ export default function Login() {
             {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
         </form>
-
-        <div
-          style={{
-            marginTop: 16,
-            textAlign: "center",
-            color: "#64748b",
-            fontSize: 14,
-          }}
-        >
-          Chưa có tài khoản?{" "}
-          <Link
-            to="/register"
-            style={{
-              color: "#2563eb",
-              fontWeight: 800,
-              textDecoration: "none",
-            }}
-          >
-            Đăng ký ngay
-          </Link>
-        </div>
       </div>
     </div>
   );

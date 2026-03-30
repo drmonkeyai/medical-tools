@@ -154,10 +154,7 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
           </>
         ) : (
           <>
-            <Link to="/register" style={simpleBtnStyle}>
-              Đăng ký
-            </Link>
-            <Link to="/login" style={simpleBtnStyle}>
+                        <Link to="/login" style={simpleBtnStyle}>
               Đăng nhập
             </Link>
           </>
