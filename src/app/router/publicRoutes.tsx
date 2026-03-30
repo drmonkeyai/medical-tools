@@ -13,6 +13,7 @@ import ICD10 from "../../pages/ICD10";
 import Contact from "../../pages/Contact";
 import BytProcedures from "../../pages/BytProcedures";
 import Login from "../../pages/Login";
+import Register from "../../pages/Register";
 import PatientMonitoringPortalPage from "../../pages/public/PatientMonitoringPortalPage";
 
 import SymptomsIndex from "../../pages/symptoms/index";
@@ -56,6 +57,7 @@ export const publicRoutes = (
     <Route element={<PublicShell />}>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
 
       <Route path="/tools" element={<Tools />} />
       <Route path="/tools/:slug" element={<ToolPlaceholder />} />

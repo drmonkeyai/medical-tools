@@ -53,7 +53,9 @@ export function useCreateCase() {
   const [creatingCase, setCreatingCase] = useState(false);
   const [createCaseError, setCreateCaseError] = useState("");
 
-  async function createCase(payload: CreateCasePayload): Promise<CreatedCaseResult> {
+  async function createCase(
+    payload: CreateCasePayload
+  ): Promise<CreatedCaseResult> {
     const fullName = payload.fullName.trim();
     const dateOfBirth = payload.dateOfBirth.trim();
     const occupation = payload.occupation?.trim() || null;
@@ -90,6 +92,7 @@ export function useCreateCase() {
             date_of_birth: dateOfBirth,
             gender: payload.gender,
             occupation,
+            created_by: authData.user.id,
           },
         ])
         .select("id, patient_code")
@@ -106,7 +109,7 @@ export function useCreateCase() {
           {
             case_code: caseCode,
             patient_id: createdPatient.id,
-            title: fullName,
+            title: `Ca bệnh - ${fullName}`,
             primary_problem: null,
             primary_diagnosis: null,
             red_flag: false,

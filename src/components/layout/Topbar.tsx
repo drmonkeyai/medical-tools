@@ -87,6 +87,8 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
           outline: "none",
           padding: 0,
           borderRadius: 0,
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
         }}
       >
         {isAuthenticated ? (
@@ -151,9 +153,14 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
             </button>
           </>
         ) : (
-          <Link to="/login" style={simpleBtnStyle}>
-            Đăng nhập
-          </Link>
+          <>
+            <Link to="/register" style={simpleBtnStyle}>
+              Đăng ký
+            </Link>
+            <Link to="/login" style={simpleBtnStyle}>
+              Đăng nhập
+            </Link>
+          </>
         )}
       </div>
     </div>

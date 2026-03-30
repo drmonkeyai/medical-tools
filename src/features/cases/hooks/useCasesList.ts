@@ -76,18 +76,20 @@ export function useCasesList() {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
 
-      let query = supabase
+      if (!authData.user?.id) {
+        setCases([]);
+        setError("Bạn chưa đăng nhập.");
+        return;
+      }
+
+      const { data: caseRows, error: caseError } = await supabase
         .from("cases")
         .select(
           "id, patient_id, case_code, title, primary_problem, primary_diagnosis, red_flag, created_at, created_by"
         )
+        .eq("created_by", authData.user.id)
         .order("created_at", { ascending: false });
 
-      if (authData.user?.id) {
-        query = query.or(`created_by.eq.${authData.user.id},created_by.is.null`);
-      }
-
-      const { data: caseRows, error: caseError } = await query;
       if (caseError) throw caseError;
 
       const typedCaseRows = ((caseRows ?? []) as CaseRow[]).filter(
@@ -132,6 +134,7 @@ export function useCasesList() {
       setCases(merged);
     } catch (error) {
       setError(getErrorMessage(error));
+      setCases([]);
     } finally {
       setLoading(false);
     }

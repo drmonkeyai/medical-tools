@@ -4,6 +4,7 @@ import AppShell from "../shells/AppShell";
 import CasesListPage from "../../features/cases/pages/CasesListPage";
 import CaseDetailPage from "../../features/cases/pages/CaseDetailPage";
 import CaseAssessmentRedirectPage from "../../features/cases/pages/CaseAssessmentRedirectPage";
+import DoctorProfilePage from "../../pages/DoctorProfilePage";
 
 export const appRoutes = (
   <Route
@@ -21,5 +22,6 @@ export const appRoutes = (
       path="cases/:caseId/assessments/:assessmentId"
       element={<CaseDetailPage />}
     />
+    <Route path="profile" element={<DoctorProfilePage />} />
   </Route>
 );

@@ -1,0 +1,890 @@
+﻿
+========================================================================================================================
+FILE: src\pages\Login.tsx
+========================================================================================================================
+
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+export default function Login() {
+  const { login, isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+
+  const [email, setEmail] = useState("user@email.com");
+  const [password, setPassword] = useState("123");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+
+    try {
+      await login(email.trim(), password);
+      navigate("/", { replace: true });
+    } catch (err: any) {
+      console.error("LOGIN PAGE ERROR:", err);
+      setError(err?.message || "Email hoáº·c máº­t kháº©u khÃ´ng Ä‘Ãºng");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 430,
+          background: "#fff",
+          borderRadius: 18,
+          boxShadow: "0 20px 60px rgba(15,23,42,0.10)",
+          padding: 28,
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 28,
+            fontWeight: 900,
+            color: "#0f172a",
+          }}
+        >
+          ÄÄƒng nháº­p
+        </h1>
+
+        <p style={{ marginTop: 10, marginBottom: 20, color: "#64748b" }}>
+          ÄÄƒng nháº­p báº±ng tÃ i khoáº£n Há»• trá»£ bÃ¡c sÄ© cá»§a báº¡n.
+        </p>
+
+        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
+          <div>
+            <label
+              htmlFor="email"
+              style={{
+                display: "block",
+                marginBottom: 6,
+                fontWeight: 700,
+                color: "#0f172a",
+              }}
+            >
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={submitting}
+              style={{
+                width: "100%",
+                height: 44,
+                borderRadius: 12,
+                border: "1px solid #cbd5e1",
+                padding: "0 14px",
+                fontSize: 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              style={{
+                display: "block",
+                marginBottom: 6,
+                fontWeight: 700,
+                color: "#0f172a",
+              }}
+            >
+              Máº­t kháº©u
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
+              style={{
+                width: "100%",
+                height: 44,
+                borderRadius: 12,
+                border: "1px solid #cbd5e1",
+                padding: "0 14px",
+                fontSize: 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+
+          {error ? (
+            <div
+              style={{
+                color: "#dc2626",
+                fontWeight: 700,
+                fontSize: 14,
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              height: 46,
+              borderRadius: 12,
+              border: "none",
+              background: "#2563eb",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: 16,
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.8 : 1,
+            }}
+          >
+            {submitting ? "Äang Ä‘Äƒng nháº­p..." : "ÄÄƒng nháº­p"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+
+========================================================================================================================
+FILE: src\context\AuthContext.tsx
+========================================================================================================================
+
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { supabase } from "../lib/supabase";
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  username: string;
+  displayName: string;
+  role: string;
+};
+
+type AuthContextType = {
+  user: AuthUser | null;
+  loading: boolean;
+  isAuthenticated: boolean;
+  isAdmin: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+function mapUserWithProfile(
+  authUser: { id: string; email?: string | null },
+  profile?: {
+    username?: string | null;
+    display_name?: string | null;
+    role?: string | null;
+  } | null
+): AuthUser {
+  const email = authUser.email ?? "";
+
+  return {
+    id: authUser.id,
+    email,
+    username: profile?.username ?? email,
+    displayName: profile?.display_name ?? email,
+    role: profile?.role ?? "doctor",
+  };
+}
+
+async function fetchAuthUser(): Promise<AuthUser | null> {
+  const {
+    data: { user: authUser },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !authUser) {
+    return null;
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("username, display_name, role")
+    .eq("id", authUser.id)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("FETCH PROFILE ERROR:", profileError);
+
+    return mapUserWithProfile(authUser, {
+      username: authUser.email,
+      display_name: authUser.email,
+      role: "doctor",
+    });
+  }
+
+  return mapUserWithProfile(authUser, profile);
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function init() {
+      try {
+        const currentUser = await fetchAuthUser();
+        if (isMounted) {
+          setUser(currentUser);
+        }
+      } catch (error) {
+        console.error("INIT AUTH ERROR:", error);
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+
+      if (!session?.user) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      fetchAuthUser()
+        .then((nextUser) => {
+          if (isMounted) {
+            setUser(nextUser);
+          }
+        })
+        .catch((error) => {
+          console.error("AUTH STATE CHANGE ERROR:", error);
+          if (isMounted) {
+            setUser(
+              mapUserWithProfile(session.user, {
+                username: session.user.email,
+                display_name: session.user.email,
+                role: "doctor",
+              })
+            );
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoading(false);
+          }
+        });
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function login(email: string, password: string) {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const currentUser = await fetchAuthUser();
+    setUser(currentUser);
+  }
+
+  async function logout() {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    setUser(null);
+  }
+
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      loading,
+      isAuthenticated: !!user,
+      isAdmin: user?.role === "admin",
+      login,
+      logout,
+    }),
+    [user, loading]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("AuthProvider chÆ°a Ä‘Æ°á»£c dÃ¹ng");
+  }
+  return ctx;
+}
+
+
+
+========================================================================================================================
+FILE: src\lib\supabase.ts
+========================================================================================================================
+
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+
+if (!supabaseUrl) {
+  throw new Error("VITE_SUPABASE_URL is missing");
+}
+
+if (!supabaseKey) {
+  throw new Error("VITE_SUPABASE_KEY is missing");
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
+
+
+
+========================================================================================================================
+FILE: src\app\router\AppRouter.tsx
+========================================================================================================================
+
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { publicRoutes } from "./publicRoutes";
+import { appRoutes } from "./appRoutes";
+
+export default function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {publicRoutes}
+        {appRoutes}
+        <Route path="*" element={<div className="p-6">Not found</div>} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+
+
+========================================================================================================================
+FILE: src\app\router\appRoutes.tsx
+========================================================================================================================
+
+import { Route, Navigate } from "react-router-dom";
+import ProtectedRoute from "./ProtectedRoute";
+import AppShell from "../shells/AppShell";
+import CasesListPage from "../../features/cases/pages/CasesListPage";
+import CaseDetailPage from "../../features/cases/pages/CaseDetailPage";
+import CaseAssessmentRedirectPage from "../../features/cases/pages/CaseAssessmentRedirectPage";
+
+export const appRoutes = (
+  <Route
+    path="/app"
+    element={
+      <ProtectedRoute>
+        <AppShell />
+      </ProtectedRoute>
+    }
+  >
+    <Route index element={<Navigate to="/app/cases" replace />} />
+    <Route path="cases" element={<CasesListPage />} />
+    <Route path="cases/:caseId" element={<CaseAssessmentRedirectPage />} />
+    <Route
+      path="cases/:caseId/assessments/:assessmentId"
+      element={<CaseDetailPage />}
+    />
+  </Route>
+);
+
+
+
+========================================================================================================================
+FILE: src\app\router\publicRoutes.tsx
+========================================================================================================================
+
+import { Fragment } from "react";
+import { Route, Navigate } from "react-router-dom";
+import PublicShell from "../shells/PublicShell";
+
+import Home from "../../pages/Home";
+import Tools from "../../pages/Tools";
+import ToolPlaceholder from "../../pages/ToolPlaceholder";
+import DoseAdjust from "../../pages/DoseAdjust";
+import MedicationDaysSupply from "../../pages/MedicationDaysSupply";
+import DrugInteractions from "../../pages/DrugInteractions";
+import Immunization from "../../pages/Immunization";
+import ICD10 from "../../pages/ICD10";
+import Contact from "../../pages/Contact";
+import BytProcedures from "../../pages/BytProcedures";
+import Login from "../../pages/Login";
+import PatientMonitoringPortalPage from "../../pages/public/PatientMonitoringPortalPage";
+
+import SymptomsIndex from "../../pages/symptoms/index";
+import Sot from "../../pages/symptoms/sot";
+import MetMoi from "../../pages/symptoms/met-moi-ue-oai";
+import CanNang from "../../pages/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan";
+import DauNguc from "../../pages/symptoms/dau-nguc";
+import KhoTho from "../../pages/symptoms/kho-tho";
+import HoiHop from "../../pages/symptoms/hoi-hop-danh-trong-nguc";
+import Ho from "../../pages/symptoms/ho";
+import PhuChan from "../../pages/symptoms/phu-chan";
+import DauDau from "../../pages/symptoms/dau-dau";
+import ChongMat from "../../pages/symptoms/chong-mat-choang-vang";
+import MatNgu from "../../pages/symptoms/mat-ngu";
+import TamTrang from "../../pages/symptoms/buon-chan-lo-au";
+import DauBung from "../../pages/symptoms/dau-bung";
+import RoiLoanTieuHoa from "../../pages/symptoms/roi-loan-tieu-hoa";
+import BuonNon from "../../pages/symptoms/buon-non-non";
+import VangDa from "../../pages/symptoms/vang-da";
+import TieuBuot from "../../pages/symptoms/tieu-buot-tieu-rat";
+import TieuMau from "../../pages/symptoms/tieu-mau";
+import DauLung from "../../pages/symptoms/dau-lung";
+import DauKhop from "../../pages/symptoms/dau-khop";
+import DaLieu from "../../pages/symptoms/ngua-ton-thuong-da";
+
+import GeriatricAssessmentCalculator from "../../calculators/GeriatricAssessmentCalculator";
+import KatzADL from "../../calculators/KatzADL";
+import LawtonIADL from "../../calculators/LawtonIADL";
+import GaitSpeed from "../../calculators/GaitSpeed";
+import GripStrength from "../../calculators/GripStrength";
+import MMSE from "../../calculators/MMSE";
+import MoCA from "../../calculators/MoCA";
+
+export const publicRoutes = (
+  <Fragment>
+    <Route
+      path="/p/:token/monitoring"
+      element={<PatientMonitoringPortalPage />}
+    />
+
+    <Route element={<PublicShell />}>
+      <Route path="/" element={<Home />} />
+      <Route path="/login" element={<Login />} />
+
+      <Route path="/tools" element={<Tools />} />
+      <Route path="/tools/:slug" element={<ToolPlaceholder />} />
+
+      <Route
+        path="/calculators/geriatric-assessment"
+        element={<GeriatricAssessmentCalculator />}
+      />
+      <Route path="/calculators/katz-adl" element={<KatzADL />} />
+      <Route path="/calculators/lawton-iadl" element={<LawtonIADL />} />
+      <Route path="/calculators/gait-speed" element={<GaitSpeed />} />
+      <Route path="/calculators/grip-strength" element={<GripStrength />} />
+      <Route path="/calculators/mmse" element={<MMSE />} />
+      <Route path="/calculators/moca" element={<MoCA />} />
+
+      <Route path="/dose-adjust" element={<DoseAdjust />} />
+      <Route path="/medication/days-supply" element={<MedicationDaysSupply />} />
+      <Route path="/drug-interactions" element={<DrugInteractions />} />
+      <Route path="/immunization" element={<Immunization />} />
+      <Route path="/icd10" element={<ICD10 />} />
+      <Route path="/byt-procedures" element={<BytProcedures />} />
+      <Route path="/contact" element={<Contact />} />
+
+      <Route path="/symptoms" element={<SymptomsIndex />} />
+      <Route path="/symptoms/sot" element={<Sot />} />
+      <Route path="/symptoms/met-moi-ue-oai" element={<MetMoi />} />
+      <Route
+        path="/symptoms/sut-can-tang-can-khong-ro-nguyen-nhan"
+        element={<CanNang />}
+      />
+      <Route path="/symptoms/dau-nguc" element={<DauNguc />} />
+      <Route path="/symptoms/kho-tho" element={<KhoTho />} />
+      <Route path="/symptoms/hoi-hop-danh-trong-nguc" element={<HoiHop />} />
+      <Route path="/symptoms/ho" element={<Ho />} />
+      <Route path="/symptoms/phu-chan" element={<PhuChan />} />
+      <Route path="/symptoms/dau-dau" element={<DauDau />} />
+      <Route path="/symptoms/chong-mat-choang-vang" element={<ChongMat />} />
+      <Route path="/symptoms/mat-ngu" element={<MatNgu />} />
+      <Route path="/symptoms/buon-chan-lo-au" element={<TamTrang />} />
+      <Route path="/symptoms/dau-bung" element={<DauBung />} />
+      <Route path="/symptoms/roi-loan-tieu-hoa" element={<RoiLoanTieuHoa />} />
+      <Route path="/symptoms/buon-non-non" element={<BuonNon />} />
+      <Route path="/symptoms/vang-da" element={<VangDa />} />
+      <Route path="/symptoms/tieu-buot-tieu-rat" element={<TieuBuot />} />
+      <Route path="/symptoms/tieu-mau" element={<TieuMau />} />
+      <Route path="/symptoms/dau-lung" element={<DauLung />} />
+      <Route path="/symptoms/dau-khop" element={<DauKhop />} />
+      <Route path="/symptoms/ngua-ton-thuong-da" element={<DaLieu />} />
+
+      <Route
+        path="/case-summary"
+        element={<Navigate to="/app/cases" replace />}
+      />
+      <Route path="/my-cases" element={<Navigate to="/app/cases" replace />} />
+    </Route>
+  </Fragment>
+);
+
+
+
+
+========================================================================================================================
+FILE: src\app\router\ProtectedRoute.tsx
+========================================================================================================================
+
+import type { ReactNode } from "react";
+import { Navigate } from "react-router-dom";
+
+type Props = {
+  children: ReactNode;
+};
+
+export default function ProtectedRoute({ children }: Props) {
+  const isAuthenticated = true;
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+
+
+========================================================================================================================
+FILE: src\components\layout\Topbar.tsx
+========================================================================================================================
+
+import type { CSSProperties } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+
+type TopbarProps = {
+  onToggleSidebar?: () => void;
+};
+
+export default function Topbar({ onToggleSidebar }: TopbarProps) {
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  async function handleLogout() {
+    try {
+      await logout();
+      navigate("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  }
+
+  const doctorName =
+    user?.displayName?.trim() ||
+    user?.username?.trim() ||
+    "";
+
+  const displayName = doctorName ? `BS ${doctorName}` : "BS";
+
+  const simpleBtnStyle: CSSProperties = {
+    height: 38,
+    padding: "0 14px",
+    borderRadius: 10,
+    border: "1px solid rgba(37, 99, 235, 0.22)",
+    background: "#fff",
+    color: "#2563eb",
+    fontWeight: 700,
+    fontSize: 14,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    boxShadow: "none",
+    outline: "none",
+  };
+
+  const isMyCasesPage = location.pathname === "/my-cases";
+
+  return (
+    <div
+      className="tb"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        minWidth: 0,
+        padding: "10px 14px",
+        borderBottom: "1px solid rgba(15, 23, 42, 0.06)",
+        background: "#fff",
+      }}
+    >
+      <button
+        className="tb__menu"
+        onClick={onToggleSidebar}
+        title="Má»Ÿ menu"
+        type="button"
+        style={{ flex: "0 0 auto" }}
+      >
+        â˜°
+      </button>
+
+      <div style={{ flex: 1 }} />
+
+      <div
+        className="tb__right"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flex: "0 0 auto",
+          marginLeft: "auto",
+          border: "none",
+          background: "transparent",
+          boxShadow: "none",
+          outline: "none",
+          padding: 0,
+          borderRadius: 0,
+        }}
+      >
+        {isAuthenticated ? (
+          <>
+            <Link
+              to="/my-cases"
+              style={{
+                ...simpleBtnStyle,
+                background: isMyCasesPage ? "#2563eb" : "#fff",
+                color: isMyCasesPage ? "#fff" : "#2563eb",
+                border: "1px solid #2563eb",
+              }}
+            >
+              Quáº£n lÃ½ bá»‡nh nhÃ¢n
+            </Link>
+
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                color: "#0f172a",
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                border: "none",
+                background: "transparent",
+                boxShadow: "none",
+                padding: 0,
+              }}
+              title={displayName}
+            >
+              <span
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 999,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(37, 99, 235, 0.08)",
+                  fontSize: 14,
+                  lineHeight: 1,
+                }}
+              >
+                ðŸ‘¤
+              </span>
+
+              <span
+                style={{
+                  maxWidth: 220,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {displayName}
+              </span>
+            </div>
+
+            <button type="button" onClick={handleLogout} style={simpleBtnStyle}>
+              ÄÄƒng xuáº¥t
+            </button>
+          </>
+        ) : (
+          <Link to="/login" style={simpleBtnStyle}>
+            ÄÄƒng nháº­p
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+
+========================================================================================================================
+FILE: src\components\layout\Navbar.tsx
+========================================================================================================================
+
+import { NavLink } from "react-router-dom";
+
+const linkStyle = ({ isActive }: { isActive: boolean }) => ({
+  padding: "10px 12px",
+  borderRadius: 10,
+  textDecoration: "none",
+  color: isActive ? "white" : "#222",
+  background: isActive ? "#111" : "transparent",
+  border: "1px solid #ddd",
+});
+
+export default function Navbar() {
+  return (
+    <div style={{ borderBottom: "1px solid #eee", background: "white" }}>
+      <div
+        style={{
+          maxWidth: 980,
+          margin: "0 auto",
+          padding: 14,
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ fontWeight: 800, marginRight: 8 }}>ðŸ©º Medical Tools</div>
+
+        <NavLink to="/" style={linkStyle}>
+          Trang chá»§
+        </NavLink>
+        <NavLink to="/tools" style={linkStyle}>
+          CÃ´ng cá»¥ y khoa
+        </NavLink>
+        <NavLink to="/drug-interactions" style={linkStyle}>
+          TÆ°Æ¡ng tÃ¡c thuá»‘c
+        </NavLink>
+        <NavLink to="/icd10" style={linkStyle}>
+          ICD-10
+        </NavLink>
+        <NavLink to="/contact" style={linkStyle}>
+          LiÃªn há»‡
+        </NavLink>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+========================================================================================================================
+FILE: src\components\layout\Sidebar.tsx
+========================================================================================================================
+
+// src/components/Sidebar.tsx
+import { NavLink } from "react-router-dom";
+
+type SidebarProps = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+type NavLinkClassNameFn = (props: { isActive: boolean }) => string;
+
+const linkClass: NavLinkClassNameFn = ({ isActive }) =>
+  isActive ? "sb__link sb__link--active" : "sb__link";
+
+type Item = {
+  label: string;
+  to: string;
+  icon: string; // dÃ¹ng emoji Ä‘á»ƒ khá»i phá»¥ thuá»™c lib icon
+};
+
+const items: Item[] = [
+  { label: "Trang chá»§", to: "/", icon: "ðŸ " },
+  { label: "CÃ´ng cá»¥ tÃ­nh toÃ¡n", to: "/tools", icon: "âœ…" },
+  { label: "Tiáº¿p cáº­n theo chá»©ng", to: "/symptoms", icon: "ðŸ§­" },
+  { label: "Äiá»u chá»‰nh liá»u thuá»‘c", to: "/dose-adjust", icon: "ðŸ’Š" },
+  { label: "TÆ°Æ¡ng tÃ¡c thuá»‘c", to: "/drug-interactions", icon: "ðŸ”" },
+  { label: "HÆ°á»›ng dáº«n tiÃªm chá»§ng", to: "/immunization", icon: "ðŸ’‰" },
+  { label: "Tra cá»©u ICD-10", to: "/icd10", icon: "ðŸ“˜" },
+
+  // âœ… new page
+  { label: "Quy trÃ¬nh BYT", to: "/byt-procedures", icon: "ðŸ“‘" },
+
+  { label: "LiÃªn há»‡", to: "/contact", icon: "ðŸ‘¤" },
+];
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  return (
+    <aside className={`sb ${isOpen ? "sb--open" : ""}`}>
+      <div className="sb__brand">
+        <div className="sb__logo" aria-hidden="true">
+          ðŸ©º
+        </div>
+        <div>
+          <div className="sb__title">Há»— trá»£ bÃ¡c sÄ©</div>
+          <div className="sb__sub">Medical tools</div>
+        </div>
+      </div>
+
+      {/* Khi báº¥m vÃ o menu (trÃªn mobile) -> Ä‘Ã³ng sidebar */}
+      <nav
+        className="sb__nav"
+        onClick={() => {
+          onClose?.();
+        }}
+      >
+        {items.map((it) => (
+          <NavLink key={it.to} to={it.to} end={it.to === "/"} className={linkClass}>
+            <span className="sb__i" aria-hidden="true">
+              {it.icon}
+            </span>
+            <span className="sb__text">{it.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="sb__footer">
+        <span className="sb__chip">Phase 1 â€¢ Beta</span>
+      </div>
+    </aside>
+  );
+}
+
+
+

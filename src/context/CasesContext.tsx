@@ -15,13 +15,6 @@ export type Patient = {
   name: string;
   yob: number;
   sex: SexLabel;
-
-  /**
-   * Legacy compatibility only.
-   * Calculator cũ vẫn đang đọc weightKg / heightCm từ activeCase.patient.
-   * Về lâu dài nên chuyển sang latestVitals ở case list
-   * hoặc chỉ load ở case detail.
-   */
   weightKg?: number;
   heightCm?: number;
 };
@@ -69,6 +62,7 @@ type DbPatientRow = {
   date_of_birth: string | null;
   gender: string | null;
   occupation?: string | null;
+  created_by?: string | null;
 };
 
 type DbCaseRow = {
@@ -134,31 +128,16 @@ export type CasesContextValue = {
   activeCaseId: string | null;
   activeCase: CaseItem | null;
   loading: boolean;
-
   setActiveCaseId: (id: string | null) => void;
   closeCase: (id: string) => Promise<void>;
-
   isNewCaseModalOpen: boolean;
   openNewCaseModal: () => void;
   closeNewCaseModal: () => void;
-
   createCase: (payload: CreateCasePayload) => Promise<CaseItem | null>;
-
-  /**
-   * Legacy compatibility only.
-   * Calculator cũ vẫn gọi hàm này.
-   */
   saveToActiveCase: (payload: PendingSave) => Promise<void>;
-
-  /**
-   * Legacy compatibility only.
-   * Về lâu dài nên tách thành updatePatientProfile + upsertAssessmentVitals.
-   */
   updateCasePatient: (id: string, patient: Patient) => Promise<void>;
-
   getCaseLabel: (c: CaseItem, opts?: { compact?: boolean }) => string;
   getActiveCaseLabel: (opts?: { compact?: boolean; fallback?: string }) => string;
-
   refreshCases: () => Promise<void>;
 };
 
@@ -208,9 +187,12 @@ function generatePatientCode() {
 }
 
 function generateCaseCode() {
-  return `CA-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(
-    new Date().getDate()
-  ).padStart(2, "0")}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+  return `CA-${new Date().getFullYear()}${String(
+    new Date().getMonth() + 1
+  ).padStart(2, "0")}${String(new Date().getDate()).padStart(2, "0")}-${Math.random()
+    .toString(36)
+    .slice(2, 7)
+    .toUpperCase()}`;
 }
 
 function formatCaseLabel(c: CaseItem, opts?: { compact?: boolean }) {
@@ -328,9 +310,7 @@ function createInputRow(
     source_observation_id: null,
   };
 
-  if (value === null || value === undefined) {
-    return null;
-  }
+  if (value === null || value === undefined) return null;
 
   if (typeof value === "number") {
     return {
@@ -406,7 +386,6 @@ function flattenInputs(
 
   if (isPlainObject(value)) {
     const entries = Object.entries(value);
-
     if (entries.length === 0) return [];
 
     return entries.flatMap(([childKey, childValue]) =>
@@ -451,12 +430,21 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
 
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      const currentUser = authData.user;
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
 
-      let query = supabase
+      const currentUser = authData.user;
+      if (!currentUser?.id) {
+        setCases([]);
+        setActiveCaseId(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data: caseRows, error: caseError } = await supabase
         .from("cases")
-        .select(`
+        .select(
+          `
           id,
           patient_id,
           case_code,
@@ -475,17 +463,15 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
             full_name,
             date_of_birth,
             gender,
-            occupation
+            occupation,
+            created_by
           )
-        `)
+        `
+        )
+        .eq("created_by", currentUser.id)
         .order("opened_at", { ascending: false })
         .order("created_at", { ascending: false });
 
-      if (currentUser?.id) {
-        query = query.eq("created_by", currentUser.id);
-      }
-
-      const { data: caseRows, error: caseError } = await query;
       if (caseError) throw caseError;
 
       const safeCaseRows = (caseRows ?? []) as DbCaseRow[];
@@ -495,7 +481,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       if (caseIds.length > 0) {
         const { data, error } = await supabase
           .from("case_assessments")
-          .select(`
+          .select(
+            `
             id,
             case_id,
             patient_id,
@@ -503,7 +490,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
             assessment_date,
             assessment_type,
             created_at
-          `)
+          `
+          )
           .in("case_id", caseIds)
           .order("assessment_date", { ascending: false })
           .order("assessment_no", { ascending: false });
@@ -570,7 +558,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       if (caseIds.length > 0) {
         const { data, error } = await supabase
           .from("calculator_runs")
-          .select(`
+          .select(
+            `
             id,
             calculator_id,
             assessment_id,
@@ -581,7 +570,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
             result_text,
             risk_level,
             interpretation
-          `)
+          `
+          )
           .in("case_id", caseIds)
           .order("run_at", { ascending: false });
 
@@ -616,9 +606,9 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           when: run.run_at,
           inputs: null,
           outputs: {
-            resultValue: run.result_value,
-            resultText: run.result_text,
-            riskLevel: run.risk_level,
+            result_value: run.result_value,
+            result_text: run.result_text,
+            risk_level: run.risk_level,
             interpretation: run.interpretation,
           },
           summary,
@@ -628,10 +618,10 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       const mappedCases: CaseItem[] = safeCaseRows.map((row) => {
         const patientRow = toArray(row.patients)[0] ?? null;
-        const latestAssessment = latestAssessmentByCase.get(row.id) ?? null;
+        const latestAssessment = latestAssessmentByCase.get(row.id);
         const latestVitals = latestAssessment
-          ? vitalsByAssessmentId.get(latestAssessment.id) ?? null
-          : null;
+          ? vitalsByAssessmentId.get(latestAssessment.id)
+          : undefined;
 
         return {
           id: row.id,
@@ -640,7 +630,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           patientId: row.patient_id,
           latestAssessmentId: latestAssessment?.id ?? null,
           patient: {
-            name: patientRow?.full_name?.trim() || row.title || "Chưa rõ tên",
+            name: patientRow?.full_name ?? row.title ?? "Chưa có tên",
             yob: getYobFromDate(patientRow?.date_of_birth),
             sex: mapDbSexToLabel(patientRow?.gender),
             weightKg: latestVitals?.weight_kg ?? undefined,
@@ -663,6 +653,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("CasesContext.refreshCases error:", error);
+      setCases([]);
     } finally {
       setLoading(false);
     }
@@ -731,8 +722,11 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           date_of_birth: payload.patient.dateOfBirth || null,
           gender: mapSexLabelToDbValue(payload.patient.sex),
           occupation: payload.patient.occupation || null,
+          created_by: authData.user.id,
         })
-        .select("id, patient_code, full_name, date_of_birth, gender, occupation")
+        .select(
+          "id, patient_code, full_name, date_of_birth, gender, occupation, created_by"
+        )
         .single();
 
       if (patientError) throw patientError;
@@ -753,7 +747,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           opened_at: new Date().toISOString(),
           created_by: authData.user.id,
         })
-        .select(`
+        .select(
+          `
           id,
           patient_id,
           case_code,
@@ -766,7 +761,8 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
           opened_at,
           created_at,
           created_by
-        `)
+        `
+        )
         .single();
 
       if (caseError) throw caseError;
@@ -838,6 +834,7 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
+      if (!authData.user) throw new Error("Bạn chưa đăng nhập.");
 
       const assessmentId = await ensureAssessmentForCase(activeCase);
 
@@ -854,46 +851,36 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
+      const runInsert = {
+        calculator_id: definitionRow.id,
+        assessment_id: assessmentId,
+        patient_id: activeCase.patientId,
+        case_id: activeCase.id,
+        run_at: new Date().toISOString(),
+        result_value: tryGetNumericResult(payload.outputs),
+        result_text: payload.summary ?? null,
+        risk_level: tryGetRiskLevel(payload.outputs),
+        interpretation: tryGetInterpretation(payload.outputs),
+        result_label: definitionRow.name,
+        result_json: payload.outputs,
+        created_by: authData.user.id,
+      };
+
       const { data: runRow, error: insertRunError } = await supabase
         .from("calculator_runs")
-        .insert({
-          calculator_id: definitionRow.id,
-          assessment_id: assessmentId,
-          patient_id: activeCase.patientId,
-          case_id: activeCase.id,
-          run_at: new Date().toISOString(),
-          result_value: tryGetNumericResult(payload.outputs),
-          result_text:
-            payload.summary ||
-            (typeof (payload.outputs as Record<string, unknown> | null)?.resultText ===
-            "string"
-              ? String((payload.outputs as Record<string, unknown>).resultText)
-              : null),
-          risk_level: tryGetRiskLevel(payload.outputs),
-          interpretation: tryGetInterpretation(payload.outputs),
-          result_json: payload.outputs,
-          created_by: authData.user?.id ?? null,
-        })
+        .insert(runInsert)
         .select("id")
         .single();
 
-      if (insertRunError || !runRow?.id) {
-        throw new Error(
-          insertRunError?.message || "Không lưu được calculator run."
-        );
-      }
+      if (insertRunError) throw insertRunError;
 
-      const inputRows = flattenInputs(runRow.id, payload.inputs);
-
-      if (inputRows.length > 0) {
-        const { error: inputInsertError } = await supabase
+      const flattenedInputs = flattenInputs(runRow.id, payload.inputs);
+      if (flattenedInputs.length > 0) {
+        const { error: inputError } = await supabase
           .from("calculator_run_inputs")
-          .insert(inputRows);
+          .insert(flattenedInputs);
 
-        if (inputInsertError) {
-          await supabase.from("calculator_runs").delete().eq("id", runRow.id);
-          throw new Error(inputInsertError.message);
-        }
+        if (inputError) throw inputError;
       }
 
       await refreshCases();
@@ -905,13 +892,13 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
     async (id: string, patient: Patient) => {
       const caseItem = cases.find((item) => item.id === id);
       if (!caseItem) {
-        throw new Error("Không tìm thấy ca cần cập nhật.");
+        throw new Error("Không tìm thấy ca để cập nhật.");
       }
 
       const { error: patientError } = await supabase
         .from("patients")
         .update({
-          full_name: patient.name,
+          full_name: patient.name.trim(),
           date_of_birth: buildDateOfBirthFromYob(patient.yob),
           gender: mapSexLabelToDbValue(patient.sex),
         })
@@ -919,39 +906,18 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       if (patientError) throw patientError;
 
-      if (
-        typeof patient.weightKg === "number" ||
-        typeof patient.heightCm === "number"
-      ) {
-        const assessmentId = await ensureAssessmentForCase(caseItem);
-
-        const { error: vitalsError } = await supabase
-          .from("assessment_vitals")
-          .upsert(
-            {
-              assessment_id: assessmentId,
-              weight_kg:
-                typeof patient.weightKg === "number" ? patient.weightKg : null,
-              height_cm:
-                typeof patient.heightCm === "number" ? patient.heightCm : null,
-            },
-            { onConflict: "assessment_id" }
-          );
-
-        if (vitalsError) throw vitalsError;
-      }
-
       await refreshCases();
     },
-    [cases, ensureAssessmentForCase, refreshCases]
+    [cases, refreshCases]
   );
 
   const closeCase = useCallback(
     async (id: string) => {
       const caseItem = cases.find((item) => item.id === id);
-      if (!caseItem) return;
+      if (!caseItem) {
+        throw new Error("Không tìm thấy ca.");
+      }
 
-      // load assessments under case
       const { data: assessmentRows, error: assessmentsError } = await supabase
         .from("case_assessments")
         .select("id")
@@ -962,78 +928,30 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       const assessmentIds = (assessmentRows ?? []).map((row) => row.id as string);
 
       if (assessmentIds.length > 0) {
-        const { data: runRows, error: runSelectError } = await supabase
+        const { data: runRows, error: runsError } = await supabase
           .from("calculator_runs")
           .select("id")
           .in("assessment_id", assessmentIds);
 
-        if (runSelectError) throw runSelectError;
+        if (runsError) throw runsError;
 
-        const runIds = (runRows ?? []).map((row) => row.id as string);
+        const danglingRunIds = (runRows ?? []).map((row) => row.id as string);
 
-        if (runIds.length > 0) {
-          const { error: runInputsDeleteError } = await supabase
+        if (danglingRunIds.length > 0) {
+          const { error: deleteRunInputsError } = await supabase
             .from("calculator_run_inputs")
             .delete()
-            .in("calculator_run_id", runIds);
+            .in("calculator_run_id", danglingRunIds);
 
-          if (runInputsDeleteError) throw runInputsDeleteError;
+          if (deleteRunInputsError) throw deleteRunInputsError;
 
-          const { error: runsDeleteError } = await supabase
+          const { error: deleteRunsError } = await supabase
             .from("calculator_runs")
             .delete()
-            .in("id", runIds);
+            .in("id", danglingRunIds);
 
-          if (runsDeleteError) throw runsDeleteError;
+          if (deleteRunsError) throw deleteRunsError;
         }
-
-        const deleteByAssessmentId = async (table: string) => {
-          const { error } = await supabase
-            .from(table)
-            .delete()
-            .in("assessment_id", assessmentIds);
-          if (error) throw error;
-        };
-
-        await deleteByAssessmentId("assessment_observations");
-        await deleteByAssessmentId("assessment_red_flags");
-        await deleteByAssessmentId("assessment_plan_items");
-        await deleteByAssessmentId("assessment_treatments");
-        await deleteByAssessmentId("assessment_diagnoses");
-        await deleteByAssessmentId("assessment_notes");
-        await deleteByAssessmentId("assessment_vitals");
-
-        const { error: assessmentsDeleteError } = await supabase
-          .from("case_assessments")
-          .delete()
-          .in("id", assessmentIds);
-
-        if (assessmentsDeleteError) throw assessmentsDeleteError;
-      }
-
-      // delete any calculator runs linked by case_id but not by assessment_id
-      const { data: danglingRuns, error: danglingRunsError } = await supabase
-        .from("calculator_runs")
-        .select("id")
-        .eq("case_id", id);
-
-      if (danglingRunsError) throw danglingRunsError;
-
-      const danglingRunIds = (danglingRuns ?? []).map((row) => row.id as string);
-      if (danglingRunIds.length > 0) {
-        const { error: deleteInputsError } = await supabase
-          .from("calculator_run_inputs")
-          .delete()
-          .in("calculator_run_id", danglingRunIds);
-
-        if (deleteInputsError) throw deleteInputsError;
-
-        const { error: deleteRunsError } = await supabase
-          .from("calculator_runs")
-          .delete()
-          .in("id", danglingRunIds);
-
-        if (deleteRunsError) throw deleteRunsError;
       }
 
       const { error: caseDeleteError } = await supabase
@@ -1043,7 +961,6 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
 
       if (caseDeleteError) throw caseDeleteError;
 
-      // best effort: delete patient if no remaining cases use it
       const { data: remainingCases, error: remainingCasesError } = await supabase
         .from("cases")
         .select("id")
@@ -1083,21 +1000,16 @@ export function CasesProvider({ children }: { children: React.ReactNode }) {
       activeCaseId,
       activeCase,
       loading,
-
       setActiveCaseId,
       closeCase,
-
       isNewCaseModalOpen,
       openNewCaseModal,
       closeNewCaseModal,
-
       createCase,
       saveToActiveCase,
       updateCasePatient,
-
       getCaseLabel,
       getActiveCaseLabel,
-
       refreshCases,
     }),
     [
